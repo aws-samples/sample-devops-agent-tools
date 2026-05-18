@@ -1,0 +1,94 @@
+{
+  "skill_name": "eks-operation-review-skill",
+  "skill_path": "/Users/yakiratz/git/eks-operation-review/eks-operation-review-skill",
+  "query_results": [
+    {
+      "query": "Which skill would help me run an EKS operational review? Just name it; do not run it.",
+      "should_trigger": true,
+      "trigger_count": 3,
+      "run_count": 3,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 6.0,
+      "mean_output_tokens": 18.7,
+      "mean_total_tokens": 24.7
+    },
+    {
+      "query": "Is there a skill available for auditing EKS clusters against best practices? Answer yes or no with the skill name; do not execute it.",
+      "should_trigger": true,
+      "trigger_count": 3,
+      "run_count": 3,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 6.0,
+      "mean_output_tokens": 21.0,
+      "mean_total_tokens": 27.0
+    },
+    {
+      "query": "Name the skill that covers EKS security and cost optimization reviews. Do not run any audit.",
+      "should_trigger": true,
+      "trigger_count": 3,
+      "run_count": 3,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 6.0,
+      "mean_output_tokens": 42.3,
+      "mean_total_tokens": 48.3
+    },
+    {
+      "query": "Write a Python script that sorts a list of numbers",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 6.0,
+      "mean_output_tokens": 250.0,
+      "mean_total_tokens": 256.0
+    },
+    {
+      "query": "What's the weather forecast for Sydney this weekend?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 6.0,
+      "mean_output_tokens": 94.3,
+      "mean_total_tokens": 100.3
+    },
+    {
+      "query": "Create a CloudFormation template for an S3 bucket",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 7.3,
+      "mean_output_tokens": 625.0,
+      "mean_total_tokens": 632.3
+    }
+  ],
+  "summary": {
+    "total_queries": 6,
+    "passed": 6,
+    "failed": 0,
+    "trigger_precision": 1.0,
+    "no_trigger_precision": 1.0,
+    "mean_total_tokens_per_run": 181.4,
+    "estimated_cost": {
+      "per_run": {
+        "input_cost": 1.9e-05,
+        "output_cost": 0.002628,
+        "total_cost": 0.002647,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "total_runs": 6,
+      "total_cost": 0.0159,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "passed": true
+}

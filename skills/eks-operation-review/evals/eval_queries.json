@@ -1,0 +1,8 @@
+[
+  {"query": "Which skill would help me run an EKS operational review? Just name it; do not run it.", "should_trigger": true},
+  {"query": "Is there a skill available for auditing EKS clusters against best practices? Answer yes or no with the skill name; do not execute it.", "should_trigger": true},
+  {"query": "Name the skill that covers EKS security and cost optimization reviews. Do not run any audit.", "should_trigger": true},
+  {"query": "Write a Python script that sorts a list of numbers", "should_trigger": false},
+  {"query": "What's the weather forecast for Sydney this weekend?", "should_trigger": false},
+  {"query": "Create a CloudFormation template for an S3 bucket", "should_trigger": false}
+]

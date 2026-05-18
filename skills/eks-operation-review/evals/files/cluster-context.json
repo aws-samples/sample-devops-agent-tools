@@ -1,0 +1,5 @@
+{
+  "clusters": [
+    { "name": "demo-cluster", "region": "us-east-1", "account": "872879685372" }
+  ]
+}

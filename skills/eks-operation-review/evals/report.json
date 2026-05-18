@@ -1,0 +1,65 @@
+{
+  "skill_name": "eks-operation-review-skill",
+  "skill_path": "/Users/yakiratz/git/eks-operation-review/eks-operation-review-skill",
+  "timestamp": "2026-05-18T10:24:42Z",
+  "overall_score": 0.9118,
+  "overall_grade": "A",
+  "passed": true,
+  "sections": {
+    "audit": {
+      "score": 100,
+      "grade": "A",
+      "passed": true,
+      "normalized": 1.0,
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "functional": {
+      "overall": 0.7794,
+      "grade": "C",
+      "passed": true,
+      "scores": {
+        "outcome": 1.0,
+        "process": 0.1176,
+        "style": 1.0,
+        "efficiency": 1.0,
+        "overall": 0.7794
+      },
+      "cost_efficiency": {
+        "quality_delta": 0.6181,
+        "cost_delta_pct": -40.9,
+        "classification": "PARETO_BETTER",
+        "emoji": "\ud83d\udfe2",
+        "description": "Skill improves quality while reducing cost"
+      },
+      "estimated_cost": {
+        "with_skill_per_run": {
+          "input_cost": 1.9e-05,
+          "output_cost": 0.005085,
+          "total_cost": 0.005104,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "without_skill_per_run": {
+          "input_cost": 2.2e-05,
+          "output_cost": 0.008661,
+          "total_cost": 0.008683,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "per_eval_pair": 0.013787,
+        "total_runs": 5,
+        "total_cost": 0.0689,
+        "model": "sonnet",
+        "currency": "USD"
+      }
+    },
+    "trigger": {
+      "pass_rate": 1.0,
+      "grade": "A",
+      "passed": true,
+      "total_queries": 6
+    }
+  }
+}

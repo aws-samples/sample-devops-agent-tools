@@ -1,0 +1,661 @@
+{
+  "skill_name": "eks-operation-review-skill",
+  "skill_path": "/Users/yakiratz/git/eks-operation-review/eks-operation-review-skill",
+  "eval_count": 5,
+  "runs_per_eval": 1,
+  "metadata": {
+    "timestamp": "2026-05-18T10:19:20Z"
+  },
+  "runs": [
+    {
+      "eval_id": "eks-review-smoke-test",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "eks-review-smoke-test",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "matches regex /[a-z]{2}-[a-z]+-\\d/",
+            "passed": true,
+            "evidence": "Regex /[a-z]{2}-[a-z]+-\\d/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /\\b\\d{12}\\b/",
+            "passed": true,
+            "evidence": "Regex /\\b\\d{12}\\b/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'name' or contains 'cluster'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'cluster' \u2014 Substring found: 'cluster'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'region'",
+            "passed": true,
+            "evidence": "Substring found: 'region'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'account'",
+            "passed": true,
+            "evidence": "Substring found: 'account'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 1,
+          "token_counts": {
+            "input_tokens": 7,
+            "output_tokens": 207,
+            "cache_read_input_tokens": 33144,
+            "cache_creation_input_tokens": 33347
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 18.787295124988304
+        },
+        "raw_output": "- **demo-cluster** \u2014 region: us-east-1, account: 872879685372"
+      },
+      "without_skill": {
+        "eval_id": "eks-review-smoke-test",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "matches regex /[a-z]{2}-[a-z]+-\\d/",
+            "passed": true,
+            "evidence": "Regex /[a-z]{2}-[a-z]+-\\d/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /\\b\\d{12}\\b/",
+            "passed": true,
+            "evidence": "Regex /\\b\\d{12}\\b/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'name' or contains 'cluster'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'cluster' \u2014 Substring found: 'cluster'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'region'",
+            "passed": false,
+            "evidence": "Substring not found: 'region'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'account'",
+            "passed": false,
+            "evidence": "Substring not found: 'account'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.6,
+        "summary": "Without skill: 60% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 1,
+          "token_counts": {
+            "input_tokens": 7,
+            "output_tokens": 198,
+            "cache_read_input_tokens": 30334,
+            "cache_creation_input_tokens": 30538
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 20.366231791995233
+        },
+        "raw_output": "- **demo-cluster** \u2014 us-east-1 \u2014 872879685372"
+      },
+      "delta_pass_rate": 0.4
+    },
+    {
+      "eval_id": "eks-review-first-cluster-identification",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "eks-review-first-cluster-identification",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "matches regex /eks-review-[a-z0-9-]+-\\d{4}-\\d{2}-\\d{2}\\.md/",
+            "passed": true,
+            "evidence": "Regex /eks-review-[a-z0-9-]+-\\d{4}-\\d{2}-\\d{2}\\.md/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /[a-z]{2}-[a-z]+-\\d/",
+            "passed": true,
+            "evidence": "Regex /[a-z]{2}-[a-z]+-\\d/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 1,
+          "token_counts": {
+            "input_tokens": 7,
+            "output_tokens": 210,
+            "cache_read_input_tokens": 46559,
+            "cache_creation_input_tokens": 20001
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 20.616157333017327
+        },
+        "raw_output": "Report artifact filename: `eks-review-demo-cluster-2026-05-18.md`"
+      },
+      "without_skill": {
+        "eval_id": "eks-review-first-cluster-identification",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "matches regex /eks-review-[a-z0-9-]+-\\d{4}-\\d{2}-\\d{2}\\.md/",
+            "passed": false,
+            "evidence": "Regex /eks-review-[a-z0-9-]+-\\d{4}-\\d{2}-\\d{2}\\.md/ did not match",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /[a-z]{2}-[a-z]+-\\d/",
+            "passed": true,
+            "evidence": "Regex /[a-z]{2}-[a-z]+-\\d/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.5,
+        "summary": "Without skill: 50% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 1,
+          "token_counts": {
+            "input_tokens": 7,
+            "output_tokens": 223,
+            "cache_read_input_tokens": 44015,
+            "cache_creation_input_tokens": 16921
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 19.161285624984885
+        },
+        "raw_output": "First cluster: `demo-cluster`\n\nReport artifact filename: `demo-cluster-2026-05-18.md`"
+      },
+      "delta_pass_rate": 0.5
+    },
+    {
+      "eval_id": "eks-review-data-source-priority",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "eks-review-data-source-priority",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'K8s' or contains 'Kubernetes'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'k8s' \u2014 Substring found: 'k8s'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'AWS' or contains 'aws'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'aws' \u2014 Substring found: 'aws'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'resources_list' or contains 'pods_list' or contains 'nodes_top' or contains 'events_list'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'resources_list' \u2014 Substring found: 'resources_list'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 6,
+            "output_tokens": 277,
+            "cache_read_input_tokens": 13381,
+            "cache_creation_input_tokens": 19794
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 15.798624332994223
+        },
+        "raw_output": "According to the skill:\n\n**Data source priority:** Try the **Kubernetes API** FIRST (via connected MCP servers such as kubernetes-mcp-server, EKS MCP server, or direct K8s API tools). Fall back to **AWS APIs and CloudWatch** only for data not available via K8s API.\n\nThe rationale given is that the K8s API provides the most accurate, real-time live cluster state.\n\n**Two specific K8s API tools the skill mentions** (from many listed):\n1. `resources_list` \u2014 list any K8s resource by apiVersion and kind\n2. `pods_top` \u2014 actual pod resource usage vs requests\n\n(Other examples mentioned include `resources_get`, `pods_list`, `pods_get`, `pods_log`, `nodes_top`, `events_list`, and `configuration_contexts_list`.)"
+      },
+      "without_skill": {
+        "eval_id": "eks-review-data-source-priority",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'K8s' or contains 'Kubernetes'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'k8s' \u2014 Substring found: 'k8s'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'AWS' or contains 'aws'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'aws' \u2014 Substring found: 'aws'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'resources_list' or contains 'pods_list' or contains 'nodes_top' or contains 'events_list'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'resources_list': Substring not found: 'resources_list'; contains 'pods_list': Substring not found: 'pods_list'; contains 'nodes_top': Substring not found: 'nodes_top'; contains 'events_list': Substring not found: 'events_list'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.6666666666666666,
+        "summary": "Without skill: 67% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 4,
+          "token_counts": {
+            "input_tokens": 10,
+            "output_tokens": 1473,
+            "cache_read_input_tokens": 141023,
+            "cache_creation_input_tokens": 31627
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 35.449476790992776
+        },
+        "raw_output": "According to the EKS Operational Review skill at `/Users/yakiratz/.claude/agents/eks-operation-review/prompt.md`:\n\n**Data source \u2014 FIRST and fallback (cost data, line 177-187):**\n- **First:** `@billing-mcp` \u2014 `get_cost_and_usage` (preferred \u2014 avoids Cost Explorer API timeouts)\n- **Fallback:** `@aws-mcp` `call_aws: aws ce get-cost-and-usage` if `@billing-mcp` is unavailable\n\n**Two specific K8s API tools the skill mentions:**\n- `list_k8s_resources` \u2014 used to enumerate Namespaces, Pods, Deployments, NodePools, etc. (lines 64\u201366, 72\u201373)\n- `read_k8s_resource` \u2014 used to fetch full specs of NodePool, EC2NodeClass, Deployments, ConfigMaps, DaemonSets (lines 74\u201375, 87, 93\u201394, 118)\n\n(Others mentioned: `list_api_versions`, `get_pod_logs`, `get_k8s_events`.)"
+      },
+      "delta_pass_rate": 0.33333333333333337
+    },
+    {
+      "eval_id": "eks-review-severity-definitions",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "eks-review-severity-definitions",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'CRITICAL'",
+            "passed": true,
+            "evidence": "Substring found: 'critical'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'HIGH'",
+            "passed": true,
+            "evidence": "Substring found: 'high'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'MEDIUM'",
+            "passed": true,
+            "evidence": "Substring found: 'medium'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'LOW'",
+            "passed": true,
+            "evidence": "Substring found: 'low'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'INFO'",
+            "passed": true,
+            "evidence": "Substring found: 'info'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 6,
+            "output_tokens": 30,
+            "cache_read_input_tokens": 13381,
+            "cache_creation_input_tokens": 19762
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 13.463195167016238
+        },
+        "raw_output": "CRITICAL, HIGH, MEDIUM, LOW, INFO"
+      },
+      "without_skill": {
+        "eval_id": "eks-review-severity-definitions",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'CRITICAL'",
+            "passed": false,
+            "evidence": "Substring not found: 'critical'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'HIGH'",
+            "passed": false,
+            "evidence": "Substring not found: 'high'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'MEDIUM'",
+            "passed": false,
+            "evidence": "Substring not found: 'medium'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'LOW'",
+            "passed": false,
+            "evidence": "Substring not found: 'low'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'INFO'",
+            "passed": false,
+            "evidence": "Substring not found: 'info'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 10,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 140.06439833398326
+        },
+        "raw_output": ""
+      },
+      "delta_pass_rate": 1.0
+    },
+    {
+      "eval_id": "eks-review-best-practices-sections",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "eks-review-best-practices-sections",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'Security' or contains 'security'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'security' \u2014 Substring found: 'security'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Reliability' or contains 'reliability'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'reliability' \u2014 Substring found: 'reliability'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Networking' or contains 'networking'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'networking' \u2014 Substring found: 'networking'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Scalability' or contains 'scalability'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'scalability' \u2014 Substring found: 'scalability'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Upgrade' or contains 'upgrade'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'upgrade' \u2014 Substring found: 'upgrade'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Cost' or contains 'cost'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'cost' \u2014 Substring found: 'cost'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Karpenter' or contains 'karpenter'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'karpenter' \u2014 Substring found: 'karpenter'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 6,
+            "output_tokens": 971,
+            "cache_read_input_tokens": 13381,
+            "cache_creation_input_tokens": 19765
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 27.62635966599919
+        },
+        "raw_output": "Based on the EKS Operational Review skill, here are the 12 best practices sections evaluated during a review:\n\n## Core Sections (1\u20139)\n\n1. **Security** \u2014 IAM & Access Management (auth mode, Access Entries, aws-auth, Pod Identity, IRSA, RBAC, STS), Pod Security, Runtime Security, Network Security, Multi-tenancy, Detective Controls, Infrastructure Security (private endpoint, IMDSv2, AMI), Data Encryption (KMS, EBS), Image Security (ECR scanning)\n\n2. **Reliability** \u2014 Applications (probes, PDBs, TopologySpreadConstraints, graceful shutdown, resource requests/limits), Control Plane (version, logs, insights, API latency/throttling), Data Plane (multi-AZ, managed node groups, autoscaling, failed nodes)\n\n3. **Karpenter** \u2014 NodePool config (consolidationPolicy, disruption budgets, instance diversity, Spot, AZ spread, limits), EC2NodeClass (amiFamily, blockDeviceMappings, metadataOptions, selectors, AMI age)\n\n4. **Cluster Autoscaler** \u2014 Deployment, expander strategy, scale-down settings, balance-similar-node-groups, version compatibility\n\n5. **EKS Auto Mode** \u2014 Auto mode status, node pool config, disruption controls\n\n6. **Networking** \u2014 VPC CNI version/config, prefix delegation, subnet IP availability, VPC CIDR sizing, CoreDNS, VPC endpoints, NAT redundancy\n\n7. **Scalability** \u2014 Control plane (API throttling, CRD count), Data plane (scaling headroom, instance diversity, NodePool limits), Cluster services (CoreDNS, metrics-server, addons), Workloads (HPA, resource requests, restart counts), Data Plane Scaling specifics (autoscaling, instance diversity, T-series, AMI updates, EBS, patching)\n\n8. **Cluster Upgrades** \u2014 Version currency (N-1/N-2/N-3), Upgrade Insights, addon compatibility, deprecated APIs, PDB coverage, node group update strategy\n\n9. **Cost Optimization** \u2014 Resource utilization (under/over-utilized), instance right-sizing, Spot adoption, Graviton migration, storage (gp2\u2192gp3, unused PVs), Karpenter consolidation, NodePool cost review, cost allocation tags, idle res"
+      },
+      "without_skill": {
+        "eval_id": "eks-review-best-practices-sections",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'Security' or contains 'security'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'security': Substring not found: 'security'; contains 'security': Substring not found: 'security'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Reliability' or contains 'reliability'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'reliability': Substring not found: 'reliability'; contains 'reliability': Substring not found: 'reliability'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Networking' or contains 'networking'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'networking': Substring not found: 'networking'; contains 'networking': Substring not found: 'networking'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Scalability' or contains 'scalability'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'scalability': Substring not found: 'scalability'; contains 'scalability': Substring not found: 'scalability'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Upgrade' or contains 'upgrade'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'upgrade': Substring not found: 'upgrade'; contains 'upgrade': Substring not found: 'upgrade'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Cost' or contains 'cost'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'cost' \u2014 Substring found: 'cost'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Karpenter' or contains 'karpenter'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'karpenter': Substring not found: 'karpenter'; contains 'karpenter': Substring not found: 'karpenter'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.14285714285714285,
+        "summary": "Without skill: 14% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 1,
+          "token_counts": {
+            "input_tokens": 12,
+            "output_tokens": 993,
+            "cache_read_input_tokens": 27270,
+            "cache_creation_input_tokens": 36772
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 28.325234084011754
+        },
+        "raw_output": "I don't see an EKS operational review skill in the available skills list. The closest AWS-related skills are:\n\n- **aws-devops-agent:investigate** \u2014 root-cause investigation\n- **aws-devops-agent:chat** \u2014 quick analysis (cost, architecture, topology, audits)\n- **aws-devops-agent:cost** \u2014 cost optimization scoped to local IaC\n\nNone of these advertise a fixed \"EKS operational review\" rubric with named best-practices sections, and I won't invent section names from training data. A few options:\n\n1. If you're thinking of a specific skill or runbook by name, share it and I'll check it directly.\n2. I can ask `aws-devops-agent:chat` what it evaluates for an EKS review (no cluster access needed) \u2014 want me to do that?\n3. If you meant the AWS EKS Best Practices Guide (the public doc), I can fetch it and list its sections.\n\nWhich would you like?"
+      },
+      "delta_pass_rate": 0.8571428571428572
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "mean_pass_rate": 1.0,
+      "stddev_pass_rate": 0.0,
+      "mean_tokens": 339.0,
+      "mean_input_tokens": 6.4,
+      "mean_output_tokens": 339.0,
+      "mean_total_tokens": 345.4,
+      "mean_tool_calls": 0.4
+    },
+    "without_skill": {
+      "mean_pass_rate": 0.3819,
+      "stddev_pass_rate": 0.2939,
+      "mean_tokens": 577.4,
+      "mean_input_tokens": 7.2,
+      "mean_output_tokens": 577.4,
+      "mean_total_tokens": 584.6,
+      "mean_tool_calls": 3.4
+    },
+    "delta": {
+      "pass_rate": 0.6181,
+      "tokens": -238.4,
+      "total_tokens": -239.2,
+      "input_tokens": -0.8,
+      "tool_calls": -3.0
+    },
+    "cost_efficiency": {
+      "quality_delta": 0.6181,
+      "cost_delta_pct": -40.9,
+      "classification": "PARETO_BETTER",
+      "emoji": "\ud83d\udfe2",
+      "description": "Skill improves quality while reducing cost"
+    },
+    "estimated_cost": {
+      "with_skill_per_run": {
+        "input_cost": 1.9e-05,
+        "output_cost": 0.005085,
+        "total_cost": 0.005104,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "without_skill_per_run": {
+        "input_cost": 2.2e-05,
+        "output_cost": 0.008661,
+        "total_cost": 0.008683,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "per_eval_pair": 0.013787,
+      "total_runs": 5,
+      "total_cost": 0.0689,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "scores": {
+    "outcome": 1.0,
+    "process": 0.1176,
+    "style": 1.0,
+    "efficiency": 1.0,
+    "overall": 0.7794
+  },
+  "passed": true
+}

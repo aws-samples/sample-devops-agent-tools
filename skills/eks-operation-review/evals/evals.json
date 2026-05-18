@@ -1,0 +1,64 @@
+[
+  {
+    "id": "eks-review-smoke-test",
+    "prompt": "Read cluster-context.json. List the cluster names, regions, and accounts. No analysis needed.",
+    "expected_output": "Lists every cluster from files/cluster-context.json with its name, region, and account exactly as defined in the file.",
+    "files": ["files/cluster-context.json"],
+    "assertions": [
+      "matches regex /[a-z]{2}-[a-z]+-\\d/",
+      "matches regex /\\b\\d{12}\\b/",
+      "contains 'name' or contains 'cluster'",
+      "contains 'region'",
+      "contains 'account'"
+    ]
+  },
+  {
+    "id": "eks-review-first-cluster-identification",
+    "prompt": "Read cluster-context.json. Identify the FIRST cluster listed and state the report artifact filename you would generate for it (use today's date in YYYY-MM-DD form). Do not run the audit.",
+    "expected_output": "Identifies the first cluster from files/cluster-context.json (its name and region) and proposes an artifact name of the form eks-review-<that-cluster-name>-<YYYY-MM-DD>.md.",
+    "files": ["files/cluster-context.json"],
+    "assertions": [
+      "matches regex /eks-review-[a-z0-9-]+-\\d{4}-\\d{2}-\\d{2}\\.md/",
+      "matches regex /[a-z]{2}-[a-z]+-\\d/"
+    ]
+  },
+  {
+    "id": "eks-review-data-source-priority",
+    "prompt": "According to the skill, when reviewing an EKS cluster, what data source should be tried FIRST and what is the fallback? Name two specific K8s API tools the skill mentions. No cluster access required.",
+    "expected_output": "States K8s API is used first, AWS API as fallback, and names tools like resources_list, pods_list, nodes_top, or events_list.",
+    "files": [],
+    "assertions": [
+      "contains 'K8s' or contains 'Kubernetes'",
+      "contains 'AWS' or contains 'aws'",
+      "contains 'resources_list' or contains 'pods_list' or contains 'nodes_top' or contains 'events_list'"
+    ]
+  },
+  {
+    "id": "eks-review-severity-definitions",
+    "prompt": "List the five severity levels the skill uses for findings, in order from most to least urgent. No cluster access required.",
+    "expected_output": "Lists CRITICAL, HIGH, MEDIUM, LOW, INFO in that order.",
+    "files": [],
+    "assertions": [
+      "contains 'CRITICAL'",
+      "contains 'HIGH'",
+      "contains 'MEDIUM'",
+      "contains 'LOW'",
+      "contains 'INFO'"
+    ]
+  },
+  {
+    "id": "eks-review-best-practices-sections",
+    "prompt": "List the best practices sections the skill evaluates during an EKS operational review. No cluster access required.",
+    "expected_output": "Mentions Security, Reliability, Networking, Scalability, Cluster Upgrades, Cost Optimization, and Karpenter aligned to the EKS Best Practices Guide.",
+    "files": [],
+    "assertions": [
+      "contains 'Security' or contains 'security'",
+      "contains 'Reliability' or contains 'reliability'",
+      "contains 'Networking' or contains 'networking'",
+      "contains 'Scalability' or contains 'scalability'",
+      "contains 'Upgrade' or contains 'upgrade'",
+      "contains 'Cost' or contains 'cost'",
+      "contains 'Karpenter' or contains 'karpenter'"
+    ]
+  }
+]
