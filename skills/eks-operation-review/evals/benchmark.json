@@ -69,7 +69,7 @@
         "timing": {
           "elapsed_seconds": 18.787295124988304
         },
-        "raw_output": "- **demo-cluster** \u2014 region: us-east-1, account: 872879685372"
+        "raw_output": "- **demo-cluster** \u2014 region: us-east-1, account: $accountid"
       },
       "without_skill": {
         "eval_id": "eks-review-smoke-test",
