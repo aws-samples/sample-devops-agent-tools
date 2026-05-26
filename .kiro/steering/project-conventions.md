@@ -2,6 +2,12 @@
 
 This repository consolidates AWS DevOps Agent skills. Follow these conventions when contributing.
 
+## Key References
+
+- [Agent Skills spec](https://agentskills.io/home) — the open standard this project follows for skill structure
+- [AWS DevOps Agent Skills documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html) — official AWS docs on creating and uploading skills
+- [Agent Skill Eval](https://github.com/aws-samples/sample-agent-skill-eval) — evaluation framework for testing skills
+
 ## Repository Structure
 
 ```
@@ -13,17 +19,77 @@ aws-devops-agent-skill-central/
 │   └── <skill-name>/
 │       ├── SKILL.md          # Required: main skill instructions with frontmatter
 │       ├── README.md         # Skill documentation (purpose, prompts, upload instructions)
+│       ├── CHANGELOG.md      # Version history
+│       ├── .skilleval.yaml   # Evaluation configuration for Agent Skill Eval
 │       ├── references/       # Optional: supplementary reference docs
 │       ├── assets/           # Optional: images, diagrams, data files
 │       └── evals/            # Optional: evaluation queries and benchmarks
 ```
 
-## Skill Requirements
+## Writing Skills
 
-- Every skill must have a `SKILL.md` with valid frontmatter (`name` and `description` fields).
-- Every skill should have a `README.md` describing its purpose, prerequisites, limitations, sample prompts, and upload instructions.
-- Skill names use lowercase letters, numbers, and hyphens only (max 64 characters, no leading/trailing hyphens).
-- The `description` in frontmatter should be written from the agent's perspective, specifying when and why the skill should activate.
+Skills should follow both the [Agent Skills spec](https://agentskills.io/home) best practices and [AWS DevOps Agent best practices](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html).
+
+### SKILL.md Requirements
+
+- Must include valid frontmatter with `name` and `description` fields.
+- `name`: lowercase letters, numbers, and hyphens only (max 64 characters, no leading/trailing hyphens).
+- `description`: written from the agent's perspective, specifying when and why the skill should activate. Be specific about scenarios, services, error types, or symptoms that should trigger the skill. Minimum 100 characters recommended.
+- Instructions should be step-by-step, actionable, and include decision trees for different scenarios.
+- Include expected outputs and success criteria.
+- Reference specific AWS APIs, CLI commands, or tools the agent should use.
+- Use tables for structured data (e.g., filtering strategies, relevance scoring).
+
+### SKILL.md Frontmatter Example
+
+```yaml
+---
+name: my-skill-name
+description: Use this skill when investigating [specific scenarios].
+  Activate when you observe [specific symptoms, error patterns, or conditions].
+  This skill [what it does] by [how it does it] to [outcome].
+---
+```
+
+### Skill README.md Structure
+
+Each skill must have a README.md following this structure (see `skills/support-cases/README.md` as reference):
+
+1. **Title** — skill name as heading
+2. **Purpose** — what the skill does and why it's useful
+3. **Key Capabilities** — bullet list of what the skill enables
+4. **Prerequisites** — what's needed before using the skill (IAM permissions, service plans, etc.)
+5. **Limitations** — known constraints or boundaries
+6. **Agent Types** — which DevOps Agent types use this skill
+7. **Uploading to AWS DevOps Agent** — zip command and upload steps
+8. **How to Use This Skill** — sample prompts organized by agent type/use-case
+
+### Changelog
+
+Every skill must include a `CHANGELOG.md` tracking version history. Use semantic versioning:
+
+```markdown
+# Changelog
+
+## 1.1.0
+
+- Added backfill logic for missing data
+- Improved error handling for API timeouts
+
+## 1.0.0
+
+- Initial version
+```
+
+### Evaluation Tests
+
+Every skill should include evaluation tests using the [Agent Skill Eval](https://github.com/aws-samples/sample-agent-skill-eval) framework:
+
+- Add a `.skilleval.yaml` configuration file in the skill root
+- Add evaluation queries and benchmarks in the `evals/` directory
+- Tests should cover both audit (structural quality) and functional (runtime behavior) evaluations
+- Skills should achieve a passing score before being merged
+- Run evaluations locally and test with DevOps Agent before submitting changes
 
 ## Allowed File Extensions
 
@@ -34,23 +100,27 @@ Only these extensions are permitted inside skill directories (enforced by `skill
 ## Disallowed Content
 
 - `scripts/` directories are not supported by DevOps Agent.
-- `.claude/` directories should not be committed.
+- `.claude/` directories should not be committed (except CLAUDE.md).
+- `.kiro/` directories should not be committed.
 - `.DS_Store` and other OS files should not be committed.
 
 ## Adding a New Skill
 
 1. Create a new directory under `skills/` with the skill name.
-2. Add a `SKILL.md` with frontmatter and step-by-step instructions.
-3. Add a `README.md` with purpose, prerequisites, limitations, sample prompts, and upload steps.
-4. Update the root `README.md` skills table with the new skill's name, agent types, author, and docs link.
+2. Add a `SKILL.md` with frontmatter and step-by-step instructions following the writing guidelines above.
+3. Add a `README.md` following the structure described above.
+4. Add a `CHANGELOG.md` starting at version 1.0.0.
+5. Add evaluation tests (`.skilleval.yaml` and `evals/` directory).
+6. Test the skill with DevOps Agent before submitting.
+7. Update the root `README.md` skills table with the new skill's name, agent types, author, and docs link.
 
 ## Zipping for Upload
 
-When zipping a skill for upload to DevOps Agent, include only allowed extensions and exclude tooling directories:
+When zipping a skill for upload to DevOps Agent, include only allowed extensions and exclude non-skill files:
 
 ```bash
 cd skills
-zip -r <skill-name>.zip <skill-name>/ -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' -x '*/.claude/*' '*/scripts/*'
+zip -r <skill-name>.zip <skill-name>/ -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' '*/CHANGELOG.md'
 ```
 
 ## Git Conventions
