@@ -113,7 +113,6 @@ Only these extensions are permitted inside skill directories (enforced by `skill
 
 - `scripts/` directories are not supported by DevOps Agent.
 - `.claude/` directories should not be committed (except CLAUDE.md).
-- `.kiro/` directories should not be committed.
 - `.DS_Store` and other OS files should not be committed.
 
 ## Adding a New Skill

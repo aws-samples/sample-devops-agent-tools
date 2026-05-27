@@ -7,6 +7,7 @@ The skills are meant to be used either as samples for writing your own skills, o
 
 | Skill | Agent Types | Author | Docs |
 |-------|-------------|--------|------|
+| [aws-health-events](skills/aws-health-events/) | Chat tasks, Incident RCA | [udid-aws](https://github.com/udid-aws) | [README](skills/aws-health-events/README.md) |
 | [support-cases](skills/support-cases/) | Chat tasks, Incident RCA | [udid-aws](https://github.com/udid-aws) | [README](skills/support-cases/README.md) |
 | [eks-operation-review](skills/eks-operation-review/) | Chat tasks, Prevention | [yakiratz-aws](https://github.com/yakiratz-aws) | [README](skills/eks-operation-review/README.md) |
 

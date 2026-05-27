@@ -1,0 +1,30 @@
+[
+  {
+    "query": "How do I set up a multi-AZ deployment for my RDS instance?",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a Python script to list all S3 buckets in my account",
+    "should_trigger": false
+  },
+  {
+    "query": "What is the difference between an IAM role and an IAM user?",
+    "should_trigger": false
+  },
+  {
+    "query": "How can I reduce my monthly AWS bill for EC2 instances?",
+    "should_trigger": false
+  },
+  {
+    "query": "What are the best practices for designing a VPC with public and private subnets?",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I configure CloudWatch alarms for Lambda function errors?",
+    "should_trigger": false
+  },
+  {
+    "query": "Explain how to attach an IAM policy that allows read-only access to DynamoDB",
+    "should_trigger": false
+  }
+]

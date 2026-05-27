@@ -1,0 +1,102 @@
+[
+  {
+    "id": "incident-health-event-lookup",
+    "prompt": "I'm investigating an incident with our RDS database in us-west-2. The database started returning connection timeout errors about 2 hours ago. Check if there are any AWS Health events that could explain this.",
+    "expected_output": "The skill searches AWS Health events using DescribeEvents filtered by the RDS service and us-west-2 region within the past 7 days. It retrieves both account-specific and public events, then presents any matching events with their status, timeline, and description, or states that no matching events were found.",
+    "assertions": [
+      "The output calls DescribeEvents with the RDS service filter",
+      "The output filters events by the us-west-2 region",
+      "The output searches within the past 7 days from the incident start time",
+      "The output includes both account-specific and public event scopes",
+      "The output presents matching events or clearly states no events were found",
+      "The output does not produce an API error or permission denied message"
+    ]
+  },
+  {
+    "id": "event-detail-extraction",
+    "prompt": "I found AWS Health events related to EC2 in us-east-1. Get me the full details for these events including descriptions, timelines, and current status.",
+    "expected_output": "The skill calls DescribeEventDetails with the identified event ARNs, batching up to 10 per request. For each event, it presents the event description, start time, end time, last updated time, status, service, region, and event type category.",
+    "assertions": [
+      "The output calls DescribeEventDetails to retrieve full event information",
+      "The output includes the event description text for each event",
+      "The output includes start time and end time in ISO 8601 format",
+      "The output includes the current status (open, closed, or upcoming) for each event",
+      "The output batches requests with no more than 10 event ARNs per API call",
+      "The output handles any failedSet entries by reporting them and continuing with successfulSet"
+    ]
+  },
+  {
+    "id": "affected-entity-matching",
+    "prompt": "We have an account-specific Health event affecting EC2. Our incident involves instances i-0abc123def456 and i-0def789ghi012 in us-east-1. Identify which of our resources are affected by this event.",
+    "expected_output": "The skill calls DescribeAffectedEntities for the account-specific event and matches the returned entities against the provided instance IDs. Matched resources are presented separately with their status (IMPAIRED, UNIMPAIRED, UNKNOWN, or PENDING) and last updated time.",
+    "assertions": [
+      "The output calls DescribeAffectedEntities for the account-specific event",
+      "The output performs exact string matching of entity values against the incident resource identifiers",
+      "The output presents matched entities separately from non-matched entities",
+      "The output includes entity status (IMPAIRED, UNIMPAIRED, UNKNOWN, or PENDING) for each entity",
+      "The output includes last updated time for each affected entity"
+    ]
+  },
+  {
+    "id": "relevance-correlation",
+    "prompt": "I'm investigating a Lambda function timeout issue in us-west-2 that started 3 hours ago. The function ARN is arn:aws:lambda:us-west-2:123456789012:function:my-processor. Several Health events were found. Correlate them with my incident and classify their relevance.",
+    "expected_output": "The skill scores each Health event for relevance by evaluating service match, timeframe overlap, region/AZ match, and affected resource match. Events are classified as High, Medium, or Low relevance. Open events with High or Medium relevance are labeled as likely contributing factors. Results are ordered by relevance classification then by start time descending.",
+    "assertions": [
+      "The output classifies each event as High, Medium, or Low relevance",
+      "The output explains the matching criteria used for each classification",
+      "The output orders results by relevance (High first, then Medium, then Low)",
+      "The output labels open events with High or Medium relevance as likely contributing factors",
+      "The output includes at least one actionable next step per correlated event",
+      "The output considers service match, timeframe overlap, and region when scoring"
+    ]
+  },
+  {
+    "id": "chat-health-report",
+    "prompt": "Generate a summary report of all AWS Health events for my account over the past 30 days.",
+    "expected_output": "The skill retrieves all Health events within the past 30 days and presents a structured report organized by event type category (issues, scheduled changes, account notifications) with counts for each. The report includes a breakdown by AWS service and by event status (open, closed, upcoming), with event timelines showing start, resolution, and duration.",
+    "assertions": [
+      "The output organizes events by event type category (issues, scheduled changes, account notifications)",
+      "The output includes counts for each category",
+      "The output includes a breakdown of events by AWS service",
+      "The output includes a breakdown by event status (open, closed, upcoming)",
+      "The output covers the past 30 days as the default time period",
+      "The output presents event timelines with start time and resolution time for closed events"
+    ]
+  },
+  {
+    "id": "no-events-found",
+    "prompt": "I'm investigating elevated error rates on our ECS cluster in eu-west-1. Check if there are any AWS Health events that could be causing this.",
+    "expected_output": "The skill searches for Health events filtered by ECS service in eu-west-1 and finds no matching events. It explicitly states no events were found, confirms the search parameters used, and suggests alternative investigation paths such as checking recent deployments, configuration changes, resource limits, or network connectivity.",
+    "assertions": [
+      "The output explicitly states that no matching AWS Health events were found",
+      "The output confirms the search parameters used (service, time range, region)",
+      "The output suggests alternative investigation paths",
+      "The output recommends checking recent deployments or configuration changes",
+      "The output does not fabricate or hallucinate health events that do not exist"
+    ]
+  },
+  {
+    "id": "api-region-awareness",
+    "prompt": "Check AWS Health events for our DynamoDB tables experiencing throttling in ap-southeast-1.",
+    "expected_output": "The skill calls the AWS Health API using the us-east-1 endpoint regardless of the fact that the affected DynamoDB resources are in ap-southeast-1. The events filter includes ap-southeast-1 as the region filter to scope results to that region, but the API call itself targets us-east-1.",
+    "assertions": [
+      "The Health API call is made to the us-east-1 endpoint",
+      "The output does not attempt to call the Health API in ap-southeast-1",
+      "The output filters events by the ap-southeast-1 region where resources are located",
+      "The output returns relevant health event information regardless of the resource region",
+      "The output does not fail due to region misconfiguration"
+    ]
+  },
+  {
+    "id": "broadened-search",
+    "prompt": "I'm investigating connection failures to our Application Load Balancer in us-east-1. The ALB started returning 503 errors 30 minutes ago. Check for any related AWS Health events.",
+    "expected_output": "The skill first searches for Health events filtered by the ELB service in us-east-1 within the past 7 days. Finding no results, it broadens the search to related services (EC2, VPC, Route 53) that share infrastructure dependencies with ELB. If still no results, it expands the time window to 14 days before reporting no events found.",
+    "assertions": [
+      "The output first searches for events specific to the ELB/ELASTICLOADBALANCING service",
+      "The output broadens to related services (EC2, VPC, Route 53) when no ELB events are found",
+      "The output expands the time window to 14 days if related service search also returns no results",
+      "The output follows the decision tree: specific service → related services → expanded time window",
+      "The output reports the search progression to the operator"
+    ]
+  }
+]

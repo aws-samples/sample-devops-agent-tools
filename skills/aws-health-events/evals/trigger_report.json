@@ -1,0 +1,105 @@
+{
+  "skill_name": "aws-health-events",
+  "skill_path": "/Users/udid/AWS Work/Services/DevOps Agent/aws-devops-agent-skill-central/skills/aws-health-events",
+  "query_results": [
+    {
+      "query": "How do I set up a multi-AZ deployment for my RDS instance?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 438.0,
+      "mean_total_tokens": 441.0
+    },
+    {
+      "query": "Write a Python script to list all S3 buckets in my account",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 181.0,
+      "mean_total_tokens": 184.0
+    },
+    {
+      "query": "What is the difference between an IAM role and an IAM user?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 299.0,
+      "mean_total_tokens": 302.0
+    },
+    {
+      "query": "How can I reduce my monthly AWS bill for EC2 instances?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 518.0,
+      "mean_total_tokens": 521.0
+    },
+    {
+      "query": "What are the best practices for designing a VPC with public and private subnets?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 601.0,
+      "mean_total_tokens": 604.0
+    },
+    {
+      "query": "How do I configure CloudWatch alarms for Lambda function errors?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 792.0,
+      "mean_total_tokens": 795.0
+    },
+    {
+      "query": "Explain how to attach an IAM policy that allows read-only access to DynamoDB",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 497.0,
+      "mean_total_tokens": 500.0
+    }
+  ],
+  "summary": {
+    "total_queries": 7,
+    "passed": 7,
+    "failed": 0,
+    "trigger_precision": 1.0,
+    "no_trigger_precision": 1.0,
+    "mean_total_tokens_per_run": 478.1,
+    "estimated_cost": {
+      "per_run": {
+        "input_cost": 9e-06,
+        "output_cost": 0.007127,
+        "total_cost": 0.007136,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "total_runs": 7,
+      "total_cost": 0.05,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "passed": true
+}

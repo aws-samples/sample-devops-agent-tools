@@ -1,0 +1,1154 @@
+{
+  "skill_name": "aws-health-events",
+  "skill_path": "/Users/udid/AWS Work/Services/DevOps Agent/aws-devops-agent-skill-central/skills/aws-health-events",
+  "eval_count": 8,
+  "runs_per_eval": 1,
+  "metadata": {
+    "timestamp": "2026-05-27T13:31:37Z"
+  },
+  "runs": [
+    {
+      "eval_id": "incident-health-event-lookup",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "incident-health-event-lookup",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output calls DescribeEvents with the RDS service filter",
+            "passed": true,
+            "evidence": "The output states 'I'll check AWS Health events for RDS' and the search parameters table shows 'Services | RDS, EC2, VPC, EBS', indicating DescribeEvents was called with RDS as a service filter. However, the actual API call (DescribeEvents) is not explicitly shown in the output text.",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "The output filters events by the us-west-2 region",
+            "passed": true,
+            "evidence": "The search parameters table explicitly shows 'Region | us-west-2' confirming the events were filtered by us-west-2.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output searches within the past 7 days from the incident start time",
+            "passed": false,
+            "evidence": "The search parameters show 'Time range | 2026-05-13 to present (14 days)'. The assertion expects a 7-day search window, but the output used a 14-day window instead.",
+            "method": "llm",
+            "confidence": 0.8,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes both account-specific and public event scopes",
+            "passed": false,
+            "evidence": "The output does not mention event scopes (account-specific vs public). The search parameters table lists services, region, time range, statuses, and categories but does not reference event scope filtering.",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          },
+          {
+            "text": "The output presents matching events or clearly states no events were found",
+            "passed": true,
+            "evidence": "The output clearly states 'No matching AWS Health events were found for RDS, EC2, VPC, or EBS in us-west-2 over the past 14 days' under a heading 'Results: No AWS Health Events Found'.",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not produce an API error or permission denied message",
+            "passed": true,
+            "evidence": "The output contains no API errors, permission denied messages, or access denied responses. It successfully completed the search and reported results.",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.6666666666666666,
+        "summary": "With skill: 67% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 4,
+          "token_counts": {
+            "input_tokens": 5,
+            "output_tokens": 1269,
+            "cache_read_input_tokens": 56662,
+            "cache_creation_input_tokens": 28998
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 61.42067291700005
+        },
+        "raw_output": "I'll check AWS Health events for RDS in us-west-2 to see if there's a service-side issue explaining your connection timeouts.Let me also check EBS (another RDS dependency) and broaden the search slightly.## Results: No AWS Health Events Found\n\nNo matching AWS Health events were found for RDS, EC2, VPC, or EBS in **us-west-2** over the past 14 days. This means AWS is not reporting any service-side disruptions or scheduled maintenance that would explain your connection timeouts.\n\n### Search Parameters Used\n| Filter | Value |\n|--------|-------|\n| Services | RDS, EC2, VPC, EBS |\n| Region | us-west-2 |\n| Time range | 2026-05-13 to present (14 days) |\n| Statuses | open, closed |\n| Categories | issue, scheduledChange, accountNotification |\n\n### Recommended Next Steps\n\nSince this doesn't appear to be an AWS-side issue, investigate these common causes of RDS connection timeouts:\n\n1. **Security group / network ACL changes** \u2014 verify inbound rules on the RDS instance's security group still allow traffic from your application subnets\n2. **Max connections exhausted** \u2014 check `DatabaseConnections` in CloudWatch; if at the limit, connections will be refused\n3. **Storage full** \u2014 check `FreeStorageSpace`; a full disk can cause RDS to reject connections\n4. **Recent deployments** \u2014 check if any application or infrastructure changes were deployed ~2 hours ago\n5. **DNS resolution** \u2014 if using a custom endpoint or Route 53, verify it still resolves to the correct RDS address\n6. **RDS instance status** \u2014 run `aws rds describe-db-instances --region us-west-2` to confirm the instance is in `available` state\n\nWould you like me to help investigate any of these?"
+      },
+      "without_skill": {
+        "eval_id": "incident-health-event-lookup",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output calls DescribeEvents with the RDS service filter",
+            "passed": true,
+            "evidence": "The output shows the aws health describe-events command with services=RDS filter, but it was not actually executed - only provided as a recommendation for the user to run",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          },
+          {
+            "text": "The output filters events by the us-west-2 region",
+            "passed": true,
+            "evidence": "The describe-events command includes regions=us-west-2 in the filter parameter",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          },
+          {
+            "text": "The output searches within the past 7 days from the incident start time",
+            "passed": false,
+            "evidence": "No time-based filter (startTime/endTime for past 7 days) is included in the describe-events command; only eventStatusCodes are specified",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes both account-specific and public event scopes",
+            "passed": false,
+            "evidence": "The command does not include any eventScopeCode filter for account-specific or public events; neither scope is mentioned",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output presents matching events or clearly states no events were found",
+            "passed": false,
+            "evidence": "The output states it cannot query the API due to missing credentials and provides commands for the user to run - it does not present actual events or definitively state no events were found",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not produce an API error or permission denied message",
+            "passed": true,
+            "evidence": "No API error or permission denied message is produced; the output proactively explains credentials are unavailable before attempting any API call",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.5,
+        "summary": "Without skill: 50% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 2,
+          "token_counts": {
+            "input_tokens": 5,
+            "output_tokens": 719,
+            "cache_read_input_tokens": 57220,
+            "cache_creation_input_tokens": 13855
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 36.07404095799939
+        },
+        "raw_output": "I'll check AWS Health for any events affecting RDS in us-west-2.There are no valid AWS credentials configured in this environment, so I can't query the AWS Health API directly. Here's how you can check yourself:\n\n**Check AWS Health events:**\n```bash\n# AWS Health API must be called from us-east-1 (it's a global endpoint)\naws health describe-events \\\n  --filter \"services=RDS,regions=us-west-2,eventStatusCodes=open,upcoming,closed\" \\\n  --region us-east-1 \\\n  --output table\n```\n\n**Get event details (if events are found):**\n```bash\naws health describe-event-details \\\n  --event-arns <arn-from-above> \\\n  --region us-east-1\n```\n\n**Other quick checks for your RDS connection timeouts:**\n\n1. **RDS instance status:**\n   ```bash\n   aws rds describe-db-instances --region us-west-2 \\\n     --query 'DBInstances[*].[DBInstanceIdentifier,DBInstanceStatus]' --output table\n   ```\n\n2. **Recent RDS events (maintenance, failover, etc.):**\n   ```bash\n   aws rds describe-events --region us-west-2 --duration 180 --output table\n   ```\n\n3. **Security group / network changes** \u2014 verify the instance's security group still allows inbound connections on the DB port from your application's CIDR/security group.\n\n4. **CloudWatch metrics** \u2014 check `DatabaseConnections`, `CPUUtilization`, and `FreeableMemory` for the past 3 hours to see if the instance is overwhelmed or unreachable.\n\nWould you like me to run any of these once you have credentials configured, or help investigate further in a different way?"
+      },
+      "delta_pass_rate": 0.16666666666666663
+    },
+    {
+      "eval_id": "event-detail-extraction",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "event-detail-extraction",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output calls DescribeEventDetails to retrieve full event information",
+            "passed": true,
+            "evidence": "The output says 'Let me get the full details' and shows detailed event information (description, timeline, root cause) consistent with a DescribeEventDetails call, but doesn't explicitly name the API",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes the event description text for each event",
+            "passed": true,
+            "evidence": "The output includes extensive event description text including Root Cause, Impact, and Timeline Summary sections which correspond to the event description from DescribeEventDetails",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes start time and end time in ISO 8601 format",
+            "passed": false,
+            "evidence": "Times are shown as '2026-05-07 16:25 PDT' and '2026-05-08 20:04 PDT' which is not ISO 8601 format (would need T separator and proper timezone offset like 2026-05-07T16:25:00-07:00)",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes the current status (open, closed, or upcoming) for each event",
+            "passed": true,
+            "evidence": "The output explicitly shows 'Status | **Closed**' which is one of the expected status values (open, closed, or upcoming)",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output batches requests with no more than 10 event ARNs per API call",
+            "passed": false,
+            "evidence": "The output does not mention batching at all. Only 1 event was found so batching wasn't needed, but there's no evidence the output implements or describes the batching constraint",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          },
+          {
+            "text": "The output handles any failedSet entries by reporting them and continuing with successfulSet",
+            "passed": false,
+            "evidence": "The output does not mention failedSet handling at all - no reporting of failed entries or explicit mention of processing successfulSet separately",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.5,
+        "summary": "With skill: 50% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 2,
+          "token_counts": {
+            "input_tokens": 5,
+            "output_tokens": 1192,
+            "cache_read_input_tokens": 66606,
+            "cache_creation_input_tokens": 22127
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 46.91727712500142
+        },
+        "raw_output": "I'll retrieve EC2 Health events in us-east-1 and then get their full details.Found one EC2 event. Let me get the full details.Here are the full details for the EC2 Health event found in us-east-1:\n\n---\n\n## EC2 Operational Issue \u2014 RESOLVED\n\n| Field | Value |\n|-------|-------|\n| **Event ARN** | `arn:aws:health:us-east-1::event/EC2/AWS_EC2_OPERATIONAL_ISSUE/AWS_EC2_OPERATIONAL_ISSUE_FFA94_A4DC515D30F` |\n| **Service** | EC2 |\n| **Type** | `AWS_EC2_OPERATIONAL_ISSUE` (issue) |\n| **Region** | us-east-1 |\n| **Availability Zone** | use1-az4 |\n| **Status** | **Closed** |\n| **Scope** | PUBLIC (affected all accounts in the zone) |\n| **Start Time** | 2026-05-07 16:25 PDT |\n| **End Time** | 2026-05-08 20:04 PDT |\n| **Duration** | ~27.5 hours |\n\n---\n\n### Root Cause\n\nA **thermal event** in a single data center facility within use1-az4 caused a **loss of power**. Servers automatically shut down when temperatures exceeded operating thresholds to protect hardware.\n\n### Impact\n\n- Impaired EC2 instances and degraded EBS volumes in use1-az4\n- Cascading impact to dependent services: ELB, EKS, ElastiCache, OpenSearch, Redshift, Kafka (MSK), NAT Gateway, IoT Core, SageMaker\n\n### Timeline Summary\n\n| Time (PDT) | Update |\n|------------|--------|\n| May 7, 4:20 PM | Thermal event begins, instance impairments start |\n| May 7, 5:06 PM | Traffic shifted away from impacted AZ for most services |\n| May 7, 9:12 PM | Power restored to a subset of infrastructure; early recovery signs |\n| May 8, 6:51 AM | Continued work on cooling capacity; Redshift errors also reported |\n| May 8, 9:30 AM | Redshift fully recovered |\n| May 8, 12:29 PM | Recovery slower than anticipated; measured cooling restoration underway |\n| May 8, 4:00 PM | Steady improvements observed; additional cooling capacity showing progress |\n| May 8, 8:04 PM | Cooling stabilized to pre-event levels; majority of EC2/EBS recovered. **Event resolved.** |\n\n### Previously Impacted Services (Now Normal)\n\nIOT, EKS, ElastiCache, OpenSearch, ELB, Ka"
+      },
+      "without_skill": {
+        "eval_id": "event-detail-extraction",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output calls DescribeEventDetails to retrieve full event information",
+            "passed": false,
+            "evidence": "The output never progressed past authentication errors and profile selection. No DescribeEventDetails call was made.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes the event description text for each event",
+            "passed": false,
+            "evidence": "No event data was retrieved at all. The output is entirely about credential/profile selection.",
+            "method": "llm",
+            "confidence": 0.98,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes start time and end time in ISO 8601 format",
+            "passed": false,
+            "evidence": "No event data was retrieved, so no timestamps in any format are present.",
+            "method": "llm",
+            "confidence": 0.98,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes the current status (open, closed, or upcoming) for each event",
+            "passed": false,
+            "evidence": "No event data was retrieved, so no status information is present.",
+            "method": "llm",
+            "confidence": 0.98,
+            "uncertain": false
+          },
+          {
+            "text": "The output batches requests with no more than 10 event ARNs per API call",
+            "passed": false,
+            "evidence": "No API requests were made at all, so no batching behavior can be observed.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output handles any failedSet entries by reporting them and continuing with successfulSet",
+            "passed": false,
+            "evidence": "No API calls were made, so no failedSet handling occurred.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 3,
+          "token_counts": {
+            "input_tokens": 6,
+            "output_tokens": 1125,
+            "cache_read_input_tokens": 81618,
+            "cache_creation_input_tokens": 14790
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 45.30411141699733
+        },
+        "raw_output": "I'll query AWS Health for EC2 events in us-east-1.The request failed with an authentication error \u2014 the current AWS credentials are invalid or not configured. Let me check what's available.I only see Admin profiles available. Since this is a read-only operation (describing Health events), I'll proceed with one of the available profiles. Which account would you like me to check? The available profiles are:\n\n- `udid-Admin` (main account)\n- `udid+linked1-Admin`\n- `udid+linked2-Admin`\n- `udid+linked3-Admin`\n- `udid+datacollection-Admin`\n- `udid+datacollection4-Admin`\n- `udid+datacollection5-Admin`\n- `udid+datacollection6-Admin`\n\nAlso note: the AWS Health API requires a Business or Enterprise AWS Support plan. Which profile/account should I use to query the Health events?Which AWS profile should I use to query the EC2 Health events? The default credentials aren't valid, and I see several profiles available (listed above). Let me know which account you'd like me to check."
+      },
+      "delta_pass_rate": 0.5
+    },
+    {
+      "eval_id": "affected-entity-matching",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "affected-entity-matching",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output calls DescribeAffectedEntities for the account-specific event",
+            "passed": false,
+            "evidence": "The output did call DescribeAffectedEntities, but the event found was PUBLIC, not account-specific. The output explicitly states 'No account-specific AWS Health events were found' so the assertion's condition ('for the account-specific event') cannot be satisfied.",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output performs exact string matching of entity values against the incident resource identifiers",
+            "passed": false,
+            "evidence": "The output does not show any string matching of returned entity values against the instance IDs i-0abc123def456 and i-0def789ghi012. It only notes that the entities response showed 'UNKNOWN' and recommends checking instances via EC2 commands instead.",
+            "method": "llm",
+            "confidence": 0.92,
+            "uncertain": false
+          },
+          {
+            "text": "The output presents matched entities separately from non-matched entities",
+            "passed": false,
+            "evidence": "The output does not present any matched vs non-matched entities. No entity-level breakdown is provided since the public event didn't return per-account entity data.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes entity status (IMPAIRED, UNIMPAIRED, UNKNOWN, or PENDING) for each entity",
+            "passed": false,
+            "evidence": "The output mentions 'UNKNOWN' once in the context of the API response but does not present entity status for each of the user's specific instances. It only notes generically that the response showed 'UNKNOWN'.",
+            "method": "llm",
+            "confidence": 0.8,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes last updated time for each affected entity",
+            "passed": false,
+            "evidence": "The output contains no last updated time for any affected entities. Only the event's start/end period is shown, not per-entity timestamps.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "With skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 7,
+          "token_counts": {
+            "input_tokens": 8,
+            "output_tokens": 2081,
+            "cache_read_input_tokens": 159082,
+            "cache_creation_input_tokens": 24636
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 76.7529924579976
+        },
+        "raw_output": "I'll investigate AWS Health events for EC2 in us-east-1 and check which of your specific instances are affected.The only EC2 event found in us-east-1 is a **PUBLIC** event (not account-specific). Let me broaden the search to include a wider time window and check for any account-specific events.Let me get the event details and check affected entities for the us-east-1 event, and also try to query affected entities directly for your instances.The event found is a **PUBLIC** event (`eventScopeCode: PUBLIC`), not an account-specific one. Public events don't return per-account affected entity data \u2014 the entities response only shows `\"UNKNOWN\"`. Let me search more broadly for any account-specific EC2 events that might not have appeared yet.## Findings\n\n**No account-specific AWS Health events were found for EC2 in us-east-1 for this account.**\n\nThe only EC2 event in us-east-1 is a **public** (service-wide) event:\n\n| Field | Value |\n|-------|-------|\n| **Event** | `AWS_EC2_OPERATIONAL_ISSUE` |\n| **Region** | us-east-1, AZ: use1-az4 |\n| **Status** | Closed |\n| **Period** | May 7 4:20 PM \u2013 May 9 3:04 AM PDT |\n| **Cause** | Thermal event (data center power loss) in use1-az4 |\n| **Scope** | PUBLIC (not account-specific) |\n\nBecause this is a public event, the Health API does not return per-account affected entity data \u2014 I cannot determine from the Health API alone whether your instances `i-0abc123def456` and `i-0def789ghi012` were impacted by this event.\n\n### Recommended next steps to identify if your resources were affected:\n\n1. **Check instance status directly:**\n   ```\n   aws ec2 describe-instance-status --instance-ids i-0abc123def456 i-0def789ghi012 --region us-east-1\n   ```\n\n2. **Check which AZ your instances are in** \u2014 the event only affected `use1-az4`:\n   ```\n   aws ec2 describe-instances --instance-ids i-0abc123def456 i-0def789ghi012 --region us-east-1 --query 'Reservations[].Instances[].[InstanceId,Placement.AvailabilityZone,State.Name]'\n   ```\n\n3. **Check the \"Your Ac"
+      },
+      "without_skill": {
+        "eval_id": "affected-entity-matching",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output calls DescribeAffectedEntities for the account-specific event",
+            "passed": false,
+            "evidence": "The output mentions querying affected entities for the us-east-1 event, but since only a public (not account-specific) event was found, DescribeAffectedEntities was not called for an account-specific event specifically. The output explicitly states the event is 'public (not account-specific)'.",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          },
+          {
+            "text": "The output performs exact string matching of entity values against the incident resource identifiers",
+            "passed": false,
+            "evidence": "The output does not perform exact string matching of entity values against the incident resource identifiers. Instead, it validates the format of the provided IDs and checks AZ placement. No entity-to-resource-ID comparison is shown.",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output presents matched entities separately from non-matched entities",
+            "passed": false,
+            "evidence": "The output does not present matched entities separately from non-matched entities. It presents instances grouped by AZ and concludes no resources are affected, but doesn't use a matched/non-matched separation structure.",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes entity status (IMPAIRED, UNIMPAIRED, UNKNOWN, or PENDING) for each entity",
+            "passed": false,
+            "evidence": "The output shows EC2 instance states ('running', 'stopped') not Health API entity statuses (IMPAIRED, UNIMPAIRED, UNKNOWN, or PENDING). No Health entity status values are mentioned anywhere.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes last updated time for each affected entity",
+            "passed": false,
+            "evidence": "No last updated time is provided for any affected entity. Only the event timeframe (May 7-9, 2026) is mentioned, not per-entity timestamps.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 14,
+          "token_counts": {
+            "input_tokens": 11,
+            "output_tokens": 3232,
+            "cache_read_input_tokens": 224300,
+            "cache_creation_input_tokens": 21966
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 112.17324075000215
+        },
+        "raw_output": "I'll investigate the AWS Health event affecting your EC2 instances in us-east-1. Let me first check your AWS credentials and then query the Health API.I see only Admin profiles available. Since querying Health events is a read-only operation, I'll proceed with the default credentials. Let me check the caller identity and then query AWS Health for events affecting your instances.The default credentials are invalid. I'll need to use one of your configured profiles. Note that only Admin profiles are available \u2014 I'll use them strictly for read-only operations (Health API queries). Let me try with the primary account profile.Good, the `udid-Admin` profile works. I'm using Admin credentials (read-only operations only). Let me now query AWS Health for EC2 events and check which of your instances are affected.The Health API returned public-scope events. Let me now check for account-specific events that might affect your instances directly, and also query the affected entities for the us-east-1 event.The Health API returned a **public** event (not account-specific). Let me check if there are account-specific events, and also verify whether your instances are in the affected availability zone (use1-az4).The instance IDs you provided (`i-0abc123def456` and `i-0def789ghi012`) are not valid EC2 instance ID format \u2014 they appear to be placeholder/redacted IDs. EC2 instance IDs are 17 hex characters after the `i-` prefix (e.g., `i-0a1b2c3d4e5f67890`).\n\nLet me try a broader approach to find account-specific events and also check instances in your account.Here's what I found:\n\n## Summary\n\n**No resources in this account are affected by the Health event.**\n\n### Health Event Details\nThe only EC2 Health event in us-east-1 is a **closed, public** (not account-specific) operational issue:\n- **Event:** `AWS_EC2_OPERATIONAL_ISSUE` \u2014 a thermal event causing power loss in **use1-az4** on May 7-9, 2026\n- **Status:** Resolved\n- **Affected AZ:** `use1-az4`\n\n### Your Account's Instances\nNone of yo"
+      },
+      "delta_pass_rate": 0.0
+    },
+    {
+      "eval_id": "relevance-correlation",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "relevance-correlation",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output classifies each event as High, Medium, or Low relevance",
+            "passed": true,
+            "evidence": "Correlated events in the Issues and Scheduled Changes tables are labeled with **Low** relevance, but the 'Discarded' events don't receive an explicit High/Medium/Low label \u2014 they're just listed as 'no correlation'. Not all events get a formal H/M/L classification.",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          },
+          {
+            "text": "The output explains the matching criteria used for each classification",
+            "passed": true,
+            "evidence": "Each classified event has a 'Rationale' column explaining why it was rated Low \u2014 citing factors like timeframe mismatch, wrong region, service relationship, and residual impact windows.",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          },
+          {
+            "text": "The output orders results by relevance (High first, then Medium, then Low)",
+            "passed": true,
+            "evidence": "All correlated events are rated Low, so there's no misordering possible. However, the output organizes by event type (Issues, then Scheduled Changes, then Discarded) rather than explicitly by relevance level, so the ordering principle isn't clearly demonstrated.",
+            "method": "llm",
+            "confidence": 0.5,
+            "uncertain": false
+          },
+          {
+            "text": "The output labels open events with High or Medium relevance as likely contributing factors",
+            "passed": true,
+            "evidence": "There are no open events with High or Medium relevance in the results. The assertion is vacuously satisfied \u2014 there's nothing to label, and the conclusion explicitly states no correlating events were found.",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes at least one actionable next step per correlated event",
+            "passed": false,
+            "evidence": "The correlated events (Route 53 issue, Lambda lifecycle events) do not have individual actionable next steps attached to them. The 'Recommended Next Steps' section provides general investigation guidance for the Lambda timeout, not per-event recommendations.",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output considers service match, timeframe overlap, and region when scoring",
+            "passed": true,
+            "evidence": "Rationales explicitly reference service match ('Route 53 could affect Lambda DNS', 'Same service', 'unrelated service'), timeframe overlap ('closed ~4 days before', 'no timeframe overlap', '5 months away'), and region ('global', 'wrong region us-east-1 vs us-west-2').",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.8333333333333334,
+        "summary": "With skill: 83% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 5,
+          "token_counts": {
+            "input_tokens": 6,
+            "output_tokens": 2669,
+            "cache_read_input_tokens": 95702,
+            "cache_creation_input_tokens": 20713
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 79.27190295899709
+        },
+        "raw_output": "I'll check AWS Health events for Lambda and related services in us-west-2 to correlate with your timeout issue.No events found for Lambda or its dependencies specifically. Let me broaden the search to all services in us-west-2 and also check account-wide events.## AWS Health Event Correlation Results\n\n### Summary\n\n| Total Events Found | Issues | Scheduled Changes | Account Notifications |\n|---|---|---|---|\n| 6 | 1 | 5 | 0 |\n\n---\n\n### Correlation Analysis\n\n**Incident context:**\n- **Service:** Lambda\n- **Region:** us-west-2\n- **Started:** ~2026-05-27 approx 3 hours ago\n- **Symptom:** Function timeouts\n- **Resource:** `arn:aws:lambda:us-west-2:123456789012:function:my-processor`\n\n---\n\n### Correlated Events\n\n#### Issues\n\n| Event | Relevance | Rationale |\n|---|---|---|\n| **AWS_ROUTE53_OPERATIONAL_ISSUE** (global, closed 2026-05-23 02:38\u201303:13 UTC) | **Low** | Route 53 is global and could affect Lambda DNS resolution, but this event closed ~4 days before the current incident \u2014 well outside the 2-hour residual impact window. |\n\n#### Scheduled Changes (Lambda-related)\n\n| Event | Relevance | Rationale |\n|---|---|---|\n| **AWS_LAMBDA_PLANNED_LIFECYCLE_EVENT** (us-east-1, starts 2026-10-31) | **Low** | Same service, but wrong region (us-east-1 vs us-west-2) and no timeframe overlap (5 months away). |\n| **AWS_LAMBDA_PLANNED_LIFECYCLE_EVENT** (us-east-1, starts 2026-08-31) | **Low** | Same service, but wrong region and no timeframe overlap (3 months away). |\n\n#### Discarded (no correlation)\n\n- **AWS_EKS_FARGATE_POD_EVICTIONS** \u2014 unrelated service, wrong region\n- **AWS_EKS_PLANNED_LIFECYCLE_EVENT** \u2014 unrelated service, wrong region, future event\n- **AWS_ELASTICMAPREDUCE_PLANNED_LIFECYCLE_EVENT** \u2014 unrelated service, wrong region\n\n---\n\n### Conclusion\n\n**No matching AWS Health events were found that correlate with your Lambda timeout incident in us-west-2.** There are no open or recently-closed events for Lambda (or its dependencies: VPC, CloudWatch) in us-west-2 that overlap with y"
+      },
+      "without_skill": {
+        "eval_id": "relevance-correlation",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output classifies each event as High, Medium, or Low relevance",
+            "passed": false,
+            "evidence": "The output provides a generic classification framework/table with High/Medium/Low/None categories and examples, but does not classify any actual specific Health events. No real events were retrieved or classified.",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output explains the matching criteria used for each classification",
+            "passed": true,
+            "evidence": "The table includes a 'Criteria' column explaining what qualifies for each relevance level (e.g., High = directly affects Lambda/networking/downstream services), but these are generic criteria not applied to specific events.",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          },
+          {
+            "text": "The output orders results by relevance (High first, then Medium, then Low)",
+            "passed": true,
+            "evidence": "The classification table is ordered High \u2192 Medium \u2192 Low \u2192 None, presenting results by descending relevance.",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          },
+          {
+            "text": "The output labels open events with High or Medium relevance as likely contributing factors",
+            "passed": false,
+            "evidence": "No actual open events are identified or labeled as likely contributing factors. The output only provides a hypothetical framework since credentials were expired.",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes at least one actionable next step per correlated event",
+            "passed": false,
+            "evidence": "The output lists general 'Common causes' and asks user to refresh credentials, but does not provide actionable next steps per correlated event since no actual events were retrieved or correlated.",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output considers service match, timeframe overlap, and region when scoring",
+            "passed": true,
+            "evidence": "The framework considers service match (criteria column references Lambda, networking, downstream services), timeframe (query uses -3H filter), and region (filters on us-west-2, notes Health API is in us-east-1). However, these are in the proposed approach rather than applied to actual scoring.",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.5,
+        "summary": "Without skill: 50% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 3,
+          "token_counts": {
+            "input_tokens": 5,
+            "output_tokens": 1056,
+            "cache_read_input_tokens": 57584,
+            "cache_creation_input_tokens": 14196
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 45.48013312499825
+        },
+        "raw_output": "I'll investigate the AWS Health events in us-west-2 to correlate them with your Lambda timeout issue. Let me start by checking available AWS credentials and querying the Health API.My AWS credentials are currently expired/invalid, so I can't directly query the AWS Health API. However, I can still help you investigate and classify Health events. Let me outline the approach:\n\n**To correlate AWS Health events with your Lambda timeout issue, here's what to check:**\n\n1. **Refresh your credentials** first:\n   ```bash\n   aws sso login --profile AdministratorAccess-742719403826-sso\n   ```\n\n2. **Then query Health events** (preferring ReadOnly credentials if available):\n   ```bash\n   # Get Health events in us-west-2 from the last 3 hours\n   aws health describe-events \\\n     --filter \"regions=us-west-2,startTimes=[{from=$(date -u -v-3H +%Y-%m-%dT%H:%M:%S)}],eventStatusCodes=open,upcoming,closed\" \\\n     --region us-east-1 \\\n     --profile <your-profile>\n   ```\n   (Note: AWS Health API is only available in `us-east-1` for global endpoint)\n\n3. **Classification framework** for correlating Health events with your Lambda timeouts:\n\n| Relevance | Criteria | Example |\n|---|---|---|\n| **High** | Directly affects Lambda, networking, or downstream services your function calls | Lambda operational issue, VPC/NAT degradation, DynamoDB/S3 latency in us-west-2 |\n| **Medium** | Affects infrastructure your function may depend on indirectly | EBS degradation (if using EFS), CloudWatch delays, SQS delivery delays |\n| **Low** | Same region but unrelated service | EC2 instance retirement, Redshift maintenance |\n| **None** | Different region or completely unrelated | Health events in other regions |\n\n**Common causes of Lambda timeouts that correlate with Health events:**\n- VPC/ENI provisioning delays (if your function is VPC-attached)\n- Downstream service latency (DynamoDB, RDS, S3, external APIs)\n- Cold start amplification during Lambda service degradation\n- NAT Gateway or networking issues\n\nWould"
+      },
+      "delta_pass_rate": 0.33333333333333337
+    },
+    {
+      "eval_id": "chat-health-report",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "chat-health-report",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output organizes events by event type category (issues, scheduled changes, account notifications)",
+            "passed": true,
+            "evidence": "Output is explicitly organized with sections 'Issues (Service Disruptions)', 'Scheduled Changes', and 'Account Notifications' referenced in the overview table.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes counts for each category",
+            "passed": true,
+            "evidence": "The overview table shows counts per category: Issues (3), Scheduled Changes (6), Account Notifications (0), with Total column.",
+            "method": "llm",
+            "confidence": 0.98,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes a breakdown of events by AWS service",
+            "passed": false,
+            "evidence": "Events mention their AWS service (EC2, Route 53, EKS, Lambda, EMR, CloudShell) but there is no dedicated breakdown/summary table grouping or counting events by service. Events are organized by category type, not by service.",
+            "method": "llm",
+            "confidence": 0.72,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes a breakdown by event status (open, closed, upcoming)",
+            "passed": true,
+            "evidence": "The overview table explicitly has columns for Open, Closed, and Upcoming counts per category, and each event is labeled with its status.",
+            "method": "llm",
+            "confidence": 0.98,
+            "uncertain": false
+          },
+          {
+            "text": "The output covers the past 30 days as the default time period",
+            "passed": true,
+            "evidence": "Report header states 'Report period: 2026-04-27 to 2026-05-27' and title says 'Past 30 Days'.",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "The output presents event timelines with start time and resolution time for closed events",
+            "passed": true,
+            "evidence": "Closed events show start and end times (e.g., '2026-05-08 00:25 UTC \u2192 2026-05-09 03:04 UTC (~27 hours)' for EC2 thermal event, and similar for other closed issues and scheduled changes).",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.8333333333333334,
+        "summary": "With skill: 83% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 3,
+          "token_counts": {
+            "input_tokens": 6,
+            "output_tokens": 2861,
+            "cache_read_input_tokens": 100644,
+            "cache_creation_input_tokens": 32503
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 73.23885583300216
+        },
+        "raw_output": "I'll retrieve AWS Health events for your account over the past 30 days using the Health API in us-east-1.Now let me get the event details to provide better descriptions.## AWS Health Events Summary Report \u2014 Past 30 Days\n\n**Account:** 742719403826 | **Report period:** 2026-04-27 to 2026-05-27 | **Total events:** 9\n\n---\n\n### Overview\n\n| Category | Open | Closed | Upcoming | Total |\n|----------|------|--------|----------|-------|\n| Issues (service disruptions) | 0 | 3 | 0 | **3** |\n| Scheduled Changes | 0 | 3 | 3 | **6** |\n| Account Notifications | 0 | 0 | 0 | **0** |\n\n| Scope | Count |\n|-------|-------|\n| Account-Specific | 6 |\n| Public | 3 |\n\n---\n\n### Issues (Service Disruptions)\n\n#### 1. EC2 \u2014 Thermal Event / Power Loss (us-east-1, use1-az4)\n- **Status:** Closed\n- **Duration:** 2026-05-08 00:25 UTC \u2192 2026-05-09 03:04 UTC (~27 hours)\n- **Scope:** PUBLIC\n- **Description:** A thermal event in a single data center caused loss of power, leading to impaired EC2 instances and degraded EBS volumes in use1-az4. Cascading impact to ELB, EKS, ElastiCache, Redshift, OpenSearch, Kafka, IoT Core, NAT Gateway, and SageMaker. Traffic was shifted away from the impacted AZ. Full recovery achieved after cooling systems were restored.\n- **Severity:** High \u2014 multi-service impact lasting over a day.\n\n#### 2. EC2 \u2014 Power Loss (eu-west-3, euw3-az2)\n- **Status:** Closed\n- **Duration:** 2026-04-27 11:27 UTC \u2192 2026-04-27 17:10 UTC (~6 hours)\n- **Scope:** PUBLIC\n- **Description:** Loss of power to infrastructure in euw3-az2 caused instance impairments and launch failures. Power restored by 4:20 AM PDT; full EC2/EBS recovery by 4:40 AM PDT. Numerous dependent services (50+) experienced temporary impact during the event.\n- **Severity:** Medium \u2014 rapid recovery, broad service impact window was short.\n\n#### 3. Route 53 \u2014 Increased API Error Rates (global)\n- **Status:** Closed\n- **Duration:** 2026-05-22 23:38 UTC \u2192 2026-05-23 00:13 UTC (~35 minutes)\n- **Scope:** PUBLIC\n- **Description:** Increased "
+      },
+      "without_skill": {
+        "eval_id": "chat-health-report",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output organizes events by event type category (issues, scheduled changes, account notifications)",
+            "passed": false,
+            "evidence": "The output never retrieves or displays any AWS Health events. It gets stuck at the credential selection stage and asks the user which profile to use.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes counts for each category",
+            "passed": false,
+            "evidence": "No event counts are presented anywhere in the output. The assistant never completes the query.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes a breakdown of events by AWS service",
+            "passed": false,
+            "evidence": "No breakdown of events by AWS service is shown. The output only discusses credential/profile selection.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "The output includes a breakdown by event status (open, closed, upcoming)",
+            "passed": false,
+            "evidence": "No event status breakdown (open, closed, upcoming) is presented. The query was never executed.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "The output covers the past 30 days as the default time period",
+            "passed": false,
+            "evidence": "The output mentions intent to 'query AWS Health events for the past 30 days' but never actually retrieves or presents data for that time period.",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          },
+          {
+            "text": "The output presents event timelines with start time and resolution time for closed events",
+            "passed": false,
+            "evidence": "No event timelines, start times, or resolution times are shown anywhere in the output.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 4,
+          "token_counts": {
+            "input_tokens": 6,
+            "output_tokens": 1143,
+            "cache_read_input_tokens": 82251,
+            "cache_creation_input_tokens": 14735
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 44.08617000000231
+        },
+        "raw_output": "I'll check your AWS configuration and then query AWS Health events for the past 30 days.I see you have several profiles but only Admin roles are configured, and no active default credentials. I need to use one of your profiles to query AWS Health events. Since this is a read-only operation, I'd prefer a ReadOnly role, but I only see Admin roles in your config.I don't see any ReadOnly profiles configured \u2014 only Admin roles are available. Per best practices, I'd prefer using least-privilege credentials for this read-only query.I need to know which AWS profile to use. You only have Admin profiles configured \u2014 no ReadOnly roles are available. Which profile should I use to query AWS Health events? The operation itself is read-only (describe-events), but I want to confirm before using an Admin credential."
+      },
+      "delta_pass_rate": 0.8333333333333334
+    },
+    {
+      "eval_id": "no-events-found",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "no-events-found",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output explicitly states that no matching AWS Health events were found",
+            "passed": true,
+            "evidence": "Output explicitly states 'No matching AWS Health events were found for ECS or related services'",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "The output confirms the search parameters used (service, time range, region)",
+            "passed": true,
+            "evidence": "Output lists search parameters including Services (ECS, EC2, VPC, ELB), Region (eu-west-1), Time range (2026-05-13 to present), Statuses, and Categories",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "The output suggests alternative investigation paths",
+            "passed": true,
+            "evidence": "Output provides 6 numbered 'Recommended next steps' covering deployments, resource limits, networking, application logs, target group health, and capacity provider",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "The output recommends checking recent deployments or configuration changes",
+            "passed": true,
+            "evidence": "First recommended next step explicitly says 'Recent deployments \u2014 check if a recent ECS task definition or service update correlates with the error spike'",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not fabricate or hallucinate health events that do not exist",
+            "passed": true,
+            "evidence": "Output clearly states no events were found and does not invent or fabricate any health events; it only suggests next investigation steps",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 3,
+          "token_counts": {
+            "input_tokens": 5,
+            "output_tokens": 1166,
+            "cache_read_input_tokens": 66643,
+            "cache_creation_input_tokens": 18813
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 45.409266541999386
+        },
+        "raw_output": "I'll check AWS Health events for ECS and related services in eu-west-1. Let me query the Health API.No events found in the past 7 days. Let me broaden the time window to 14 days.## Results: No AWS Health Events Found\n\nNo matching AWS Health events were found for ECS or related services (EC2, VPC, ELB) in **eu-west-1** over the past 14 days.\n\n**Search parameters used:**\n- Services: ECS, EC2, VPC, Elastic Load Balancing\n- Region: eu-west-1\n- Time range: 2026-05-13 to present\n- Statuses: open and closed\n- Categories: issues, scheduled changes, account notifications\n\n**Recommended next steps** \u2014 since this doesn't appear to be caused by an AWS-side service event:\n\n1. **Recent deployments** \u2014 check if a recent ECS task definition or service update correlates with the error spike\n2. **Resource limits** \u2014 verify ECS service quotas and task CPU/memory aren't being exhausted\n3. **Networking** \u2014 check security group rules, NACLs, and NAT gateway metrics for the VPC\n4. **Application logs** \u2014 inspect CloudWatch Logs for the ECS tasks to identify the error type (5xx, OOM kills, connection timeouts, etc.)\n5. **Target group health** \u2014 if behind an ALB, check target group health check failures\n6. **Capacity provider** \u2014 verify the capacity provider has sufficient capacity and isn't failing to place tasks\n\nWould you like me to help investigate any of these areas?"
+      },
+      "without_skill": {
+        "eval_id": "no-events-found",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output explicitly states that no matching AWS Health events were found",
+            "passed": false,
+            "evidence": "The output never states that no health events were found. Instead, it reports that API calls failed due to invalid/expired credentials and asks the user how to proceed.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output confirms the search parameters used (service, time range, region)",
+            "passed": false,
+            "evidence": "The output mentions 'ECS in eu-west-1' in the opening line but does not confirm a time range. The search was never actually completed due to credential failures.",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          },
+          {
+            "text": "The output suggests alternative investigation paths",
+            "passed": false,
+            "evidence": "The output suggests ways to fix the credential problem (refresh credentials, use a different profile) but does not suggest alternative investigation paths for the original ECS health concern (e.g., checking CloudWatch, service logs, etc.).",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "The output recommends checking recent deployments or configuration changes",
+            "passed": false,
+            "evidence": "The output does not recommend checking recent deployments or configuration changes. It only discusses credential/authentication issues.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not fabricate or hallucinate health events that do not exist",
+            "passed": true,
+            "evidence": "The output does not fabricate any health events. It honestly reports that it could not complete the query due to expired credentials.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.2,
+        "summary": "Without skill: 20% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 3,
+          "token_counts": {
+            "input_tokens": 5,
+            "output_tokens": 713,
+            "cache_read_input_tokens": 57372,
+            "cache_creation_input_tokens": 14388
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 38.81947583299916
+        },
+        "raw_output": "I'll check AWS Health for any active events affecting ECS in eu-west-1.The AWS Health API calls are failing due to invalid security credentials. This could mean:\n\n1. **No active AWS credentials** \u2014 your session may have expired or no profile is configured.\n2. **Wrong profile** \u2014 you may need to specify a `--profile` flag.\n\nLet me check what's available:Your default credentials are expired. You have several profiles available. To check AWS Health events, I'd recommend using a **ReadOnly** profile if one exists, but I only see Admin profiles here.\n\nWhich profile should I use to query AWS Health? For example:\n- `udid-Admin` (appears to be your primary account)\n- One of the linked account profiles\n\nAlso, you may need to refresh your credentials first (e.g., via `ada credentials update --profile <profile-name>` or re-authenticating via SSO). Would you like me to try with a specific profile, or would you prefer to refresh your credentials first?"
+      },
+      "delta_pass_rate": 0.8
+    },
+    {
+      "eval_id": "api-region-awareness",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "api-region-awareness",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The Health API call is made to the us-east-1 endpoint",
+            "passed": true,
+            "evidence": "The output shows successful Health API queries returning results (even if empty), which implies correct endpoint usage (us-east-1 is required for AWS Health API). However, the output does not explicitly state which endpoint was used.",
+            "method": "llm",
+            "confidence": 0.4,
+            "uncertain": true
+          },
+          {
+            "text": "The output does not attempt to call the Health API in ap-southeast-1",
+            "passed": true,
+            "evidence": "The output uses ap-southeast-1 as a filter parameter for events, not as the API endpoint. The successful execution without errors suggests the API was not called in ap-southeast-1 directly. However, the output doesn't explicitly show the endpoint used.",
+            "method": "llm",
+            "confidence": 0.5,
+            "uncertain": false
+          },
+          {
+            "text": "The output filters events by the ap-southeast-1 region where resources are located",
+            "passed": true,
+            "evidence": "The summary table explicitly shows 'Region | ap-southeast-1' as a filter, and the output states it checked for 'open issues across all services in ap-southeast-1' and 'DynamoDB events globally'.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "The output returns relevant health event information regardless of the resource region",
+            "passed": true,
+            "evidence": "The output successfully returned health event information (no events found) and also checked 'DynamoDB events globally' beyond just ap-southeast-1, providing a complete answer with next steps regardless of resource region.",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not fail due to region misconfiguration",
+            "passed": true,
+            "evidence": "The output completed successfully with a full summary, search parameters, and recommendations. No errors or failures due to region misconfiguration are present.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 5,
+          "token_counts": {
+            "input_tokens": 6,
+            "output_tokens": 1443,
+            "cache_read_input_tokens": 95146,
+            "cache_creation_input_tokens": 19166
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 57.19553399999859
+        },
+        "raw_output": "I'll check AWS Health events for DynamoDB in ap-southeast-1 to see if there are any service events that could explain the throttling.No DynamoDB-specific events found. Let me broaden the search to related services and a wider time window.Let me also check for any broader regional events and account notifications that might be relevant.## Summary\n\n**No matching AWS Health events found** for DynamoDB in ap-southeast-1.\n\n### Search parameters used:\n| Filter | Value |\n|--------|-------|\n| Service | DYNAMODB (+ VPC as dependency) |\n| Region | ap-southeast-1 |\n| Time range | 2026-05-13 to present (14 days) |\n| Status | open + closed |\n| Categories | issues, scheduled changes, account notifications |\n\nI also checked for any open issues across all services in ap-southeast-1 and DynamoDB events globally \u2014 both returned zero results.\n\n### Recommended next steps\n\nSince there's no AWS-side service event explaining the throttling, the cause is likely within your account:\n\n1. **Check table capacity** \u2014 Verify whether your tables are using provisioned capacity and have hit their read/write capacity limits, or if on-demand tables are hitting account-level throughput quotas.\n2. **Review CloudWatch metrics** \u2014 Look at `ConsumedReadCapacityUnits` / `ConsumedWriteCapacityUnits` vs. provisioned, and `ThrottledRequests` / `ReadThrottleEvents` / `WriteThrottleEvents`.\n3. **Hot partition keys** \u2014 Throttling can occur at the partition level even when table-level capacity isn't exhausted. Check for uneven access patterns.\n4. **Account-level quotas** \u2014 Verify your DynamoDB account-level throughput quotas in Service Quotas for ap-southeast-1.\n5. **Recent configuration changes** \u2014 Check if auto-scaling policies were modified or if capacity was recently reduced.\n\nWould you like me to help investigate any of these areas further?"
+      },
+      "without_skill": {
+        "eval_id": "api-region-awareness",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The Health API call is made to the us-east-1 endpoint",
+            "passed": true,
+            "evidence": "The output doesn't explicitly state which endpoint region was used for Health API calls. However, the successful responses (no events, SubscriptionRequiredException) indicate the API was called correctly - AWS Health API only works from us-east-1. No evidence of endpoint errors that would occur if wrong region was used, but no explicit confirmation either.",
+            "method": "llm",
+            "confidence": 0.5,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not attempt to call the Health API in ap-southeast-1",
+            "passed": true,
+            "evidence": "The output mentions checking 'for DynamoDB health events in ap-southeast-1' which refers to filtering events by resource region, not calling the API endpoint in ap-southeast-1. The successful API responses (rather than endpoint connection errors) suggest the Health API was not called in ap-southeast-1. However, the actual API calls are not shown explicitly.",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          },
+          {
+            "text": "The output filters events by the ap-southeast-1 region where resources are located",
+            "passed": true,
+            "evidence": "The output explicitly states it checked for 'DynamoDB health events in ap-southeast-1' and reports 'No Health events (issues or scheduled changes) for DynamoDB in ap-southeast-1', indicating the results were filtered by the ap-southeast-1 region for resource location.",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output returns relevant health event information regardless of the resource region",
+            "passed": true,
+            "evidence": "The output returns relevant health information - reporting no active events, subscription requirement errors for linked accounts, and a suspended account status. It provides actionable follow-up suggestions. The information is relevant even though no events were found.",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not fail due to region misconfiguration",
+            "passed": true,
+            "evidence": "The output did not fail due to region misconfiguration. The primary account query succeeded (returned no events). Failures were due to subscription requirements (no Business/Enterprise Support) and a suspended account - neither related to region misconfiguration.",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "Without skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 7,
+          "token_counts": {
+            "input_tokens": 7,
+            "output_tokens": 1686,
+            "cache_read_input_tokens": 108785,
+            "cache_creation_input_tokens": 17102
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 73.08630970800004
+        },
+        "raw_output": "I'll check AWS Health events for DynamoDB throttling in ap-southeast-1. Let me first see what credentials are available.I see multiple AWS profiles available, all with Admin roles (no ReadOnly profiles). I'll use the primary account profile to query AWS Health events. Since this is a read-only operation, using Admin credentials is acceptable here.\n\nWhich account should I check? I see several profiles:\n- `udid-Admin` (primary)\n- `udid+linked1-Admin` through `udid+linked3-Admin`\n- `udid+datacollection-Admin` and others\n\nLet me start with the primary account and check for DynamoDB health events in ap-southeast-1.No Health events returned for the primary account. Let me also check with event type filtering for operational issues and check the linked accounts.Here's what I found:\n\n**No active AWS Health events for DynamoDB in ap-southeast-1** across your accounts:\n\n- **Primary account (`udid-Admin`)**: No Health events (issues or scheduled changes) for DynamoDB in ap-southeast-1.\n- **Linked accounts 1 & 2**: `SubscriptionRequiredException` \u2014 these accounts don't have AWS Business/Enterprise Support, which is required for the Health API.\n- **Linked account 3**: Account is suspended.\n\nIf you're experiencing DynamoDB throttling in ap-southeast-1, it's likely not related to an AWS service event. The throttling is more likely caused by your table's provisioned capacity being exceeded. You could investigate further by:\n\n1. **Checking CloudWatch metrics** for `ThrottledRequests` or `ReadThrottleEvents`/`WriteThrottleEvents`:\n   ```\n   aws cloudwatch get-metric-statistics --namespace AWS/DynamoDB --metric-name ThrottledRequests --region ap-southeast-1 --profile udid-Admin --dimensions Name=TableName,Value=<TABLE_NAME> --start-time <start> --end-time <end> --period 300 --statistics Sum\n   ```\n\n2. **Reviewing table capacity settings** to see if you need to increase provisioned capacity or switch to on-demand mode.\n\nWould you like me to check CloudWatch metrics for specific DynamoD"
+      },
+      "delta_pass_rate": 0.0
+    },
+    {
+      "eval_id": "broadened-search",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "broadened-search",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output first searches for events specific to the ELB/ELASTICLOADBALANCING service",
+            "passed": true,
+            "evidence": "Output explicitly states 'I'll check AWS Health events for ELB-related issues in us-east-1' as the first action, and lists ELASTICLOADBALANCING in the services searched table.",
+            "method": "llm",
+            "confidence": 0.92,
+            "uncertain": false
+          },
+          {
+            "text": "The output broadens to related services (EC2, VPC, Route 53) when no ELB events are found",
+            "passed": true,
+            "evidence": "Output states 'No AWS Health events found for ELB or related services. Let me broaden the search to check all services in us-east-1' and the table shows EC2, VPC, ROUTE53 were included in the search.",
+            "method": "llm",
+            "confidence": 0.88,
+            "uncertain": false
+          },
+          {
+            "text": "The output expands the time window to 14 days if related service search also returns no results",
+            "passed": false,
+            "evidence": "The table shows 'Past 7\u201314 days' as the time window, suggesting some expansion occurred, but the output does not explicitly narrate expanding the time window as a distinct step triggered by related services also returning no results. The expansion is implied in the summary but not clearly described as a sequential decision.",
+            "method": "llm",
+            "confidence": 0.55,
+            "uncertain": false
+          },
+          {
+            "text": "The output follows the decision tree: specific service \u2192 related services \u2192 expanded time window",
+            "passed": false,
+            "evidence": "The output shows specific service \u2192 broadened search (related services + account notifications), but the expanded time window is not clearly presented as a distinct third step in the decision tree. Only two progression steps are narrated; the time window appears in the summary table without being called out as a separate decision point.",
+            "method": "llm",
+            "confidence": 0.5,
+            "uncertain": false
+          },
+          {
+            "text": "The output reports the search progression to the operator",
+            "passed": true,
+            "evidence": "The output narrates the search progression: first 'check AWS Health events for ELB-related issues', then 'No AWS Health events found... Let me broaden the search', followed by a comprehensive results summary table showing all parameters used.",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.6,
+        "summary": "With skill: 60% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 4,
+          "token_counts": {
+            "input_tokens": 5,
+            "output_tokens": 1411,
+            "cache_read_input_tokens": 66659,
+            "cache_creation_input_tokens": 19345
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 55.64649858300254
+        },
+        "raw_output": "I'll check AWS Health events for ELB-related issues in us-east-1. Let me search for active and recent events.No AWS Health events found for ELB or related services. Let me broaden the search to check all services in us-east-1 and also try account notifications.## AWS Health Event Review \u2014 Results\n\n**No matching AWS Health events found** for your ALB 503 errors in us-east-1.\n\n### Search Parameters Used\n| Filter | Value |\n|--------|-------|\n| Services searched | ELASTICLOADBALANCING, EC2, VPC, ROUTE53 |\n| Region | us-east-1 |\n| Time window | Past 7\u201314 days |\n| Statuses | open, closed |\n| Categories | issue, scheduledChange, accountNotification |\n\nThe only event found was an unrelated **ElasticMapReduce** scheduled lifecycle event (closed, future-dated for July 2026) \u2014 not relevant to your ALB issue.\n\n### Recommended Next Steps\n\nSince no AWS-side service disruption explains the 503 errors, investigate these potential causes:\n\n1. **Target health** \u2014 Check if your ALB targets (EC2 instances, ECS tasks, Lambda) are healthy:\n   ```\n   aws elbv2 describe-target-health --target-group-arn <your-tg-arn>\n   ```\n2. **Capacity / scaling** \u2014 Verify target group has enough healthy targets registered and that Auto Scaling hasn't scaled down.\n3. **Recent deployments** \u2014 Check for configuration changes or deployments in the last 30 minutes that could have broken targets.\n4. **Security groups / NACLs** \u2014 Confirm the ALB can reach targets on the configured health check and traffic ports.\n5. **CloudWatch metrics** \u2014 Review `HealthyHostCount`, `UnHealthyHostCount`, and `HTTPCode_ELB_503_Count` on the ALB.\n\nWould you like me to help investigate any of these further?"
+      },
+      "without_skill": {
+        "eval_id": "broadened-search",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "The output first searches for events specific to the ELB/ELASTICLOADBALANCING service",
+            "passed": true,
+            "evidence": "The output states it attempted to check AWS Health for ALB/ELB events and the suggested command includes services=ELASTICLOADBALANCING filter, but the actual search failed due to invalid credentials rather than completing successfully.",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          },
+          {
+            "text": "The output broadens to related services (EC2, VPC, Route 53) when no ELB events are found",
+            "passed": false,
+            "evidence": "The output does not broaden to related services like EC2, VPC, or Route 53. After the credential failure, it provides authentication troubleshooting rather than expanding the search scope.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output expands the time window to 14 days if related service search also returns no results",
+            "passed": false,
+            "evidence": "The output does not expand to a 14-day time window. There is no mention of widening the time range at all.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output follows the decision tree: specific service \u2192 related services \u2192 expanded time window",
+            "passed": false,
+            "evidence": "The output does not follow the decision tree. It attempted the first step (ELB-specific search) but failed on credentials, then provided generic troubleshooting advice rather than proceeding to related services or expanded time window.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output reports the search progression to the operator",
+            "passed": false,
+            "evidence": "The output reports the initial attempt and its failure, but does not report a search progression through multiple stages. It only mentions one attempted search before stopping.",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.2,
+        "summary": "Without skill: 20% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 2,
+          "token_counts": {
+            "input_tokens": 4,
+            "output_tokens": 846,
+            "cache_read_input_tokens": 33505,
+            "cache_creation_input_tokens": 13950
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 34.782777750002424
+        },
+        "raw_output": "I'll check AWS Health for any events related to ALB/ELB in us-east-1.The AWS Health API calls failed due to invalid credentials. The AWS Health API requires valid authentication, and the current session doesn't have valid credentials configured.\n\nHere's what you can do to proceed:\n\n1. **Authenticate first** \u2014 If you use Isengard/ada credentials, refresh them:\n   ```bash\n   ada credentials update --account <your-account-id> --provider isengard --role ReadOnly\n   ```\n\n2. **Then query AWS Health**:\n   ```bash\n   aws health describe-events \\\n     --filter \"services=ELASTICLOADBALANCING,regions=us-east-1,eventStatusCodes=open,upcoming\" \\\n     --region us-east-1\n   ```\n\n3. **Check the AWS Health Dashboard directly** \u2014 The [Personal Health Dashboard](https://phd.aws.amazon.com/) or Service Health Dashboard may show active incidents.\n\n4. **Quick ALB diagnostics** you can run in parallel once authenticated:\n   ```bash\n   # Check target health\n   aws elbv2 describe-target-health --target-group-arn <tg-arn> --region us-east-1\n\n   # Check ALB access logs or CloudWatch for 503 spike\n   aws cloudwatch get-metric-statistics \\\n     --namespace AWS/ApplicationELB \\\n     --metric-name HTTPCode_ELB_503_Count \\\n     --dimensions Name=LoadBalancer,Value=<alb-id> \\\n     --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%S) \\\n     --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \\\n     --period 300 --statistics Sum --region us-east-1\n   ```\n\nA 503 from the ALB typically means all targets in the target group are unhealthy or there are no registered targets. Would you like me to help investigate further once you have valid credentials?"
+      },
+      "delta_pass_rate": 0.39999999999999997
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "mean_pass_rate": 0.6792,
+      "stddev_pass_rate": 0.328,
+      "mean_tokens": 1761.5,
+      "mean_input_tokens": 5.8,
+      "mean_output_tokens": 1761.5,
+      "mean_total_tokens": 1767.2,
+      "mean_tool_calls": 4.1
+    },
+    "without_skill": {
+      "mean_pass_rate": 0.3,
+      "stddev_pass_rate": 0.3505,
+      "mean_tokens": 1315.0,
+      "mean_input_tokens": 6.1,
+      "mean_output_tokens": 1315.0,
+      "mean_total_tokens": 1321.1,
+      "mean_tool_calls": 4.8
+    },
+    "delta": {
+      "pass_rate": 0.3792,
+      "tokens": 446.5,
+      "total_tokens": 446.1,
+      "input_tokens": -0.4,
+      "tool_calls": -0.6
+    },
+    "cost_efficiency": {
+      "quality_delta": 0.3792,
+      "cost_delta_pct": 33.8,
+      "classification": "TRADEOFF",
+      "emoji": "\ud83d\udfe1",
+      "description": "Skill improves quality but increases cost"
+    },
+    "estimated_cost": {
+      "with_skill_per_run": {
+        "input_cost": 1.7e-05,
+        "output_cost": 0.026423,
+        "total_cost": 0.02644,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "without_skill_per_run": {
+        "input_cost": 1.8e-05,
+        "output_cost": 0.019725,
+        "total_cost": 0.019743,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "per_eval_pair": 0.046183,
+      "total_runs": 8,
+      "total_cost": 0.3695,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "scores": {
+    "outcome": 0.6792,
+    "process": 0.8684,
+    "style": 0.6792,
+    "efficiency": 1.0,
+    "overall": 0.8067
+  },
+  "passed": true
+}
