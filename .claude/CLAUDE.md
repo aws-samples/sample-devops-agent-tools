@@ -11,7 +11,7 @@ This repository consolidates AWS DevOps Agent skills. Follow these conventions w
 ## Repository Structure
 
 ```
-aws-devops-agent-skill-central/
+sample-code-for-devops-agent-skills/
 ├── README.md                 # Project overview with skills table
 ├── .gitignore                # Root-level ignores
 ├── skills/
@@ -21,9 +21,9 @@ aws-devops-agent-skill-central/
 │       ├── README.md         # Skill documentation (purpose, prompts, upload instructions)
 │       ├── CHANGELOG.md      # Version history
 │       ├── .skilleval.yaml   # Evaluation configuration for Agent Skill Eval
-│       ├── references/       # Optional: supplementary reference docs
+│       ├── evals/            # evaluation queries and benchmarks
 │       ├── assets/           # Optional: images, diagrams, data files
-│       └── evals/            # Optional: evaluation queries and benchmarks
+│       └── references/       # Optional: supplementary reference docs
 ```
 
 ## Writing Skills
