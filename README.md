@@ -41,6 +41,24 @@ The `SKILL.md`, `references/`, and `assets/` directories are what AWS DevOps Age
 
 See [CONTRIBUTING](CONTRIBUTING.md) for more information.
 
+## References
+
+* AWS documentation
+  * [DevOps Agent product page](https://aws.amazon.com/devops-agent/)
+  * [DevOps Agent user guide](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent.html)
+  * [DevOps Agent API reference](https://docs.aws.amazon.com/devopsagent/latest/APIReference/Welcome.html)
+  * [DevOps Agent skills user guide](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html)
+
+* AWS blog posts and articles
+  * [AWS Builder Center article - DevOps Agent skills](https://builder.aws.com/content/3BDdQAFY2bSmtjecZC7vbOQGSEV/extend-aws-devops-agent-with-custom-skills-for-your-operational-workflows)
+  * [AWS blog post - Building an end-to-end agentic SRE using AWS DevOps Agent](https://aws.amazon.com/blogs/devops/building-an-end-to-end-agentic-sre-using-aws-devops-agent/)
+  * [AWS blog post - Best Practices for Deploying AWS DevOps Agent in Production](https://aws.amazon.com/blogs/devops/best-practices-for-deploying-aws-devops-agent-in-production/)
+  * [AWS blog post - Leverage Agentic AI for Autonomous Incident Response with AWS DevOps Agent](https://aws.amazon.com/blogs/devops/leverage-agentic-ai-for-autonomous-incident-response-with-aws-devops-agent/)
+
+* Other
+  * [Agent Skills specification](https://agentskills.io/home)
+  * [Agent Skill Eval](https://github.com/aws-samples/sample-agent-skill-eval)
+
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
