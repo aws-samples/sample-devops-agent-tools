@@ -1,0 +1,63 @@
+[
+  {
+    "id": "rds-review-smoke-test",
+    "prompt": "Read database-context.json. List each database's name, type (instance or cluster), engine, region, and account. No analysis needed.",
+    "expected_output": "Lists every database from files/database-context.json with its name, type, engine, region, and account exactly as defined in the file.",
+    "files": ["files/database-context.json"],
+    "assertions": [
+      "matches regex /[a-z]{2}-[a-z]+-\\d/",
+      "matches regex /\\b\\d{12}\\b/",
+      "contains 'engine'",
+      "contains 'region'",
+      "contains 'account'"
+    ]
+  },
+  {
+    "id": "rds-review-first-resource-identification",
+    "prompt": "Read database-context.json. Identify the FIRST database listed and state the report artifact filename you would generate for it (use today's date in YYYY-MM-DD form). Do not run the audit.",
+    "expected_output": "Identifies the first database from files/database-context.json (its name and region) and proposes an artifact name of the form rds-review-<that-resource-name>-<YYYY-MM-DD>.md.",
+    "files": ["files/database-context.json"],
+    "assertions": [
+      "matches regex /rds-review-[a-z0-9-]+-\\d{4}-\\d{2}-\\d{2}\\.md/",
+      "matches regex /[a-z]{2}-[a-z]+-\\d/"
+    ]
+  },
+  {
+    "id": "rds-review-data-source-priority",
+    "prompt": "According to the skill, which AWS APIs does the RDS operational review use to collect data? Name at least three specific API calls or namespaces the skill mentions. Confirm whether the skill uses Kubernetes (k8s) or EKS APIs. No database access required.",
+    "expected_output": "States the skill uses RDS, CloudWatch, CloudWatch Logs (and related AWS APIs like EC2, KMS, Cost Explorer) and explicitly does NOT use Kubernetes or EKS APIs. Names specific calls such as rds.DescribeDBInstances, rds.DescribeDBClusters, cloudwatch.GetMetricData, or logs.FilterLogEvents.",
+    "files": [],
+    "assertions": [
+      "contains 'RDS' or contains 'rds'",
+      "contains 'CloudWatch' or contains 'cloudwatch'",
+      "contains 'DescribeDBInstances' or contains 'DescribeDBClusters' or contains 'GetMetricData' or contains 'FilterLogEvents'",
+      "contains 'not' or contains 'no '"
+    ]
+  },
+  {
+    "id": "rds-review-severity-definitions",
+    "prompt": "List the five severity levels the skill uses for findings, in order from most to least urgent. No database access required.",
+    "expected_output": "Lists CRITICAL, HIGH, MEDIUM, LOW, INFO in that order.",
+    "files": [],
+    "assertions": [
+      "contains 'CRITICAL'",
+      "contains 'HIGH'",
+      "contains 'MEDIUM'",
+      "contains 'LOW'",
+      "contains 'INFO'"
+    ]
+  },
+  {
+    "id": "rds-review-pillars",
+    "prompt": "List the Well-Architected pillars the skill evaluates during an RDS / Aurora operational review. No database access required.",
+    "expected_output": "Mentions Security, Reliability, Performance, Cost Optimization, and Operational Excellence.",
+    "files": [],
+    "assertions": [
+      "contains 'Security' or contains 'security'",
+      "contains 'Reliability' or contains 'reliability'",
+      "contains 'Performance' or contains 'performance'",
+      "contains 'Cost' or contains 'cost'",
+      "contains 'Operational' or contains 'operational'"
+    ]
+  }
+]

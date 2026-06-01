@@ -1,0 +1,5 @@
+{
+  "databases": [
+    { "type": "instance", "name": "demo-mysql", "engine": "mysql", "region": "us-east-1", "account": "$accountId" }
+  ]
+}
