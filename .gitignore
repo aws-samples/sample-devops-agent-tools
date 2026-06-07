@@ -12,6 +12,17 @@ __pycache__/
 # Log files
 *.log
 
+# MkDocs build output
+site/
+
+# Generated at build time by skills_catalog.py hook
+docs/javascripts/skills-data.json
+docs/skills/*.md
+!docs/skills/index.md
+
 # Claude
 .claude/*
 !.claude/CLAUDE.md
+
+# Holmes
+.holmesignore
