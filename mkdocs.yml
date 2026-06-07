@@ -1,0 +1,78 @@
+site_name: AWS DevOps Agent Skills
+site_url: https://aws-samples.github.io/sample-code-for-devops-agent-skills/
+site_description: Open-source skills for AWS DevOps Agent — incident response, root cause analysis, and operational troubleshooting.
+repo_url: https://github.com/aws-samples/sample-code-for-devops-agent-skills
+repo_name: aws-samples/sample-code-for-devops-agent-skills
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  logo: assets/devops-agent-icon.svg
+  favicon: assets/devops-agent-icon.svg
+  palette:
+    - scheme: slate
+      primary: black
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - content.code.copy
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js
+  - javascripts/skills-filter.js
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+hooks:
+  - docs/hooks/skills_catalog.py
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Skills:
+      - Catalog:
+          - skills/index.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/aws-samples/sample-code-for-devops-agent-skills
+  generator: false

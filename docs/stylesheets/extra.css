@@ -1,0 +1,249 @@
+/* Light mode */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #232f3e;
+  --md-primary-fg-color--light: #37475a;
+  --md-primary-fg-color--dark: #161e2d;
+}
+
+/* Dark mode — let Material's slate scheme handle backgrounds naturally,
+   only override accent/link colors for AWS branding */
+[data-md-color-scheme="slate"] {
+  --md-typeset-a-color: #4fc3f7;
+  --md-accent-fg-color: #4fc3f7;
+}
+
+/* Header stays AWS dark in both modes */
+.md-header {
+  background-color: #232f3e;
+}
+
+.md-header__button.md-logo {
+  margin: 0.2rem 0;
+  padding: 0.2rem;
+}
+
+.md-header__button.md-logo img {
+  border-radius: 0.4rem;
+}
+
+.md-header__ellipsis {
+  margin-left: -0.4rem;
+}
+
+.md-tabs {
+  background-color: #232f3e;
+}
+
+/* --- Hero Section --- */
+
+.hero {
+  text-align: center;
+  padding: 4rem 1rem 3rem;
+}
+
+.hero-image img {
+  width: 150px;
+  height: 150px;
+  border-radius: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.hero h1 {
+  font-size: 2.5rem;
+  margin-bottom: 0.75rem;
+  font-weight: 700;
+}
+
+.hero-subtitle {
+  font-size: 1.2rem;
+  color: var(--md-default-fg-color--light);
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  line-height: 1.6;
+}
+
+.hero-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.hero-buttons .md-button {
+  padding: 0.7rem 1.8rem;
+  border-radius: 2rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.hero-buttons .md-button--primary {
+  background: #e7157b;
+  border-color: #e7157b;
+  color: #fff;
+}
+
+.hero-buttons .md-button--primary:hover {
+  background: #c91168;
+  border-color: #c91168;
+}
+
+/* --- Features Grid --- */
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  padding: 2rem 0;
+}
+
+.feature {
+  padding: 1.5rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.75rem;
+  text-align: center;
+}
+
+.feature h3 {
+  margin-top: 0;
+  font-size: 1.1rem;
+}
+
+.feature p {
+  color: var(--md-default-fg-color--light);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* --- Skills Catalog --- */
+
+#skill-filters {
+  margin-bottom: 1.5rem;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filter-label {
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+
+.filter-btn {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 1rem;
+  background: transparent;
+  color: var(--md-default-fg-color);
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.15s ease;
+}
+
+.filter-btn:hover {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color);
+}
+
+.filter-btn.active {
+  background: var(--md-accent-fg-color);
+  color: var(--md-accent-fg-color--transparent);
+  border-color: var(--md-accent-fg-color);
+  color: #fff;
+}
+
+#skill-catalog,
+#skill-grouped {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+.skill-card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.skill-card:hover {
+  border-color: var(--md-accent-fg-color);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.skill-card h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.skill-card p {
+  margin-bottom: 0.75rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.skill-meta {
+  margin-bottom: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.skill-author {
+  color: var(--md-default-fg-color--lighter);
+}
+
+.skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tag {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.tag-agent {
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+}
+
+.tag-service {
+  background: rgba(255, 153, 0, 0.15);
+  color: #ff9900;
+}
+
+[data-md-color-scheme="default"] .tag-agent {
+  background: rgba(25, 118, 210, 0.1);
+  color: #1565c0;
+}
+
+[data-md-color-scheme="default"] .tag-service {
+  background: rgba(255, 153, 0, 0.1);
+  color: #e65100;
+}
+
+.group-heading {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.skill-group {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 768px) {
+  #skill-catalog,
+  .skill-group {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
