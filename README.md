@@ -7,7 +7,7 @@ Open-source skills for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) 
 
 ## ⚠️ Important Notice
 
-These skills are provided as sample code for educational and demonstration purposes. They are not intended for production use without additional review and testing. Before deploying any skill to a production environment:
+These skills are provided as sample code. If you intend to deploy these skills in production, start with a non-production environment first. Before deploying any skill to a production environment:
 
 - Test thoroughly in a non-production environment first
 - Review IAM permissions and security configurations against your organization's policies
