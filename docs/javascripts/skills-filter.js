@@ -44,7 +44,7 @@
 
     // Description (may contain safe HTML links from the hook)
     var desc = document.createElement("p");
-    desc.innerHTML = DOMPurify.sanitize(skill.description, { ALLOWED_TAGS: ["a"], ALLOWED_ATTR: ["href", "target", "rel"] });
+    desc.innerHTML = DOMPurify.sanitize(skill.description, { ALLOWED_TAGS: ["a", "strong"], ALLOWED_ATTR: ["href", "target", "rel"] });
     card.appendChild(desc);
 
     // Author
