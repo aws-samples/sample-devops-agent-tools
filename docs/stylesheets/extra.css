@@ -259,3 +259,27 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* --- Skill Page Metadata Block --- */
+
+.skill-page-meta {
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.5rem;
+}
+
+.skill-page-meta .skill-meta {
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.skill-page-meta .skill-author {
+  color: var(--md-default-fg-color--light);
+}
+
+.skill-page-meta .skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}

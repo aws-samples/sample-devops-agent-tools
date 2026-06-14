@@ -184,21 +184,61 @@ def _generate_skill_stub(doc_path: Path, skill: dict, config_dir: str):
         f'View on GitHub</a>\n\n'
     )
 
+    # Build metadata block (author + dimension tags)
+    meta_block = _build_skill_meta_block(skill)
+
     readme = Path(config_dir) / "skills" / skill["id"] / "README.md"
     if readme.is_file():
         readme_content = readme.read_text(encoding="utf-8")
-        # Insert the GitHub link after the first heading
+        # Insert the GitHub link and metadata after the first heading
         lines = readme_content.split("\n", 1)
         if len(lines) == 2 and lines[0].startswith("# "):
-            content = lines[0] + "\n\n" + github_link + lines[1]
+            content = lines[0] + "\n\n" + github_link + meta_block + lines[1]
         else:
-            content = github_link + readme_content
+            content = github_link + meta_block + readme_content
     else:
-        content = f"# {skill['name']}\n\n{github_link}{skill['description']}\n"
+        content = f"# {skill['name']}\n\n{github_link}{meta_block}{skill['description']}\n"
 
     if doc_path.is_file() and doc_path.read_text(encoding="utf-8") == content:
         return  # No change, skip write
     doc_path.write_text(content, encoding="utf-8")
+
+
+def _build_skill_meta_block(skill: dict) -> str:
+    """Build an HTML block showing author and dimension tags for a skill page."""
+    parts = []
+
+    # Author line (linked to GitHub profile)
+    author = skill.get("author", "")
+    if author:
+        parts.append(
+            f'<div class="skill-meta">'
+            f'<span class="skill-author">by <a href="https://github.com/{author}" '
+            f'target="_blank" rel="noopener"><strong>{author}</strong></a></span>'
+            f'</div>'
+        )
+
+    # Dimension tags
+    dimensions = skill.get("dimensions", {})
+    tags_html = []
+    tag_class_map = {
+        "agent-types": "tag-agent",
+        "aws-services": "tag-service",
+        "technical-domains": "tag-domain",
+    }
+    for dim_key, values in dimensions.items():
+        css_class = tag_class_map.get(dim_key, "tag-domain")
+        for value in values:
+            tags_html.append(f'<span class="tag {css_class}">{value}</span>')
+
+    if tags_html:
+        parts.append(
+            '<div class="skill-tags">' + " ".join(tags_html) + '</div>'
+        )
+
+    if parts:
+        return '<div class="skill-page-meta">\n' + "\n".join(parts) + "\n</div>\n\n"
+    return ""
 
 
 def _update_nav(config, catalog):
