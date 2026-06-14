@@ -110,6 +110,12 @@ def _build_catalog(config_dir: str) -> list:
             r'<a href="\2" target="_blank" rel="noopener">\1</a>',
             description
         )
+        # Convert markdown bold to HTML
+        description = re.sub(
+            r'\*\*([^*]+)\*\*',
+            r'<strong>\1</strong>',
+            description
+        )
 
         # Collect all aws-devops-agent-skills.* dimensions
         dimensions = {}
@@ -134,7 +140,7 @@ def _format_name(skill_id: str) -> str:
     """Convert skill-id to display name: aws-health-events -> AWS Health Events."""
     words = skill_id.split("-")
     # Capitalize known acronyms
-    acronyms = {"aws", "eks", "rds", "rca", "mcp"}
+    acronyms = {"aws", "eks", "rds", "rca", "mcp", "crm"}
     return " ".join(
         w.upper() if w.lower() in acronyms else w.capitalize()
         for w in words
