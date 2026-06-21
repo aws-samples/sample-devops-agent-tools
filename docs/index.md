@@ -9,7 +9,7 @@ hide:
     <img src="assets/devops-agent-icon.svg" alt="AWS DevOps Agent">
   </div>
   <h1>AWS DevOps Agent Skills</h1>
-  <p class="hero-subtitle">Extend your agent with open-source skills for incident response, root cause analysis, and operational reviews.</p>
+  <p class="hero-subtitle">Extend your DevOps Agent with open-source skills for incident response, root cause analysis, and operational reviews.</p>
   <div class="hero-buttons">
     <a href="getting-started/" class="md-button md-button--primary">Get Started</a>
     <a href="skills/" class="md-button">Browse Skills</a>
