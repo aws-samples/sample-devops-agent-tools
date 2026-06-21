@@ -36,7 +36,15 @@ This skill is designed for:
 
 ## Uploading to AWS DevOps Agent
 
-To deploy this skill (or your adapted version) to your Agent Space:
+To deploy this skill (or your adapted version) to your Agent Space, you can use any of three ways:
+
+**Option A: Import from GitHub (recommended)**
+
+If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsagent/latest/userguide/connecting-to-cicd-pipelines-connecting-github.html) in your Agent Space, you can import this skill directly from the repository. In the DevOps Agent web app, go to Settings → Add Skill → Import from repository, then point to the `skills/crm-production-investigation-guidelines` directory. See [Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) for full instructions.
+
+> **Note:** You cannot connect the `aws-samples` GitHub organization directly because the GitHub connection setup requires admin rights on the organization. Instead, connect your personal GitHub account and select any repository from it during the connection setup. Once a GitHub connection is established, you can import skills from any public repository — including this one — even if it wasn't selected during the connection setup.
+
+**Option B: Upload as a zip file**
 
 1. Zip the skill directory (only including allowed extensions):
 
@@ -45,11 +53,15 @@ To deploy this skill (or your adapted version) to your Agent Space:
    zip -r crm-production-investigation-guidelines.zip crm-production-investigation-guidelines/ -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml' '*.xml' '*.csv' '*.tsv' '*.html' '*.htm' '*.png' '*.jpg' '*.jpeg' '*.gif' '*.svg' '*.webp' '*.pdf' -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/.skilleval.yml' '*/CHANGELOG.md' '*/evals/*'
    ```
 
-2. In the AWS DevOps Agent Operator Web App, navigate to the **Skills** page.
+2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
 3. Click **Add skill** → **Upload skill**.
 4. Drag and drop the zip file (max 6 MB).
 5. Select the agent type: **Incident Triage**.
 6. Click **Upload**.
+
+**Option C: Upload via the Asset API**
+
+Use the AWS DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign the skill to the `INCIDENT_TRIAGE` agent type. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
 
 For more details, see [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) in the AWS DevOps Agent User Guide.
 

@@ -60,7 +60,21 @@ Browse the skills table above and read the skill's `README.md` for details on it
 
 ### 3. Upload to AWS DevOps Agent
 
-Zip the skill directory (see the zip command in each skill's README) and [upload it via the AWS DevOps Agent Operator Web App](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills). Detailed instructions are in each skill's README.
+You can add skills to your Agent Space in two ways:
+
+**Option A: Import from GitHub (recommended)**
+
+If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsagent/latest/userguide/connecting-to-cicd-pipelines-connecting-github.html) in your Agent Space, you can import skills directly from this repository. In the DevOps Agent web app, go to Settings → Add Skill → Import from repository, then point to the skill directory in the repo. The skill stays in sync with the repository. See [Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) for full instructions.
+
+> **Note:** You cannot connect the `aws-samples` GitHub organization directly because the GitHub connection setup requires admin rights on the organization. Instead, connect your personal GitHub account and select any repository from it during the connection setup. Once a GitHub connection is established, you can import skills from any public repository — including this one — even if it wasn't selected during the connection setup.
+
+**Option B: Upload as a zip file**
+
+Zip the skill directory (see the zip command in each skill's README) and [upload it via the DevOps Agent web app](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills). Detailed instructions are in each skill's README.
+
+**Option C: Upload via the Asset API**
+
+Use the AWS DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
 
 ## Skill Directory Structure
 
