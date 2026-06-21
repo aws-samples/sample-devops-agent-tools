@@ -1,0 +1,94 @@
+{
+  "skill_name": "investigation-cost-guardrail",
+  "skill_path": "Devops-Agent-Finops-Skills-main",
+  "query_results": [
+    {
+      "query": "How much does an m5.xlarge cost per hour?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 262.0,
+      "mean_total_tokens": 265.0
+    },
+    {
+      "query": "What EC2 instances are running in us-east-1?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 403.0,
+      "mean_total_tokens": 407.0
+    },
+    {
+      "query": "Scale my ECS service to 10 tasks",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 230.0,
+      "mean_total_tokens": 233.0
+    },
+    {
+      "query": "How do I enable GuardDuty in my account?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 452.0,
+      "mean_total_tokens": 455.0
+    },
+    {
+      "query": "Generate a cost report for last month broken down by service",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 6.0,
+      "mean_output_tokens": 608.0,
+      "mean_total_tokens": 614.0
+    },
+    {
+      "query": "What are the best practices for tagging AWS resources?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 561.0,
+      "mean_total_tokens": 564.0
+    }
+  ],
+  "summary": {
+    "total_queries": 6,
+    "passed": 6,
+    "failed": 0,
+    "trigger_precision": 1.0,
+    "no_trigger_precision": 1.0,
+    "mean_total_tokens_per_run": 423.0,
+    "estimated_cost": {
+      "per_run": {
+        "input_cost": 1.1e-05,
+        "output_cost": 0.00629,
+        "total_cost": 0.006301,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "total_runs": 6,
+      "total_cost": 0.0378,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "passed": true
+}

@@ -1,0 +1,65 @@
+{
+  "skill_name": "investigation-cost-guardrail",
+  "skill_path": "Devops-Agent-Finops-Skills-main",
+  "timestamp": "2026-06-21T01:23:33Z",
+  "overall_score": 0.9133,
+  "overall_grade": "A",
+  "passed": true,
+  "sections": {
+    "audit": {
+      "score": 92,
+      "grade": "A",
+      "passed": true,
+      "normalized": 0.92,
+      "critical": 0,
+      "warning": 0,
+      "info": 4
+    },
+    "functional": {
+      "overall": 0.8632,
+      "grade": "B",
+      "passed": true,
+      "scores": {
+        "outcome": 0.7264,
+        "process": 1.0,
+        "style": 0.7264,
+        "efficiency": 1.0,
+        "overall": 0.8632
+      },
+      "cost_efficiency": {
+        "quality_delta": 0.4986,
+        "cost_delta_pct": 156.5,
+        "classification": "TRADEOFF",
+        "emoji": "\ud83d\udfe1",
+        "description": "Skill improves quality but increases cost"
+      },
+      "estimated_cost": {
+        "with_skill_per_run": {
+          "input_cost": 1.2e-05,
+          "output_cost": 0.02508,
+          "total_cost": 0.025092,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "without_skill_per_run": {
+          "input_cost": 2.7e-05,
+          "output_cost": 0.009666,
+          "total_cost": 0.009693,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "per_eval_pair": 0.034785,
+        "total_runs": 12,
+        "total_cost": 0.4174,
+        "model": "sonnet",
+        "currency": "USD"
+      }
+    },
+    "trigger": {
+      "pass_rate": 1.0,
+      "grade": "A",
+      "passed": true,
+      "total_queries": 6
+    }
+  }
+}

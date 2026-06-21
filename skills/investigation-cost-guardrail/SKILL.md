@@ -1,8 +1,12 @@
 ---
 name: investigation-cost-guardrail
 description: Estimates the downstream AWS API cost of an incident investigation before the agent runs any CloudWatch Logs Insights, GetMetricData, X-Ray, or cross-region query, shows a per-step cost plan, and cancels if the estimate exceeds a threshold or no time window is provided. This skill applies ONLY to diagnosing a problem that has already happened (an incident, error, outage, alarm, latency spike, or failure) for example 'what happened', 'why is X down', 'look into this alarm', 'investigate the errors'. It does NOT apply to actions that create, change, deploy, scale, or configure resources (for example deploying a CDK or CloudFormation stack, or scaling a service), nor to architecture or Well-Architected reviews, cost or billing reports, inventory listing, or general how-to questions.
-version: 1.0.0
-author: inesttia-aws
+metadata:
+  author: inesttia
+  version: "1.0.0"
+  aws-devops-agent-skills.agent-types: "Incident RCA"
+  aws-devops-agent-skills.aws-services: "Amazon CloudWatch, AWS X-Ray, AWS CloudTrail"
+  aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
 ---
 
 # Investigation Cost Guardrail
