@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Adds skill-specific IAM inline policies to a DevOps Agent role.
+  Provide ExistingRoleName to attach policies to an existing role, or leave
+  empty to create a new role with AIDevOpsAgentAccessPolicy attached.
+  Does NOT create an Agent Space — deploy the space separately and associate
+  the role ARN from this stack's output.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Role Configuration
+        Parameters:
+          - ExistingRoleName
+      - Label:
+          default: Skill Activation
+        Parameters:
+          - EnableAwsHealthEvents
+          - EnableSupportCases
+          - EnableRdsOperationReview
+          - EnableEksOperationReview
+          - EnableInvestigationCostGuardrail
+          - EnableEnrichWithSecurityAgent
+          - EnableCrmInvestigationGuidelines
+          - EnableSkipScheduledMaintenance
+      - Label:
+          default: Optional Resource Scoping
+        Parameters:
+          - AllowedRegions
+
+Parameters:
+  ExistingRoleName:
+    Type: String
+    Description: >
+      Name of an existing DevOps Agent role. Leave empty to create a new one.
+    Default: ''
+
+  AllowedRegions:
+    Type: CommaDelimitedList
+    Description: >
+      (Optional) Restrict agent to these regions. Leave empty for all regions.
+    Default: ''
+
+  EnableAwsHealthEvents:
+    Type: String
+    Description: AWS Health Events skill (requires Business/Enterprise Support).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableSupportCases:
+    Type: String
+    Description: Support Cases skill (requires Business/Enterprise Support).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableRdsOperationReview:
+    Type: String
+    Description: RDS Operation Review skill.
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableEksOperationReview:
+    Type: String
+    Description: EKS Operation Review skill (covered by managed policy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableInvestigationCostGuardrail:
+    Type: String
+    Description: Investigation Cost Guardrail skill.
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableEnrichWithSecurityAgent:
+    Type: String
+    Description: Enrich with AWS Security Agent skill (covered by managed policy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableCrmInvestigationGuidelines:
+    Type: String
+    Description: CRM Production Investigation Guidelines skill (covered by managed policy).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+  EnableSkipScheduledMaintenance:
+    Type: String
+    Description: Skip Scheduled Maintenance skill (no IAM needed).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
+Conditions:
+  CreateNewRole: !Equals [!Ref ExistingRoleName, '']
+  SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
+  SkillSupportCases: !Equals [!Ref EnableSupportCases, 'true']
+  SkillRdsOperationReview: !Equals [!Ref EnableRdsOperationReview, 'true']
+  SkillInvestigationCostGuardrail: !Equals [!Ref EnableInvestigationCostGuardrail, 'true']
+  HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
+
+Resources:
+  # New role — only created when ExistingRoleName is empty
+  DevOpsAgentRole:
+    Type: AWS::IAM::Role
+    Condition: CreateNewRole
+    Properties:
+      RoleName: DevOpsAgentRole-AgentSpace
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: aidevops.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:aws:aidevops:*:${AWS::AccountId}:agentspace/*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AIDevOpsAgentAccessPolicy
+      Tags:
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # Required for topology discovery
+  PolicyResourceExplorerSLR:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: AllowCreateResourceExplorerSLR
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCreateServiceLinkedRoles
+            Effect: Allow
+            Action:
+              - iam:CreateServiceLinkedRole
+            Resource:
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/aws-service-role/resource-explorer-2.amazonaws.com/AWSServiceRoleForResourceExplorer'
+
+  # aws-health-events: adds health:DescribeEventTypes
+  PolicyAwsHealthEvents:
+    Type: AWS::IAM::Policy
+    Condition: SkillAwsHealthEvents
+    Properties:
+      PolicyName: DevOpsAgentSkill-AwsHealthEvents
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: HealthEventTypes
+            Effect: Allow
+            Action:
+              - health:DescribeEventTypes
+            Resource: '*'
+
+  # support-cases: adds support:DescribeCommunications
+  PolicySupportCases:
+    Type: AWS::IAM::Policy
+    Condition: SkillSupportCases
+    Properties:
+      PolicyName: DevOpsAgentSkill-SupportCases
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SupportCommunications
+            Effect: Allow
+            Action:
+              - support:DescribeCommunications
+            Resource: '*'
+
+  # rds-operation-review: adds rds:DownloadDBLogFilePortion, logs:GetLogEvents
+  PolicyRdsOperationReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillRdsOperationReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-RdsOperationReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: RdsLogDownload
+            Effect: Allow
+            Action:
+              - rds:DownloadDBLogFilePortion
+            Resource: '*'
+          - Sid: CloudWatchLogsGetEvents
+            Effect: Allow
+            Action:
+              - logs:GetLogEvents
+            Resource: '*'
+
+  # investigation-cost-guardrail: adds pricing:GetProducts
+  PolicyInvestigationCostGuardrail:
+    Type: AWS::IAM::Policy
+    Condition: SkillInvestigationCostGuardrail
+    Properties:
+      PolicyName: DevOpsAgentSkill-InvestigationCostGuardrail
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PricingAccess
+            Effect: Allow
+            Action:
+              - pricing:GetProducts
+            Resource: '*'
+
+  # Optional: restrict agent to specific regions
+  PolicyRegionalRestriction:
+    Type: AWS::IAM::Policy
+    Condition: HasRegionRestriction
+    Properties:
+      PolicyName: DevOpsAgent-RegionalRestriction
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyOutOfScopeRegions
+            Effect: Deny
+            Action: '*'
+            Resource: '*'
+            Condition:
+              StringNotEquals:
+                aws:RequestedRegion: !Ref AllowedRegions
+              'ForAnyValue:StringNotLike':
+                aws:PrincipalServiceNamesList:
+                  - health.amazonaws.com
+                  - support.amazonaws.com
+                  - ce.amazonaws.com
+
+Outputs:
+  DevOpsAgentRoleArn:
+    Description: Role ARN to use with aws devops-agent associate-service.
+    Value: !If
+      - CreateNewRole
+      - !GetAtt DevOpsAgentRole.Arn
+      - !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ExistingRoleName}'
+
+  DevOpsAgentRoleName:
+    Description: Role name.
+    Value: !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+
+  SkillPolicySummary:
+    Description: Policies applied per skill.
+    Value: !Sub |
+      Skills with inline policies added:
+        - aws-health-events: ${EnableAwsHealthEvents} (health:DescribeEventTypes)
+        - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
+        - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
+        - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
+      Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
+        - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
+      No IAM required:
+        - skip-scheduled-maintenance

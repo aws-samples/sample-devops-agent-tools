@@ -94,6 +94,22 @@ skills/<skill-name>/
 
 The `SKILL.md`, `references/`, and `assets/` directories are what AWS DevOps Agent reads at runtime. Everything else supports development, testing, and documentation.
 
+## Skill Permissions
+
+Each skill documents the IAM permissions it requires in its README under **Prerequisites**. The DevOps Agent role associated with your Agent Space must have these permissions for the skill to function fully.
+
+Most permissions are already covered by the AWS managed policy [`AIDevOpsAgentAccessPolicy`](https://docs.aws.amazon.com/devopsagent/latest/userguide/aws-devops-agent-security-devops-agent-iam-permissions.html). For skills that need additional permissions, you can use the included CloudFormation template to automatically provision them:
+
+```bash
+aws cloudformation deploy \
+  --template-file cloudformation/devops-agent-skill-policies.yaml \
+  --stack-name devops-agent-skill-policies \
+  --parameter-overrides ExistingRoleName=<YOUR-DEVOPS-AGENT-ROLE-NAME> \
+  --capabilities CAPABILITY_NAMED_IAM
+```
+
+The template supports enabling/disabling policies per skill, optional region restrictions, and can either attach to an existing role or create a new one. See [`cloudformation/devops-agent-skill-policies.yaml`](cloudformation/devops-agent-skill-policies.yaml) for details.
+
 ## Writing Your Own Skills
 
 Want to create custom skills for your operational workflows? See the [AWS DevOps Agent skills documentation](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html) for the full guide, or use the skills in this repository as templates.
