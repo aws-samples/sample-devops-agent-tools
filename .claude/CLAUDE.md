@@ -11,7 +11,7 @@ This repository consolidates AWS DevOps Agent skills. Follow these conventions w
 ## Repository Structure
 
 ```
-sample-code-for-devops-agent-skills/
+sample-devops-agent-tools/
 ├── README.md                 # Project overview with skills table
 ├── .gitignore                # Root-level ignores
 ├── skills/

@@ -1,16 +1,5 @@
 (function () {
-  function initSkillCatalog() {
-    var container = document.getElementById("skills-catalog-root");
-    if (!container) return;
-
-    var dataUrl = container.getAttribute("data-source");
-    if (!dataUrl) return;
-
-    fetch(dataUrl)
-      .then(function (r) { return r.json(); })
-      .then(function (skills) { render(container, skills); })
-      .catch(function (err) { console.error("Skills catalog:", err); });
-  }
+  // === Shared Utilities ===
 
   function escapeText(str) {
     var div = document.createElement("div");
@@ -25,7 +14,48 @@
     return span;
   }
 
-  function createCard(skill) {
+  function sanitizeHTML(html) {
+    return DOMPurify.sanitize(html, { ALLOWED_TAGS: ["a", "strong"], ALLOWED_ATTR: ["href", "target", "rel"] });
+  }
+
+  function fixRepoLink() {
+    var source = document.querySelector(".md-source");
+    if (source) {
+      source.setAttribute("target", "_blank");
+      source.setAttribute("rel", "noopener");
+    }
+    // Make all external links open in a new tab
+    var siteHost = window.location.hostname;
+    document.querySelectorAll("a[href]").forEach(function (link) {
+      var href = link.getAttribute("href");
+      if (href && href.startsWith("http")) {
+        try {
+          var linkHost = new URL(href).hostname;
+          if (linkHost !== siteHost) {
+            link.setAttribute("target", "_blank");
+            link.setAttribute("rel", "noopener");
+          }
+        } catch (e) {}
+      }
+    });
+  }
+
+  // === Skills Catalog ===
+
+  function initSkillCatalog() {
+    var container = document.getElementById("skills-catalog-root");
+    if (!container) return;
+
+    var dataUrl = container.getAttribute("data-source");
+    if (!dataUrl) return;
+
+    fetch(dataUrl)
+      .then(function (r) { return r.json(); })
+      .then(function (skills) { renderSkills(container, skills); })
+      .catch(function (err) { console.error("Skills catalog:", err); });
+  }
+
+  function createSkillCard(skill) {
     var card = document.createElement("div");
     card.className = "skill-card";
 
@@ -44,7 +74,7 @@
 
     // Description (may contain safe HTML links from the hook)
     var desc = document.createElement("p");
-    desc.innerHTML = DOMPurify.sanitize(skill.description, { ALLOWED_TAGS: ["a", "strong"], ALLOWED_ATTR: ["href", "target", "rel"] });
+    desc.innerHTML = sanitizeHTML(skill.description);
     card.appendChild(desc);
 
     // Author
@@ -78,7 +108,7 @@
     return card;
   }
 
-  function render(container, skills) {
+  function renderSkills(container, skills) {
     // Collect all unique dimension keys
     var dimKeys = [];
     var dimLabels = {};
@@ -128,7 +158,7 @@
     catalogEl.id = "skill-catalog";
     var cards = [];
     skills.forEach(function (skill) {
-      var card = createCard(skill);
+      var card = createSkillCard(skill);
       cards.push(card);
       catalogEl.appendChild(card);
     });
@@ -200,44 +230,79 @@
       .replace(/s$/, "");
   }
 
-  // Initialize
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", function () {
-      initSkillCatalog();
-      fixRepoLink();
+  // === Agents Catalog ===
+
+  function initAgentsCatalog() {
+    var container = document.getElementById("agents-catalog-root");
+    if (!container) return;
+
+    var dataUrl = container.getAttribute("data-source");
+    if (!dataUrl) return;
+
+    fetch(dataUrl)
+      .then(function (r) { return r.json(); })
+      .then(function (agents) { renderAgents(container, agents); })
+      .catch(function (err) { console.error("Agents catalog:", err); });
+  }
+
+  function createAgentCard(agent) {
+    var card = document.createElement("div");
+    card.className = "skill-card";
+
+    // Title with link
+    var h3 = document.createElement("h3");
+    var link = document.createElement("a");
+    link.href = escapeText(agent.id) + "/";
+    link.textContent = agent.name;
+    h3.appendChild(link);
+    card.appendChild(h3);
+
+    // Description
+    var desc = document.createElement("p");
+    desc.innerHTML = sanitizeHTML(agent.description);
+    card.appendChild(desc);
+
+    // Tags (tools + skills)
+    var tagsDiv = document.createElement("div");
+    tagsDiv.className = "skill-tags";
+    (agent.tools || []).forEach(function (tool) {
+      tagsDiv.appendChild(createTag(tool, "tag-tool"));
     });
-  } else {
+    (agent.skills || []).forEach(function (skill) {
+      tagsDiv.appendChild(createTag(skill, "tag-skill"));
+    });
+    card.appendChild(tagsDiv);
+
+    return card;
+  }
+
+  function renderAgents(container, agents) {
+    container.textContent = "";
+
+    var catalogEl = document.createElement("div");
+    catalogEl.id = "agents-catalog";
+    agents.forEach(function (agent) {
+      catalogEl.appendChild(createAgentCard(agent));
+    });
+    container.appendChild(catalogEl);
+  }
+
+  // === Initialize ===
+
+  function initAll() {
     initSkillCatalog();
+    initAgentsCatalog();
     fixRepoLink();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAll);
+  } else {
+    initAll();
   }
 
   // Material instant navigation
   if (typeof document$ !== "undefined") {
-    document$.subscribe(function () {
-      initSkillCatalog();
-      fixRepoLink();
-    });
-  }
-
-  function fixRepoLink() {
-    var source = document.querySelector(".md-source");
-    if (source) {
-      source.setAttribute("target", "_blank");
-      source.setAttribute("rel", "noopener");
-    }
-    // Make all external links open in a new tab
-    var siteHost = window.location.hostname;
-    document.querySelectorAll("a[href]").forEach(function (link) {
-      var href = link.getAttribute("href");
-      if (href && href.startsWith("http")) {
-        try {
-          var linkHost = new URL(href).hostname;
-          if (linkHost !== siteHost) {
-            link.setAttribute("target", "_blank");
-            link.setAttribute("rel", "noopener");
-          }
-        } catch (e) {}
-      }
-    });
+    document$.subscribe(initAll);
   }
 })();

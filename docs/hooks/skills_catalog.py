@@ -1,12 +1,18 @@
 """
-MkDocs hook: generates the skills catalog data from SKILL.md frontmatter.
+MkDocs hook: generates catalog data for skills and custom agents.
 
-At build time, scans skills/*/SKILL.md, extracts metadata, and writes
-docs/javascripts/skills-data.json. The JS on the catalog page reads this
-JSON to render cards and group-by buttons dynamically.
+At build time:
+- Scans skills/*/SKILL.md, extracts metadata, and writes
+  docs/javascripts/skills-data.json.
+- Scans custom-agents/*/README.md, extracts metadata, and writes
+  docs/javascripts/agents-data.json.
 
-This also generates individual skill doc stubs if a docs/skills/<name>.md
-doesn't already exist, so new skills appear on the site automatically.
+The JS on the catalog pages reads these JSON files to render cards
+and group-by buttons dynamically.
+
+This also generates individual doc stubs for skills and custom agents
+that don't have a docs page yet, so new entries appear on the site
+automatically.
 """
 
 import json
@@ -176,7 +182,7 @@ def on_pre_build(config, **kwargs):
 
 def _generate_skill_stub(doc_path: Path, skill: dict, config_dir: str):
     """Generate a minimal skill doc page from its README (only if changed)."""
-    repo_url = "https://github.com/aws-samples/sample-code-for-devops-agent-skills"
+    repo_url = "https://github.com/aws-samples/sample-devops-agent-tools"
     github_link = (
         f'<a href="{repo_url}/tree/main/skills/{skill["id"]}" '
         f'target="_blank" rel="noopener" class="md-button">'

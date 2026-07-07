@@ -1,8 +1,8 @@
-site_name: AWS DevOps Agent Skills
-site_url: https://aws-samples.github.io/sample-code-for-devops-agent-skills/
-site_description: Open-source skills for AWS DevOps Agent — incident response, root cause analysis, and operational troubleshooting.
-repo_url: https://github.com/aws-samples/sample-code-for-devops-agent-skills
-repo_name: aws-samples/sample-code-for-devops-agent-skills
+site_name: AWS DevOps Agent Tools
+site_url: https://aws-samples.github.io/sample-devops-agent-tools/
+site_description: Open-source skills, custom agents, and templates for AWS DevOps Agent — incident response, root cause analysis, and operational troubleshooting.
+repo_url: https://github.com/aws-samples/sample-devops-agent-tools
+repo_name: aws-samples/sample-devops-agent-tools
 edit_uri: edit/main/docs/
 
 theme:
@@ -40,7 +40,7 @@ extra_css:
 
 extra_javascript:
   - https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js
-  - javascripts/skills-filter.js
+  - javascripts/catalog.js
 
 markdown_extensions:
   - admonition
@@ -66,6 +66,7 @@ plugins:
 
 hooks:
   - docs/hooks/skills_catalog.py
+  - docs/hooks/agents_catalog.py
 
 nav:
   - Home: index.md
@@ -73,9 +74,12 @@ nav:
   - Skills:
       - Catalog:
           - skills/index.md
+  - Custom Agents:
+      - Catalog:
+          - custom-agents/index.md
 
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/aws-samples/sample-code-for-devops-agent-skills
+      link: https://github.com/aws-samples/sample-devops-agent-tools
   generator: false

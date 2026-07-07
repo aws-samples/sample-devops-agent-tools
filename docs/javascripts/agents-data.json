@@ -1,0 +1,37 @@
+[
+  {
+    "id": "aws-health-report",
+    "name": "AWS Health Report",
+    "description": "This custom agent generates a report of AWS Health events (service issues, scheduled changes, and account notifications) during a specified time period (last 30 days by default). It provides operations teams with visibility into AWS-side events affecting their environment.",
+    "tools": [
+      "use_aws"
+    ],
+    "skills": [
+      "aws-health-events"
+    ]
+  },
+  {
+    "id": "aws-operation-review",
+    "name": "AWS Operation Review",
+    "description": "This custom agent performs comprehensive operational reviews of AWS services (EKS clusters, RDS instances, Aurora clusters) against best practices and the Well-Architected Framework. It identifies gaps in security, reliability, performance, cost optimization, and operational excellence, producing actionable recommendations and a structured report artifact.",
+    "tools": [
+      "use_aws",
+      "use_kubectl"
+    ],
+    "skills": [
+      "eks-operation-review",
+      "rds-operation-review"
+    ]
+  },
+  {
+    "id": "support-cases-report",
+    "name": "Support Cases Report",
+    "description": "This custom agent generates a report of all AWS Support cases during a specified time period (last 60 days by default, unless otherwise requested by a user prompt). It provides operations teams with a consolidated view of support activity, recurring patterns, and items requiring follow-up.",
+    "tools": [
+      "use_aws"
+    ],
+    "skills": [
+      "support-cases"
+    ]
+  }
+]

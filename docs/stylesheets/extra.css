@@ -239,6 +239,38 @@
   color: #2e7d32;
 }
 
+.tag-tool {
+  background: rgba(156, 39, 176, 0.15);
+  color: #ab47bc;
+}
+
+.tag-skill {
+  background: rgba(79, 195, 247, 0.15);
+  color: #4fc3f7;
+}
+
+[data-md-color-scheme="default"] .tag-tool {
+  background: rgba(156, 39, 176, 0.1);
+  color: #7b1fa2;
+}
+
+[data-md-color-scheme="default"] .tag-skill {
+  background: rgba(25, 118, 210, 0.1);
+  color: #1565c0;
+}
+
+#agents-catalog {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  #agents-catalog {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 .group-heading {
   margin-top: 1.5rem;
   margin-bottom: 0.75rem;
