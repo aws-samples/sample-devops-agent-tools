@@ -1,6 +1,6 @@
 # AWS DevOps Agent Tools
 
-![License: MIT-0](https://img.shields.io/badge/License-MIT--0-blue)
+![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)
 ![AWS DevOps Agent](https://img.shields.io/badge/AWS-DevOps%20Agent-orange?logo=amazonaws)
 
 Open-source skills, custom agents, and infrastructure templates for [AWS DevOps Agent](https://aws.amazon.com/devops-agent/) that extend its capabilities for incident response, root cause analysis, and operational troubleshooting.
@@ -81,4 +81,4 @@ We welcome contributions of new skills and improvements to existing ones. See [C
 
 ## License
 
-This library is licensed under the MIT-0 License. See the LICENSE file.
+This library is licensed under the Apache-2.0 License. See the LICENSE file.
