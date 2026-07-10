@@ -1,0 +1,63 @@
+[
+  {
+    "id": "msk-broker-type-determination",
+    "prompt": "According to the skill, what is the single API call and field the skill uses to determine whether an MSK cluster is Standard or Express brokers? No cluster access required.",
+    "expected_output": "Names aws kafka describe-cluster-v2 and identifies the InstanceType field (kafka.* vs express.*) as the discriminator.",
+    "files": [],
+    "assertions": [
+      "contains 'describe-cluster-v2' or contains 'describeClusterV2'",
+      "contains 'InstanceType' or contains 'instance type'",
+      "contains 'express' or contains 'Express'",
+      "contains 'kafka.' or contains 'Standard'"
+    ]
+  },
+  {
+    "id": "msk-critical-warnings-recall",
+    "prompt": "List the critical warnings the skill states around MSK broker operations. Focus on partition replication, client-side batching, and Express-broker constraints. No cluster access required.",
+    "expected_output": "Mentions do not reboot brokers while UnderReplicatedPartitions > 0, linger.ms=0 causing high CPU, and Express enforcing RF=3 with min.insync.replicas=2.",
+    "files": [],
+    "assertions": [
+      "contains 'UnderReplicatedPartitions'",
+      "contains 'linger.ms'",
+      "contains 'min.insync.replicas'",
+      "contains 'Express' or contains 'express'"
+    ]
+  },
+  {
+    "id": "msk-quick-diagnostics-recall",
+    "prompt": "The skill lists five quick diagnostics for common MSK issues. Name them and the primary CloudWatch metric each one examines. No cluster access required.",
+    "expected_output": "Lists CPU (CpuUser + CpuSystem), disk (KafkaDataLogsDiskUsed), UnderReplicatedPartitions, consumer offset lag (OffsetLag / MaxOffsetLag / SumOffsetLag), and BytesInPerSec throughput.",
+    "files": [],
+    "assertions": [
+      "contains 'CpuUser' or contains 'CPU'",
+      "contains 'KafkaDataLogsDiskUsed' or contains 'disk'",
+      "contains 'UnderReplicatedPartitions'",
+      "contains 'OffsetLag' or contains 'consumer lag' or contains 'consumer_lag'",
+      "contains 'BytesInPerSec' or contains 'throughput'"
+    ]
+  },
+  {
+    "id": "msk-reference-routing",
+    "prompt": "According to the skill's routing table, which reference file should be consulted for (a) consumer lag investigation, (b) recommended CloudWatch alarms, and (c) rolling restart / Kafka version upgrade behavior? No cluster access required.",
+    "expected_output": "Maps consumer lag to troubleshoot-consumer-lag.md, monitoring/alarms to monitor-and-alarm.md, and maintenance/upgrades to maintenance-operations.md.",
+    "files": [],
+    "assertions": [
+      "contains 'troubleshoot-consumer-lag'",
+      "contains 'monitor-and-alarm'",
+      "contains 'maintenance-operations'"
+    ]
+  },
+  {
+    "id": "msk-severity-scale",
+    "prompt": "List the five severity levels the skill uses for findings in an operational review, in order from most to least urgent. No cluster access required.",
+    "expected_output": "Lists CRITICAL, HIGH, MEDIUM, LOW, INFO in that order.",
+    "files": [],
+    "assertions": [
+      "contains 'CRITICAL'",
+      "contains 'HIGH'",
+      "contains 'MEDIUM'",
+      "contains 'LOW'",
+      "contains 'INFO'"
+    ]
+  }
+]

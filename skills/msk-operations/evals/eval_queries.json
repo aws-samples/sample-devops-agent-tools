@@ -1,0 +1,10 @@
+[
+  {"query": "Which skill would help me troubleshoot high produce latency on an MSK cluster? Just name it; do not run it.", "should_trigger": true},
+  {"query": "Is there a skill available for investigating consumer lag on Amazon MSK? Answer yes or no with the skill name; do not execute it.", "should_trigger": true},
+  {"query": "Name the skill that covers MSK cluster health checks and best-practices review. Do not run any audit.", "should_trigger": true},
+  {"query": "Which skill explains rolling restart behavior and Kafka version upgrades on MSK? Just name it.", "should_trigger": true},
+  {"query": "Write a Python script that sorts a list of numbers", "should_trigger": false},
+  {"query": "What's the weather forecast for Sydney this weekend?", "should_trigger": false},
+  {"query": "Create a CloudFormation template for an S3 bucket", "should_trigger": false},
+  {"query": "How do I set up an RDS Multi-AZ Aurora cluster?", "should_trigger": false}
+]
