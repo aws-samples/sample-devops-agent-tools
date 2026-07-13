@@ -1,0 +1,79 @@
+[
+  {
+    "id": "check-ec2-vcpu-quota-utilization",
+    "prompt": "Check the EC2 On-Demand Standard vCPU quota utilization in us-east-1. We're planning to launch 100 more t3.large instances.",
+    "expected_output": "The agent retrieves the EC2 On-Demand Standard vCPU quota (L-1216C47A), checks current utilization via CloudWatch or resource count, calculates the percentage used, and assesses whether 100 additional t3.large instances (200 vCPUs) can be launched within the current limit.",
+    "assertions": [
+      "The output references the EC2 service code or quota code L-1216C47A",
+      "The output shows the current quota value (limit)",
+      "The output calculates or reports current utilization as a percentage",
+      "The output assesses whether the additional 200 vCPUs would exceed the quota"
+    ]
+  },
+  {
+    "id": "vpc-limit-exceeded-investigation",
+    "prompt": "I'm getting a VpcLimitExceeded error when trying to create a new VPC in us-west-2. Investigate the quota.",
+    "expected_output": "The agent checks the VPCs per Region quota (L-F678F1CE), finds it at or near 100% utilization, and recommends a quota increase since the limit is reached.",
+    "assertions": [
+      "The output identifies the VPC quota or quota code L-F678F1CE",
+      "The output shows that the VPC quota is at or near its limit",
+      "The output recommends or offers to request a quota increase",
+      "The output does not produce an unrelated error"
+    ]
+  },
+  {
+    "id": "lambda-throttling-quota-check",
+    "prompt": "Lambda functions are being throttled. Check if we're hitting the concurrent execution quota limit.",
+    "expected_output": "The agent checks the Lambda concurrent executions quota (L-B99A9384), retrieves current utilization, and reports whether throttling is caused by the quota limit.",
+    "assertions": [
+      "The output identifies the Lambda concurrent executions quota",
+      "The output shows the current quota limit value",
+      "The output reports utilization or states whether the limit is being hit",
+      "The output provides recommendations if utilization is high"
+    ]
+  },
+  {
+    "id": "request-quota-increase-flow",
+    "prompt": "My NAT Gateway quota in eu-west-1 is at 4 out of 5. I need to create 2 more. Please request an increase.",
+    "expected_output": "The agent confirms the NAT Gateway quota is at 80% (4/5), recognizes that adding 2 more would exceed the limit, and submits a quota increase request via the Service Quotas API after confirming with the user.",
+    "assertions": [
+      "The output shows current utilization (4 out of 5 or 80%)",
+      "The output recognizes the need for a quota increase",
+      "The output uses request-service-quota-increase or equivalent API",
+      "The output reports the request status (PENDING or similar)"
+    ]
+  },
+  {
+    "id": "non-adjustable-quota-handling",
+    "prompt": "I need to increase the S3 bucket quota but it says it's not adjustable. What should I do?",
+    "expected_output": "The agent checks the S3 buckets quota, finds that Adjustable is false or the increase cannot be done via API, and recommends opening a support case with specific instructions.",
+    "assertions": [
+      "The output identifies that the quota is not adjustable via the API",
+      "The output recommends opening a support case",
+      "The output provides instructions on how to open the support case",
+      "The output does not attempt to call request-service-quota-increase for a non-adjustable quota"
+    ]
+  },
+  {
+    "id": "bulk-quota-assessment",
+    "prompt": "We're planning a major scaling event. Check all relevant quotas for EC2, VPC, and ELB in us-east-1 and flag any that are above 70% utilization.",
+    "expected_output": "The agent checks quotas across EC2, VPC, and ELB services, calculates utilization for each, and presents a summary table flagging any quotas above 70%.",
+    "assertions": [
+      "The output checks quotas for multiple services (EC2, VPC, ELB)",
+      "The output presents utilization data for multiple quotas",
+      "The output flags or highlights any quotas above 70% utilization",
+      "The output provides a structured summary or table"
+    ]
+  },
+  {
+    "id": "pending-request-detection",
+    "prompt": "Request an increase for the RDS DB instances quota in us-east-1.",
+    "expected_output": "The agent first checks for existing pending requests for the RDS DB instances quota before submitting a new one. If a pending request exists, it reports it rather than creating a duplicate.",
+    "assertions": [
+      "The output checks for existing pending requests before submitting",
+      "The output either reports an existing pending request or submits a new one",
+      "The output does not create a duplicate request if one is already pending",
+      "The output shows the request ID and status"
+    ]
+  }
+]

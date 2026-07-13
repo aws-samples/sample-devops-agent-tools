@@ -1,0 +1,22 @@
+[
+  {
+    "query": "How do I configure a CloudFront distribution with a custom SSL certificate?",
+    "should_trigger": false
+  },
+  {
+    "query": "What is the best way to set up a multi-AZ RDS deployment?",
+    "should_trigger": false
+  },
+  {
+    "query": "Explain the difference between S3 Standard and S3 Glacier storage classes.",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I write a Lambda function in Python that processes SQS messages?",
+    "should_trigger": false
+  },
+  {
+    "query": "What IAM policies do I need for cross-account access to DynamoDB?",
+    "should_trigger": false
+  }
+]

@@ -24,6 +24,7 @@ Metadata:
           - EnableEnrichWithSecurityAgent
           - EnableCrmInvestigationGuidelines
           - EnableSkipScheduledMaintenance
+          - EnableServiceQuotaCheck
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -90,12 +91,19 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableServiceQuotaCheck:
+    Type: String
+    Description: Service Quota Check skill (Service Quotas + CloudWatch).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
   SkillSupportCases: !Equals [!Ref EnableSupportCases, 'true']
   SkillRdsOperationReview: !Equals [!Ref EnableRdsOperationReview, 'true']
   SkillInvestigationCostGuardrail: !Equals [!Ref EnableInvestigationCostGuardrail, 'true']
+  SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -213,6 +221,37 @@ Resources:
               - pricing:GetProducts
             Resource: '*'
 
+  # service-quota-check: adds servicequotas:* and cloudwatch:GetMetricData/GetMetricStatistics
+  PolicyServiceQuotaCheck:
+    Type: AWS::IAM::Policy
+    Condition: SkillServiceQuotaCheck
+    Properties:
+      PolicyName: DevOpsAgentSkill-ServiceQuotaCheck
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ServiceQuotasReadAndRequest
+            Effect: Allow
+            Action:
+              - servicequotas:ListServices
+              - servicequotas:ListServiceQuotas
+              - servicequotas:GetServiceQuota
+              - servicequotas:GetAWSDefaultServiceQuota
+              - servicequotas:ListRequestedServiceQuotaChangeHistory
+              - servicequotas:ListRequestedServiceQuotaChangeHistoryByQuota
+              - servicequotas:GetRequestedServiceQuotaChange
+              - servicequotas:RequestServiceQuotaIncrease
+              - servicequotas:CreateSupportCase
+            Resource: '*'
+          - Sid: CloudWatchUsageMetrics
+            Effect: Allow
+            Action:
+              - cloudwatch:GetMetricData
+              - cloudwatch:GetMetricStatistics
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -257,6 +296,7 @@ Outputs:
         - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
         - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
         - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
+        - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:
