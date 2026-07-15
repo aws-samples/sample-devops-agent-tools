@@ -15,7 +15,7 @@ description: "Investigation and review procedures for AWS Certificate Manager (A
 metadata:
   author: majamuda, vmgaddam
   version: "1.0.0"
-  aws-devops-agent-skills.agent-types: "Chat tasks, Incident RCA, Incident Triage"
+  aws-devops-agent-skills.agent-types: "Chat tasks"
   aws-devops-agent-skills.aws-services: "AWS Certificate Manager, AWS Private CA"
   aws-devops-agent-skills.technical-domains: "Security"
 ---
