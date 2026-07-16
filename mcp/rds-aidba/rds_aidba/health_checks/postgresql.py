@@ -1,6 +1,6 @@
 """
 PostgreSQL Health Check Query Registry
-Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Premium Support
+Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Enterprise Support
 
 Aurora PostgreSQL and RDS PostgreSQL diagnostic queries.
 All queries use pg_stat_* views, pg_settings, and system catalogs.

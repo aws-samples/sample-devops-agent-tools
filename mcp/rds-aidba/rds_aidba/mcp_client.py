@@ -1,6 +1,6 @@
 """
 MCP Client — wraps the awslabs.mysql-mcp-server via subprocess/stdio transport.
-Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Premium Support
+Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Enterprise Support
 
 ✅ FIXES:
 - Serialized send+receive (root cause of readuntil() concurrency error)

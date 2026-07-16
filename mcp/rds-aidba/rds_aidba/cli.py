@@ -1,6 +1,6 @@
 """
 rds-aidba CLI — Interactive DBA console.
-Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Premium Support
+Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Enterprise Support
 
 ✅ UPDATED:
 - Displays detected environment (Aurora/RDS/EC2) in the session header

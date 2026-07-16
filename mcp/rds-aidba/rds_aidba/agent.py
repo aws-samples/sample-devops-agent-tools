@@ -1,6 +1,6 @@
 """
 AI-DBA Agent — Amazon Bedrock-backed MySQL expert.
-Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Premium Support
+Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Enterprise Support
 
 ✅ FIXES:
 - Environment probed ONCE at session start, cached, injected into every prompt
@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = textwrap.dedent("""
     You are rds-aidba, an expert AI Database Administrator specialised in
     Amazon Aurora MySQL and Amazon RDS MySQL running on AWS.
-    Created by Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Premium Support.
+    Created by Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Enterprise Support.
 
     ═══════════════════════════════════════════════════════
     KNOWLEDGE PRIORITY — ALWAYS FOLLOW THIS ORDER

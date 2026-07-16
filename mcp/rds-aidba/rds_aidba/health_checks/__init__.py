@@ -1,6 +1,6 @@
 """
 Health Check Query Registry — MySQL + PostgreSQL
-Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Premium Support
+Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Enterprise Support
 
 Unified registry for both MySQL and PostgreSQL health check queries.
 Engine selection is determined by cluster config `engine` field.

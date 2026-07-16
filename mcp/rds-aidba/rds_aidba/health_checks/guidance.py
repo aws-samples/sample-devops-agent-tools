@@ -1,6 +1,6 @@
 """
 DBA Guidance & Recommendations Knowledge Base
-Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Premium Support
+Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Enterprise Support
 
 ✅ UPDATED:
 - All guidance functions now accept cluster_type ("aurora" | "rds" | "ec2")
@@ -33,7 +33,7 @@ _AUTHORITY_HEADER = """
 ║  • AWS Prescriptive Guidance                                 ║
 ║  • Amazon Aurora MySQL Best Practices                        ║
 ║  • Amazon RDS MySQL Best Practices                           ║
-║  • AWS Premium Support validated runbooks                    ║
+║  • AWS Enterprise Support validated runbooks                    ║
 ║                                                              ║
 ║  KNOWLEDGE PRIORITY ORDER:                                   ║
 ║  1. Live query results (facts about THIS cluster)            ║
