@@ -14,7 +14,7 @@ This skill: redshift-support-specialist
         |  (calls the 6 MCP tools: list_clusters, list_databases,
         |   list_schemas, list_tables, list_columns, execute_query)
         v
-Redshift MCP Server on Lambda, AWS_IAM Function URL   (deployment/)
+Redshift MCP Server on Lambda, behind API Gateway (AWS_IAM auth)   (deployment/)
         |  (Redshift Data API -- no VPC, no container image, no ECR)
         v
 Amazon Redshift (provisioned clusters / Serverless workgroups)
@@ -22,7 +22,7 @@ Amazon Redshift (provisioned clusters / Serverless workgroups)
 
 ## Getting Started
 
-1. **Deploy the MCP server** — see [Deploying the Redshift MCP Server](#deploying-the-redshift-mcp-server) below. Two options: AWS SAM (recommended) or a plain CLI script. Both produce a Lambda Function URL / API Gateway endpoint secured with AWS IAM (SigV4) for remote HTTP streaming.
+1. **Deploy the MCP server** — see [Deploying the Redshift MCP Server](#deploying-the-redshift-mcp-server) below. Two options: AWS SAM (recommended) or a plain CLI script. Both produce an API Gateway endpoint secured with AWS IAM (SigV4) for remote HTTP streaming.
 2. **Connect it to your Agent Space** as a custom MCP server capability provider (see Prerequisites below for the exact steps).
 3. **Upload this skill** — see the Uploading section below for packaging and upload steps.
 4. **Use it** — ask the DevOps Agent things like "run a health check on my Redshift cluster" or "why is this query slow?" in Chat.
@@ -62,10 +62,9 @@ The connected MCP server's own execution role needs Redshift/Redshift Data API r
 
 ## Deploying the Redshift MCP Server
 
-This runs the **standard, unmodified** `awslabs.redshift-mcp-server@latest` PyPI package on AWS Lambda, fronted by **two** AWS IAM (SigV4) authenticated endpoints:
+This runs the **standard, unmodified** `awslabs.redshift-mcp-server@latest` PyPI package on AWS Lambda, fronted by an **API Gateway REST API** secured with AWS IAM (SigV4) authorization.
 
-- **API Gateway** (`execute-api`) — use this one to register with **AWS DevOps Agent**. DevOps Agent's SigV4 MCP-server auth is documented and validated against `execute-api`, not Lambda Function URLs directly — pointing DevOps Agent at a bare Function URL fails with `Credential should be scoped to correct service: 'lambda'`.
-- **Lambda Function URL** — kept for direct testing/scripting and any other SigV4 client that does target `lambda` correctly.
+API Gateway sits in front of the Lambda function and exposes a single `/mcp` endpoint. Every request must be signed with AWS SigV4 for the `execute-api` service, from a principal that's been explicitly granted `execute-api:Invoke` on that endpoint (see **Grant invoke access to a caller** below). API Gateway validates the signature and the caller's IAM permissions before the request ever reaches the Lambda function, then forwards it into the Lambda execution environment where `mcp-proxy` bridges the HTTP request to the underlying MCP server process (see **Architecture** below). This is the endpoint you register with AWS DevOps Agent as the MCP server URL.
 
 No EC2 instance, no load balancer, no VPC networking, and no container registry (ECR) to maintain.
 
@@ -89,14 +88,12 @@ No EC2 instance, no load balancer, no VPC networking, and no container registry 
 ### Architecture
 
 ```text
-Caller (SigV4-signed request, service=execute-api or service=lambda)
-        │
-        ├─────────────────────────────┐
-        ▼                             ▼
-API Gateway REST API           Lambda Function URL
-(AWS_IAM auth, /mcp)           (AWS_IAM auth)
-        │                             │
-        └─────────────┬───────────────┘
+Caller (SigV4-signed request, service=execute-api)
+                       │
+                       ▼
+API Gateway REST API
+(AWS_IAM auth, /mcp)
+                       │
                        ▼
 Lambda execution environment (arm64, Python 3.13 runtime)
   ├─ Lambda Web Adapter (layer, /opt/extensions/lambda-adapter)
@@ -108,6 +105,8 @@ Lambda execution environment (arm64, Python 3.13 runtime)
 ```
 
 ### Two ways to deploy
+
+Both options provision the same thing: the Lambda function plus an API Gateway REST API with an AWS_IAM-authorized `POST /mcp` method in front of it.
 
 #### Option A — AWS SAM (recommended; this *is* a CloudFormation template)
 
@@ -123,7 +122,7 @@ No `--use-container` and no Docker/Finch needed — `template.yaml` uses a `Make
 
 #### Option B — Plain AWS CLI + shell script (no SAM CLI required)
 
-If you'd rather not install the SAM CLI, `deployment/build_zip.sh` + `deployment/deploy.sh` do the same thing directly with the AWS CLI:
+If you'd rather not install the SAM CLI, `deployment/build_zip.sh` + `deployment/deploy.sh` do the same thing directly with the AWS CLI — building the Lambda package, creating the function, and provisioning the API Gateway REST API (resource, method, integration, and stage) via `aws apigateway` calls:
 
 ```bash
 cd skills/redshift-support-specialist/deployment
@@ -132,7 +131,7 @@ cd skills/redshift-support-specialist/deployment
 ./deploy.sh my-function-name us-west-2 arn:aws:iam::<account-id>:role/<caller-role>   # also grants invoke access
 ```
 
-`build_zip.sh` runs a plain `pip install --platform manylinux2014_aarch64` on the host — no Docker or Finch required, for the same reason as Option A above. The optional third argument to `deploy.sh` grants `lambda:InvokeFunctionUrl` to that caller role automatically, so you can skip the manual `add-permission` step below.
+`build_zip.sh` runs a plain `pip install --platform manylinux2014_aarch64` on the host — no Docker or Finch required, for the same reason as Option A above. The optional third argument to `deploy.sh` grants that caller role `execute-api:Invoke` on the API and `lambda:InvokeFunction` on the function automatically, so you can skip the manual grant step below.
 
 ### Deployment prerequisites
 
@@ -163,23 +162,22 @@ If you deploy with `CreateDevOpsAgentRole=true` (see [`deployment/sam-app/README
 
 #### Authentication model — what this deployment produces
 
-This deployment does **not** create an API key, username/password, or any custom authentication. Both endpoints are IAM-authorized, meaning every request must be signed with [AWS SigV4](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv4.html) using valid AWS credentials belonging to a principal (IAM user or role) that has been explicitly granted invoke access on that specific endpoint (see **Grant invoke access to a caller** below). Requests without a valid SigV4 signature, or from a principal that hasn't been granted access, are rejected by AWS before they reach your code — there is no application-level auth to configure.
+This deployment does **not** create an API key, username/password, or any custom authentication. The endpoint is IAM-authorized, meaning every request must be signed with [AWS SigV4](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv4.html) using valid AWS credentials belonging to a principal (IAM user or role) that has been explicitly granted invoke access (see **Grant invoke access to a caller** below). Requests without a valid SigV4 signature, or from a principal that hasn't been granted access, are rejected by AWS before they reach your code — there is no application-level auth to configure.
 
 Practically, this means:
 
-- Any MCP client that supports SigV4-signed HTTP requests can call either endpoint, as long as it signs for the matching service (`execute-api` for the API Gateway endpoint, `lambda` for the Function URL) and is running with credentials for a permitted principal.
-- **Use the API Gateway endpoint (`execute-api`) for AWS DevOps Agent** — see the note in "Why this approach" above about why the Function URL doesn't work with DevOps Agent's SigV4 auth.
+- Any MCP client that supports SigV4-signed HTTP requests can call the endpoint, as long as it signs for the `execute-api` service (the same service AWS DevOps Agent's SigV4 auth signs for) and is running with credentials for a permitted principal.
 - There is no shared secret to distribute — access control is entirely IAM-based, per caller identity.
-- `deployment/scripts/mcp_call.py` and `deployment/scripts/list_clusters.py` demonstrate the exact SigV4 signing steps in Python (via `botocore.auth.SigV4Auth`) for both services if you're integrating a custom client — set `MCP_SIGV4_SERVICE=execute-api` or `lambda` to match your endpoint.
+- `deployment/scripts/mcp_call.py` and `deployment/scripts/list_clusters.py` demonstrate the exact SigV4 signing steps in Python (via `botocore.auth.SigV4Auth`) if you're integrating a custom client.
 
 ### Grant invoke access to a caller
 
-Each principal (user or role) that needs to call an endpoint must be explicitly granted invoke access on that specific endpoint. Both deploy paths can do this automatically for one caller role at deploy time:
+Each principal (user or role) that needs to call the endpoint must be explicitly granted `execute-api:Invoke` on it, plus `lambda:InvokeFunction` on the underlying Lambda function — both are required, since the API integration invokes the Lambda using the caller's own IAM identity rather than API Gateway's own service principal. Both deploy paths can do this automatically for one caller role at deploy time:
 
-- **SAM**: pass `--parameter-overrides CallerRoleArn=arn:aws:iam::<account-id>:role/<role-name>` — grants `execute-api:Invoke` on the API Gateway endpoint AND `lambda:InvokeFunctionUrl` on the Function URL.
-- **Plain CLI**: pass the role ARN as `deploy.sh`'s third argument — grants `lambda:InvokeFunctionUrl` only (Option B doesn't provision API Gateway; see [`deployment/sam-app/README.md`](deployment/sam-app/README.md) if you need the `execute-api` endpoint for DevOps Agent).
+- **SAM**: pass `--parameter-overrides CallerRoleArn=arn:aws:iam::<account-id>:role/<role-name>`.
+- **Plain CLI**: pass the role ARN as `deploy.sh`'s third argument.
 
-For any additional caller roles (or if you skipped the option above), grant access manually. For the API Gateway endpoint (get `<api-id>` from the `RedshiftMcpApiUrl` stack output and `<function-name>` from `RedshiftMcpFunctionArn`) — both statements are required, since this template's AWS_IAM-authorized API integration invokes the Lambda using the caller's own IAM identity rather than API Gateway's service principal:
+For any additional caller roles (or if you skipped the option above), grant access manually. Get `<api-id>` from the `RedshiftMcpApiUrl` stack output (SAM) or the printed endpoint (plain CLI), and `<function-name>`/`<function-arn>` from the `RedshiftMcpFunctionArn` output (SAM) or `aws lambda get-function` (plain CLI):
 
 ```bash
 aws iam put-role-policy \
@@ -202,34 +200,16 @@ aws iam put-role-policy \
   }'
 ```
 
-For the Function URL:
-
-```bash
-aws lambda add-permission \
-  --function-name <function-name> \
-  --statement-id invoke-my-role \
-  --action lambda:InvokeFunctionUrl \
-  --principal arn:aws:iam::<account-id>:role/<role-name> \
-  --function-url-auth-type AWS_IAM
-```
-
 Repeat for every caller role (for example, each role used by an agent platform's AgentSpace/WebappAdmin roles).
 
 ### Testing the deployment
 
-`deployment/scripts/mcp_call.py` and `deployment/scripts/list_clusters.py` are small SigV4 test helpers (only dependency: `boto3`). Point `MCP_FUNCTION_URL` at either endpoint and set `MCP_SIGV4_SERVICE` to match (defaults to `lambda`):
+`deployment/scripts/mcp_call.py` and `deployment/scripts/list_clusters.py` are small SigV4 test helpers (only dependency: `boto3`). Point `MCP_FUNCTION_URL` at the deployed endpoint (`MCP_SIGV4_SERVICE` defaults to `execute-api` and normally doesn't need to be set):
 
 ```bash
 export AWS_PROFILE="your-profile"   # optional, uses default credential chain if unset
-
-# API Gateway endpoint (same auth path DevOps Agent uses):
 export MCP_FUNCTION_URL="https://<api-id>.execute-api.<region>.amazonaws.com/Prod/mcp"
-export MCP_SIGV4_SERVICE="execute-api"
-python deployment/scripts/list_clusters.py
 
-# Lambda Function URL:
-export MCP_FUNCTION_URL="https://<url-id>.lambda-url.<region>.on.aws/mcp"
-export MCP_SIGV4_SERVICE="lambda"
 python deployment/scripts/list_clusters.py
 
 python deployment/scripts/mcp_call.py execute_query \
@@ -269,12 +249,13 @@ sam delete --stack-name <stack-name>
 
 **Plain CLI:**
 ```bash
+aws apigateway delete-rest-api --rest-api-id <api-id>
 aws lambda delete-function --function-name <function-name>
 aws iam delete-role-policy --role-name redshift-mcp-lambda-role --policy-name RedshiftMcpAccess
 aws iam detach-role-policy --role-name redshift-mcp-lambda-role --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 aws iam delete-role --role-name redshift-mcp-lambda-role
 ```
-(Deleting the function automatically removes its Function URL and resource policy — no separate cleanup needed for those.)
+(Get `<api-id>` from the `deploy.sh` output, or `aws apigateway get-rest-apis`.)
 
 ## Limitations
 

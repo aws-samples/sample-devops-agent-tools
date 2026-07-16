@@ -3,29 +3,19 @@
 An [AWS SAM](https://docs.aws.amazon.com/serverless-application-model/)
 (CloudFormation transform) template that deploys the standard,
 unmodified `awslabs.redshift-mcp-server` PyPI package as an AWS Lambda
-function, reachable over **two** endpoints, both AWS IAM (SigV4)
-authenticated:
+function, reachable through an **API Gateway REST API** (`execute-api`)
+secured with AWS IAM (SigV4) authorization. This is the endpoint to
+register with AWS DevOps Agent's SigV4 MCP-server capability provider —
+DevOps Agent's SigV4 auth is documented and tested against `execute-api`
+(see [Connecting MCP Servers](https://docs.aws.amazon.com/devopsagent/latest/userguide/configuring-integrations-and-knowledge-connecting-mcp-servers.html)).
 
-- An **API Gateway REST API** (`execute-api`) — this is the endpoint to
-  register with AWS DevOps Agent's SigV4 MCP-server capability provider.
-  DevOps Agent's SigV4 auth is documented and tested against `execute-api`
-  (see [Connecting MCP Servers](https://docs.aws.amazon.com/devopsagent/latest/userguide/configuring-integrations-and-knowledge-connecting-mcp-servers.html)),
-  not Lambda Function URLs — connecting the Function URL directly fails
-  with `Credential should be scoped to correct service: 'lambda'` because
-  DevOps Agent's SigV4 signing targets `execute-api` regardless of the
-  endpoint you register.
-- A **Lambda Function URL** — kept for direct testing/scripting (see
-  `../scripts/list_clusters.py`) and for any other SigV4 client that does
-  target the `lambda` service correctly.
-
-Both point at the same underlying Lambda function. See the parent
-[`../README.md`](../README.md) for the full architecture explanation.
+See the parent [`../README.md`](../README.md) for the full architecture explanation.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `template.yaml` | The SAM/CloudFormation template — an `AWS::Serverless::Function` resource (with a custom `Makefile` build method) with both a `FunctionUrlConfig` and an `AWS::Serverless::Api` (IAM-authorized) event source, inline IAM policies, and stack outputs. |
+| `template.yaml` | The SAM/CloudFormation template — an `AWS::Serverless::Function` resource (with a custom `Makefile` build method) with an `AWS::Serverless::Api` (IAM-authorized) event source, inline IAM policies, and stack outputs. |
 | `src/Makefile` | Custom SAM build step (`BuildMethod: makefile`). Installs `uv` and `mcp-proxy` via a plain `pip install --platform manylinux2014_aarch64 --only-binary=:all:` targeting Python 3.13/arm64 — no container required, since every dependency publishes prebuilt manylinux wheels. |
 | `src/run.sh` | Lambda function handler (a shell script, invoked via the Lambda Web Adapter's `AWS_LAMBDA_EXEC_WRAPPER`). Starts `mcp-proxy`, which spawns `uvx awslabs.redshift-mcp-server@latest`. |
 | `src/requirements.txt` | Python dependencies installed by `src/Makefile` at build time: `uv` (provides `uvx`) and `mcp-proxy`. |
@@ -37,7 +27,7 @@ Both point at the same underlying Lambda function. See the parent
   build time — no Docker or Finch needed; see the parent
   [`../README.md`](../README.md) for why).
 - AWS credentials with permission to create IAM roles, Lambda functions,
-  Lambda Function URLs, and (for `--resolve-s3`) an S3 bucket for
+  API Gateway REST APIs, and (for `--resolve-s3`) an S3 bucket for
   deployment artifacts.
 
 ## Deploy
@@ -62,7 +52,7 @@ sam deploy \
 ```
 
 To also grant a caller role invoke access at deploy time (skipping the
-manual `add-permission` step below), pass `CallerRoleArn`:
+manual policy step below), pass `CallerRoleArn`:
 ```bash
 sam deploy \
   --stack-name redshift-mcp \
@@ -72,19 +62,14 @@ sam deploy \
   --parameter-overrides FastMcpLogLevel=INFO CallerRoleArn=arn:aws:iam::<account-id>:role/<role-name>
 ```
 
-After deploy, the stack outputs include both MCP endpoint URLs:
+After deploy, the stack outputs include the MCP endpoint URL:
 ```
 Key                 RedshiftMcpApiUrl
 Value                https://<api-id>.execute-api.<region>.amazonaws.com/Prod/mcp
-
-Key                 RedshiftMcpFunctionUrl
-Value                https://<url-id>.lambda-url.<region>.on.aws/
 ```
 `RedshiftMcpApiUrl` is already the full URL including `/mcp` — use it
 as-is when registering with AWS DevOps Agent (Service Name =
-`execute-api`). For `RedshiftMcpFunctionUrl`, append `mcp` yourself (e.g.
-`https://<url-id>.lambda-url.<region>.on.aws/mcp`) if you use it for
-direct testing (Service Name = `lambda`).
+`execute-api`).
 
 ## Parameters
 
@@ -92,7 +77,7 @@ direct testing (Service Name = `lambda`).
 |---|---|---|
 | `FastMcpLogLevel` | `INFO` | Log level for the underlying `awslabs.redshift-mcp-server` process (`DEBUG`, `INFO`, `WARNING`, `ERROR`). |
 | `LambdaWebAdapterLayerVersion` | `28` | Version number of the public `awsguru/LambdaAdapterLayerArm64` layer. Check the [adapter's releases](https://github.com/aws/aws-lambda-web-adapter/releases) for newer versions and override with `--parameter-overrides LambdaWebAdapterLayerVersion=<N>`. |
-| `CallerRoleArn` | `''` (empty) | Optional ARN of an **existing** IAM role to auto-grant `lambda:InvokeFunctionUrl` at deploy time (see below). Leave empty to skip and grant access manually later. |
+| `CallerRoleArn` | `''` (empty) | Optional ARN of an **existing** IAM role to auto-grant `execute-api:Invoke` (and `lambda:InvokeFunction`) at deploy time (see below). Leave empty to skip and grant access manually later. |
 | `CreateDevOpsAgentRole` | `false` | If `true`, this stack creates a **new** IAM role for AWS DevOps Agent to assume, with the trust policy, MCP invoke permission, and Redshift Data API permissions it needs (see "Create a DevOps Agent IAM role" below). Use this instead of `CallerRoleArn` when the role doesn't exist yet. |
 | `DevOpsAgentRoleName` | `DevOpsAgentRole-Redshift-support-specialist` | Name for the role created when `CreateDevOpsAgentRole` is `true`. Ignored otherwise. |
 
@@ -100,12 +85,14 @@ direct testing (Service Name = `lambda`).
 
 **If you already have a role** (e.g. one you created yourself): pass its
 ARN as the `CallerRoleArn` parameter (see the non-interactive example
-above). The template grants that role invoke access on BOTH endpoints
-automatically — no extra step needed after `sam deploy` completes:
+above). The template grants that role invoke access automatically — no
+extra step needed after `sam deploy` completes:
 - `execute-api:Invoke` on the API Gateway `/mcp` method, via an inline
   policy (`CallerApiInvokePolicy`) attached directly to that role.
-- `lambda:InvokeFunctionUrl` on the Function URL, via a Lambda
-  resource-based permission (`CallerInvokePermission`).
+- `lambda:InvokeFunction` directly on the Lambda function, required
+  because this template's AWS_IAM-authorized API integration invokes the
+  Lambda backend using the caller's own IAM identity rather than via API
+  Gateway's own service principal.
 
 The stack output `CallerRoleGranted` confirms which role (if any) was
 granted.
@@ -117,8 +104,7 @@ this same deploy.
 
 **Manually, for additional callers (or if you skipped both options above):**
 
-For the API Gateway endpoint (what DevOps Agent needs) — note both
-statements are required (see the note above about why):
+Both statements below are required (see the note above about why):
 ```bash
 aws iam put-role-policy \
   --role-name <caller-role-name> \
@@ -140,26 +126,16 @@ aws iam put-role-policy \
   }'
 ```
 (Get `<api-id>` from the `RedshiftMcpApiUrl` output, and `<function-name>`
-from the `RedshiftMcpFunctionArn` output.)
-
-For the Function URL (only needed if you're using it directly):
-```bash
-aws lambda add-permission \
-  --function-name <output-function-name> \
-  --statement-id invoke-my-role \
-  --action lambda:InvokeFunctionUrl \
-  --principal arn:aws:iam::<account-id>:role/<role-name> \
-  --function-url-auth-type AWS_IAM
-```
-The stack output `GrantInvokeCommand` gives you this second command
-pre-filled with the actual function name.
+from the `RedshiftMcpFunctionArn` output.) The stack output
+`GrantInvokeCommand` gives you this command pre-filled with the actual
+API ID and function ARN.
 
 ## Create a DevOps Agent IAM role
 
 Connecting this MCP server to an AWS DevOps Agent Agent Space normally
 requires manually creating an IAM role for the agent to assume: a trust
 policy for the `aidevops.amazonaws.com` service principal, permission to
-invoke this function's URL, and Redshift Data API permissions. This
+invoke the API Gateway endpoint, and Redshift Data API permissions. This
 template can do all of that for you in one deploy:
 
 ```bash
@@ -191,8 +167,6 @@ This creates an `AWS::IAM::Role` named `DevOpsAgentRole-Redshift-support-special
   fail at the integration layer with "Execution failed due to
   configuration error: Invalid permissions on Lambda function" even
   though the `execute-api:Invoke` check passes.
-- An inline policy granting `lambda:InvokeFunctionUrl` on the Function
-  URL too, in case you also want to use that endpoint directly.
 - An inline policy granting the same Redshift Data API read permissions as
   the Lambda's own execution role (`redshift:DescribeClusters`,
   `redshift-serverless:ListWorkgroups`/`GetWorkgroup`,
@@ -226,8 +200,8 @@ sam local invoke RedshiftMcpFunction \
 Note: `sam local invoke` sends a single synchronous Lambda event and won't
 fully exercise the HTTP server behavior the Web Adapter provides — it's
 useful for confirming the function initializes without error, but for a
-real HTTP round-trip test, deploy and use the Function URL directly (see
-`../scripts/list_clusters.py`).
+real HTTP round-trip test, deploy and use `../scripts/list_clusters.py`
+against the deployed API Gateway endpoint.
 
 ## Tear down
 

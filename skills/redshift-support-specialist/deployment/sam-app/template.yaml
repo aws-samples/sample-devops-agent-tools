@@ -4,13 +4,11 @@ Description: >
   Redshift MCP Server (Model Context Protocol) deployed on AWS Lambda.
   Runs the standard, unmodified `awslabs.redshift-mcp-server` PyPI package
   behind a generic stdio<->streamable-HTTP bridge (mcp-proxy). Fronted by
-  BOTH a Lambda Function URL (AWS_IAM/SigV4, useful for direct testing) AND
-  an API Gateway REST API (also AWS_IAM/SigV4) -- AWS DevOps Agent's SigV4
-  MCP-connection feature is documented and tested against the API Gateway
-  ("execute-api") signing service, not Lambda Function URLs, so the API
-  Gateway endpoint is what should be registered with DevOps Agent. No
-  container image, no ECR repository -- packaged as a plain Lambda .zip
-  deployment.
+  an API Gateway REST API (AWS_IAM/SigV4 authorized) -- this is the
+  endpoint that should be registered with AWS DevOps Agent's SigV4
+  MCP-connection feature, which is documented and tested against the API
+  Gateway ("execute-api") signing service. No container image, no ECR
+  repository -- packaged as a plain Lambda .zip deployment.
 
 Parameters:
   FastMcpLogLevel:
@@ -30,13 +28,12 @@ Parameters:
     Default: ''
     Description: >
       (Optional) ARN of an EXISTING IAM role that should be granted
-      permission to invoke this function's URL -- for example, a role you
-      already created for an AWS DevOps Agent Agent Space. Leave empty to
-      skip; grant access later with `aws lambda add-permission` (see the
-      GrantInvokeCommand output, or the README's "Grant invoke access to a
-      caller" section). Mutually independent from CreateDevOpsAgentRole
-      below -- use this when the role already exists, use that when you
-      want this stack to create it.
+      permission to invoke the API Gateway endpoint -- for example, a role
+      you already created for an AWS DevOps Agent Agent Space. Leave empty
+      to skip; grant access later with the manual policy steps in the
+      README's "Grant invoke access to a caller" section. Mutually
+      independent from CreateDevOpsAgentRole below -- use this when the
+      role already exists, use that when you want this stack to create it.
   CreateDevOpsAgentRole:
     Type: String
     Default: 'false'
@@ -45,7 +42,7 @@ Parameters:
       If 'true', this stack creates a NEW IAM role for AWS DevOps Agent to
       assume (trust policy for the aidevops.amazonaws.com service
       principal, scoped to this account/region), and grants it permission
-      to invoke this function's URL plus the Redshift Data API read
+      to invoke the API Gateway endpoint plus the Redshift Data API read
       permissions the agent needs. Use this instead of manually running
       the "Step 1-4" console/CLI role-creation steps from the DevOps Agent
       MCP-connection docs. Leave 'false' if you already have a role (use
@@ -101,8 +98,6 @@ Resources:
                 - redshift-data:DescribeStatement
                 - redshift-data:GetStatementResult
               Resource: '*'
-      FunctionUrlConfig:
-        AuthType: AWS_IAM
       Events:
         McpApi:
           Type: Api
@@ -125,7 +120,7 @@ Resources:
   # set"). With AWS_IAM auth, access control is entirely identity-based --
   # each caller role needs execute-api:Invoke granted on ITS OWN IAM
   # identity (see DevOpsAgentRole's InvokeRedshiftMcpApi policy below, and
-  # CallerRoleApiInvokePolicy for an externally-owned CallerRoleArn).
+  # CallerApiInvokePolicy for an externally-owned CallerRoleArn).
   RedshiftMcpApi:
     Type: AWS::Serverless::Api
     DependsOn: ApiGatewayAccount
@@ -187,25 +182,11 @@ Resources:
     Properties:
       CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
 
-  # Grants the caller role (e.g. a DevOps Agent Agent Space role) permission
-  # to invoke this function's URL, so the deployment is immediately usable
-  # by that caller without a separate manual `add-permission` step. Only
-  # created when CallerRoleArn is provided.
-  CallerInvokePermission:
-    Type: AWS::Lambda::Permission
-    Condition: HasCallerRole
-    Properties:
-      FunctionName: !Ref RedshiftMcpFunction
-      Action: lambda:InvokeFunctionUrl
-      Principal: !Ref CallerRoleArn
-      FunctionUrlAuthType: AWS_IAM
-
   # Grants the CallerRoleArn role execute-api:Invoke on the /mcp method,
-  # via an inline policy attached directly to that (externally-owned) role
-  # -- the API Gateway equivalent of CallerInvokePermission above. Only
-  # created when CallerRoleArn is provided. Extracts the role name from
-  # the ARN since AWS::IAM::RolePolicy's RoleName property takes a name,
-  # not an ARN.
+  # via an inline policy attached directly to that (externally-owned) role.
+  # Only created when CallerRoleArn is provided. Extracts the role name
+  # from the ARN since AWS::IAM::RolePolicy's RoleName property takes a
+  # name, not an ARN.
   #
   # ALSO grants lambda:InvokeFunction directly on the Lambda function.
   # SAM's AWS_IAM-authorized Api integration sets the integration's
@@ -275,19 +256,6 @@ Resources:
               - Effect: Allow
                 Action: lambda:InvokeFunction
                 Resource: !GetAtt RedshiftMcpFunction.Arn
-        # Permission to invoke this specific function's URL too, in case
-        # you want to test/use the Function URL directly instead of (or in
-        # addition to) the API Gateway endpoint.
-        - PolicyName: InvokeRedshiftMcpFunctionUrl
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action: lambda:InvokeFunctionUrl
-                Resource: !GetAtt RedshiftMcpFunction.Arn
-                Condition:
-                  StringEquals:
-                    lambda:FunctionUrlAuthType: AWS_IAM
         # Redshift Data API + discovery permissions the MCP server's six
         # tools need on the caller side (mirrors the Lambda's own execution
         # role policy -- see redshift-access-policy.json). The agent's
@@ -322,33 +290,24 @@ Outputs:
     Value: !GetAtt RedshiftMcpFunction.Arn
   RedshiftMcpApiUrl:
     Description: >
-      RECOMMENDED endpoint to register with AWS DevOps Agent's SigV4
-      MCP-server capability provider (Service Name = execute-api). Backed
-      by API Gateway, IAM/SigV4 authorized.
+      The endpoint to register with AWS DevOps Agent's SigV4 MCP-server
+      capability provider (Service Name = execute-api). Backed by API
+      Gateway, IAM/SigV4 authorized.
     Value: !Sub 'https://${RedshiftMcpApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/mcp'
-  RedshiftMcpFunctionUrl:
-    Description: >
-      Alternate MCP endpoint (Lambda Function URL, Service Name = lambda).
-      Useful for direct testing with scripts/list_clusters.py and
-      scripts/mcp_call.py. Append no path -- the streamable-HTTP endpoint
-      is served at /mcp, so the full URL to configure in an MCP client is
-      this value + "mcp" (e.g. https://<id>.lambda-url.<region>.on.aws/mcp).
-    Value: !GetAtt RedshiftMcpFunctionUrl.FunctionUrl
   GrantInvokeCommand:
     Description: >
       If CallerRoleArn was provided, that role already has invoke access
-      (see CallerRoleGranted below). Use this command to grant access to
-      any additional caller role. Replace <ACCOUNT_ID> and <ROLE_NAME>.
+      (see CallerRoleGranted below). Use this command to grant
+      execute-api:Invoke access to any additional caller role. Replace
+      <ACCOUNT_ID> and <ROLE_NAME>.
     Value: !Sub >-
-      aws lambda add-permission --function-name ${RedshiftMcpFunction}
-      --statement-id invoke-<ROLE_NAME> --action lambda:InvokeFunctionUrl
-      --principal arn:aws:iam::<ACCOUNT_ID>:role/<ROLE_NAME>
-      --function-url-auth-type AWS_IAM
+      aws iam put-role-policy --role-name <ROLE_NAME>
+      --policy-name InvokeRedshiftMcpApi --policy-document
+      '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"execute-api:Invoke","Resource":"arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RedshiftMcpApi}/*/POST/mcp"},{"Effect":"Allow","Action":"lambda:InvokeFunction","Resource":"${RedshiftMcpFunction.Arn}"}]}'
   CallerRoleGranted:
     Description: >
-      The role (if any) granted lambda:InvokeFunctionUrl via the
-      CallerRoleArn parameter at deploy time. Empty if CallerRoleArn was
-      not provided.
+      The role (if any) granted execute-api:Invoke via the CallerRoleArn
+      parameter at deploy time. Empty if CallerRoleArn was not provided.
     Value: !Ref CallerRoleArn
   DevOpsAgentRoleArn:
     Description: >

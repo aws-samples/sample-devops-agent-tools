@@ -47,6 +47,13 @@
       }
     },
     {
+      "Sid": "GrantCallerRoleAccess",
+      "Comment": "Only needed when deploy.sh's third argument (caller-role-arn) is used, or when manually re-running the printed put-role-policy command. Grants the deployer permission to attach an inline policy to an externally-owned caller role (e.g. a DevOps Agent Agent Space role) so it can invoke the API Gateway endpoint. Not scoped to a specific role name since the caller role is provided at deploy time and may vary. If you know the caller role ahead of time, replace this Resource with its specific ARN for tighter scoping.",
+      "Effect": "Allow",
+      "Action": "iam:PutRolePolicy",
+      "Resource": "*"
+    },
+    {
       "Sid": "LambdaFunctionManagement",
       "Effect": "Allow",
       "Action": [
@@ -56,15 +63,24 @@
         "lambda:GetFunction",
         "lambda:DeleteFunction",
         "lambda:TagResource",
-        "lambda:CreateFunctionUrlConfig",
-        "lambda:GetFunctionUrlConfig",
-        "lambda:UpdateFunctionUrlConfig",
-        "lambda:DeleteFunctionUrlConfig",
         "lambda:AddPermission",
         "lambda:RemovePermission",
         "lambda:GetPolicy"
       ],
       "Resource": "arn:aws:lambda:*:*:function:redshift-mcp-proxy-zip*"
+    },
+    {
+      "Sid": "ApiGatewayManagement",
+      "Comment": "Needed by deployment/deploy.sh (Option B) to create/reuse the REST API, /mcp resource, method, integration, and stage. Scoped to apigateway:* actions rather than per-resource ARNs because API Gateway's ARN format for these management APIs does not support resource-level restriction by API name.",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:GET",
+        "apigateway:POST",
+        "apigateway:PUT",
+        "apigateway:PATCH",
+        "apigateway:DELETE"
+      ],
+      "Resource": "*"
     },
     {
       "Sid": "StsIdentity",
