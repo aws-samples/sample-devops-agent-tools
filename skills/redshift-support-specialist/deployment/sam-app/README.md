@@ -32,35 +32,60 @@ See the parent [`../README.md`](../README.md) for the full architecture explanat
 
 ## Deploy
 
+### Quick deploy (no prompts)
+
+This uses the template's default parameter values (see **Parameters**
+below) and skips every interactive prompt — one command, nothing to
+answer:
+
+```bash
+sam build
+sam deploy \
+  --stack-name redshift-mcp \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --resolve-s3 \
+  --region us-east-1 \
+  --no-confirm-changeset \
+  --no-fail-on-empty-changeset
+```
+
+`--capabilities CAPABILITY_NAMED_IAM` is always used here (rather than
+`CAPABILITY_IAM`) so this same command works whether or not you later set
+`CreateDevOpsAgentRole=true` — `CAPABILITY_NAMED_IAM` covers both named and
+unnamed IAM resources, so there's no need to branch on which one to pass.
+
+To override any parameter without triggering prompts, add
+`--parameter-overrides`:
+```bash
+sam deploy \
+  --stack-name redshift-mcp \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --resolve-s3 \
+  --region us-east-1 \
+  --no-confirm-changeset \
+  --no-fail-on-empty-changeset \
+  --parameter-overrides FastMcpLogLevel=DEBUG CallerRoleArn=arn:aws:iam::<account-id>:role/<role-name>
+```
+
+### Guided deploy (interactive, saves answers for next time)
+
+If you'd rather be prompted for each value (and have them saved to
+`samconfig.toml` for future `sam deploy` runs with no flags at all):
+
 ```bash
 sam build
 sam deploy --guided
 ```
 
-`sam deploy --guided` will prompt for a stack name, region, and whether to
-save these choices to `samconfig.toml` for future non-interactive deploys
-(`sam deploy` alone, after the first guided run).
-
-Non-interactive example:
+Note that guided mode does not prompt for `--capabilities` — it defaults
+to `CAPABILITY_IAM`, which is insufficient if you answer
+`CreateDevOpsAgentRole=true`. If you hit `Requires capabilities:
+[CAPABILITY_NAMED_IAM]` after confirming the prompts, re-run:
 ```bash
-sam deploy \
-  --stack-name redshift-mcp \
-  --capabilities CAPABILITY_IAM \
-  --resolve-s3 \
-  --region us-east-1 \
-  --parameter-overrides FastMcpLogLevel=INFO
+sam deploy --capabilities CAPABILITY_NAMED_IAM
 ```
-
-To also grant a caller role invoke access at deploy time (skipping the
-manual policy step below), pass `CallerRoleArn`:
-```bash
-sam deploy \
-  --stack-name redshift-mcp \
-  --capabilities CAPABILITY_IAM \
-  --resolve-s3 \
-  --region us-east-1 \
-  --parameter-overrides FastMcpLogLevel=INFO CallerRoleArn=arn:aws:iam::<account-id>:role/<role-name>
-```
+(Your other answers are already saved from the first guided run, so this
+reuses them.)
 
 After deploy, the stack outputs include the MCP endpoint URL:
 ```
@@ -144,11 +169,16 @@ sam deploy \
   --capabilities CAPABILITY_NAMED_IAM \
   --resolve-s3 \
   --region us-east-1 \
+  --no-confirm-changeset \
+  --no-fail-on-empty-changeset \
   --parameter-overrides CreateDevOpsAgentRole=true
 ```
 
-Note `CAPABILITY_NAMED_IAM` (not just `CAPABILITY_IAM`) is required here
-because the created role has an explicit name (`DevOpsAgentRoleName`).
+`CAPABILITY_NAMED_IAM` (not just `CAPABILITY_IAM`) is required here
+because the created role has an explicit name (`DevOpsAgentRoleName`) —
+this is already the default in the **Quick deploy** command above, so
+you only need to add `--parameter-overrides CreateDevOpsAgentRole=true`
+to that command rather than retyping the whole thing.
 
 This creates an `AWS::IAM::Role` named `DevOpsAgentRole-Redshift-support-specialist`
 (override with `DevOpsAgentRoleName`) with:
