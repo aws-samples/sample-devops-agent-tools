@@ -1,6 +1,6 @@
 # Redshift MCP Server — Serverless Deployment (Lambda, no ECR)
 
-Full deployment documentation (architecture, both deploy options, prerequisites, IAM setup, testing, configuration, and teardown) now lives in the main skill README — see [**Deploying the Redshift MCP Server**](../README.md#deploying-the-redshift-mcp-server).
+Full deployment documentation (architecture, both deploy options, prerequisites, IAM setup, testing, configuration, and teardown) now lives in the main skill README — see [**Step 2 — Deploy the Redshift MCP Server**](../README.md#step-2--deploy-the-redshift-mcp-server).
 
 Quick reference for the files in this directory:
 
