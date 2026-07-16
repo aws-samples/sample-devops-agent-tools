@@ -1,0 +1,243 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  mysql-aidba MCP Server — One-click deployment for AWS DevOps Agent.
+  Deploys a Lambda-based MCP server that provides read-only MySQL health check
+  diagnostics for Aurora MySQL and RDS MySQL clusters.
+  Author: Kiran Mayee Mulupuru
+
+Parameters:
+  ClusterIdentifier:
+    Type: String
+    Description: Aurora MySQL or RDS MySQL cluster identifier to monitor
+    MinLength: 1
+
+  ClusterArn:
+    Type: String
+    Description: Full ARN of the Aurora/RDS cluster (arn:aws:rds:<region>:<account>:cluster:<name>)
+    AllowedPattern: 'arn:aws:rds:[a-z0-9-]+:[0-9]+:cluster:.+'
+
+  SecretArn:
+    Type: String
+    Description: Secrets Manager ARN containing database credentials
+    AllowedPattern: 'arn:aws:secretsmanager:[a-z0-9-]+:[0-9]+:secret:.+'
+
+  DatabaseName:
+    Type: String
+    Default: information_schema
+    Description: Default database to connect to
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the database cluster resides (for Lambda VPC access)
+    Default: ''
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnet IDs for Lambda (must have route to RDS)
+    Default: ''
+
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group allowing Lambda to connect to RDS (port 3306)
+    Default: ''
+
+  UseDataApi:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Use RDS Data API (recommended, no VPC config needed).
+      Set to 'false' for direct TCP connection (requires VPC/subnet/SG config).
+
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-5-sonnet-20241022-v2:0
+    Description: Bedrock model ID for AI-powered analysis
+    AllowedValues:
+      - anthropic.claude-3-5-sonnet-20241022-v2:0
+      - anthropic.claude-3-haiku-20240307-v1:0
+      - anthropic.claude-3-opus-20240229-v1:0
+
+Conditions:
+  UseVpc: !Equals [!Ref UseDataApi, 'false']
+
+Resources:
+
+  # ============================================================================
+  # IAM Role for Lambda
+  # ============================================================================
+  MysqlAidbaLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'mysql-aidba-mcp-${ClusterIdentifier}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - !If [UseVpc, arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole, !Ref 'AWS::NoValue']
+      Policies:
+        - PolicyName: MysqlAidbaPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Secrets Manager — retrieve DB credentials
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref SecretArn
+
+              # RDS Data API — execute read-only queries
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BatchExecuteStatement
+                Resource: !Ref ClusterArn
+
+              # RDS — describe cluster configuration (Layer 1)
+              - Effect: Allow
+                Action:
+                  - rds:DescribeDBClusters
+                  - rds:DescribeDBInstances
+                  - rds:DescribeDBEngineVersions
+                  - rds:DescribeDBClusterParameters
+                  - rds:DescribeDBLogFiles
+                  - rds:ListTagsForResource
+                  - rds:DescribeReservedDBInstances
+                  - rds:DescribeGlobalClusters
+                Resource: '*'
+
+              # CloudWatch — metrics and logs (Layer 2)
+              - Effect: Allow
+                Action:
+                  - cloudwatch:GetMetricData
+                  - cloudwatch:GetMetricStatistics
+                  - cloudwatch:DescribeAlarms
+                  - logs:StartQuery
+                  - logs:GetQueryResults
+                  - logs:DescribeLogGroups
+                Resource: '*'
+
+              # Application Auto Scaling — check read replica scaling
+              - Effect: Allow
+                Action:
+                  - application-autoscaling:DescribeScalableTargets
+                Resource: '*'
+
+              # Bedrock — AI analysis
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}'
+
+  # ============================================================================
+  # Lambda Function — MCP Server
+  # ============================================================================
+  MysqlAidbaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'mysql-aidba-mcp-${ClusterIdentifier}'
+      Description: !Sub 'mysql-aidba MCP Server for ${ClusterIdentifier} — read-only MySQL health diagnostics'
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt MysqlAidbaLambdaRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Environment:
+        Variables:
+          CLUSTER_ARN: !Ref ClusterArn
+          SECRET_ARN: !Ref SecretArn
+          DATABASE_NAME: !Ref DatabaseName
+          CLUSTER_IDENTIFIER: !Ref ClusterIdentifier
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          AWS_REGION_NAME: !Ref 'AWS::Region'
+          USE_DATA_API: !Ref UseDataApi
+          READONLY: 'true'
+      VpcConfig: !If
+        - UseVpc
+        - SubnetIds: !Ref SubnetIds
+          SecurityGroupIds:
+            - !Ref SecurityGroupId
+        - !Ref 'AWS::NoValue'
+      Code:
+        ZipFile: |
+          """
+          mysql-aidba MCP Server Lambda Handler
+          Placeholder — replace with packaged mysql-aidba code or Layer.
+          See mcp-servers/mysql-aidba/ for full implementation.
+          """
+          import json
+          import os
+          import boto3
+
+          def handler(event, context):
+              """
+              MCP Server handler — processes health check requests.
+              Full implementation uses mysql_aidba package.
+              """
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({
+                      'server': 'mysql-aidba',
+                      'cluster': os.environ.get('CLUSTER_IDENTIFIER'),
+                      'status': 'ready',
+                      'message': 'Deploy full mysql-aidba package as Lambda Layer for complete functionality'
+                  })
+              }
+
+  # ============================================================================
+  # Lambda Function URL (StreamableHTTP for MCP)
+  # ============================================================================
+  MysqlAidbaFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      AuthType: AWS_IAM
+      TargetFunctionArn: !GetAtt MysqlAidbaFunction.Arn
+      InvokeMode: RESPONSE_STREAM
+
+  MysqlAidbaFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt MysqlAidbaFunction.Arn
+      Action: lambda:InvokeFunctionUrl
+      Principal: '*'
+      FunctionUrlAuthType: AWS_IAM
+
+  # ============================================================================
+  # CloudWatch Log Group
+  # ============================================================================
+  MysqlAidbaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/mysql-aidba-mcp-${ClusterIdentifier}'
+      RetentionInDays: 14
+
+Outputs:
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt MysqlAidbaFunction.Arn
+
+  FunctionUrl:
+    Description: Lambda Function URL (MCP endpoint)
+    Value: !GetAtt MysqlAidbaFunctionUrl.FunctionUrl
+
+  RoleArn:
+    Description: IAM role ARN (grant DevOps Agent access to invoke)
+    Value: !GetAtt MysqlAidbaLambdaRole.Arn
+
+  ConfigureDevOpsAgent:
+    Description: MCP server configuration for DevOps Agent
+    Value: !Sub |
+      {
+        "mcpServers": {
+          "mysql-aidba-${ClusterIdentifier}": {
+            "url": "${MysqlAidbaFunctionUrl.FunctionUrl}",
+            "transport": "streamable-http",
+            "auth": "aws-iam"
+          }
+        }
+      }

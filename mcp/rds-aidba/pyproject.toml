@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "rds-aidba"
+version         = "0.1.0"
+description     = "AI-Powered MySQL DBA for Amazon Aurora & RDS MySQL on AWS"
+authors         = [
+    { name = "Kiran Mayee Mulupuru", email = "kmulupuru@amazon.com" }
+]
+readme          = "README.md"
+license         = { text = "MIT" }
+requires-python = ">=3.10"
+
+dependencies = [
+    # AWS SDK
+    "boto3>=1.34",
+    "botocore>=1.34",
+
+    # CLI & UX
+    "click>=8.1",
+    "rich>=13.7",
+    "prompt_toolkit>=3.0",
+    "pyyaml>=6.0",
+
+    # MCP server is invoked via `uvx` — no pip dependency needed.
+    # uv must be installed separately: https://docs.astral.sh/uv/
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+    "moto[rds,secretsmanager]>=5.0",
+    "black",
+    "ruff",
+    "mypy",
+]
+
+[project.scripts]
+rds-aidba = "rds_aidba.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rds_aidba*"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

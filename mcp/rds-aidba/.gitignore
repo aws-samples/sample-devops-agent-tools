@@ -1,0 +1,52 @@
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Egg / distribution / packaging
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# uv lock (optional — remove this line if you want reproducible installs)
+uv.lock
+
+# Config files with secrets (keep .example versions)
+config/config.yaml
+config/mcp_config.json
+
+# Environment variable files
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Logs
+*.log
+logs/
+

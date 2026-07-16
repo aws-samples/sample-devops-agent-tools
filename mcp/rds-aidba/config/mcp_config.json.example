@@ -1,0 +1,49 @@
+{
+  "mcpServers": {
+    "mysql-primary": {
+      "command": "uvx",
+      "args": [
+        "awslabs.mysql-mcp-server@latest",
+        "--connection_method", "RDS_API",
+        "--db_cluster_arn", "arn:aws:rds:us-east-1:123456789012:cluster:my-aurora-cluster",
+        "--db_type", "aurora-mysql",
+        "--database", "mydb",
+        "--region", "us-east-1"
+      ],
+      "env": {
+        "AWS_PROFILE": "default",
+        "AWS_REGION": "us-east-1"
+      }
+    },
+    "mysql-direct": {
+      "command": "uvx",
+      "args": [
+        "awslabs.mysql-mcp-server@latest",
+        "--connection_method", "MYSQL_WIRE_PROTOCOL",
+        "--db_endpoint", "my-cluster.cluster-ro-xxxx.us-east-1.rds.amazonaws.com",
+        "--database", "mydb",
+        "--region", "us-east-1",
+        "--port", "3306"
+      ],
+      "env": {
+        "AWS_PROFILE": "default",
+        "AWS_REGION": "us-east-1"
+      }
+    },
+    "postgres-primary": {
+      "command": "uvx",
+      "args": [
+        "awslabs.postgres-mcp-server@latest",
+        "--connection_method", "RDS_API",
+        "--db_cluster_arn", "arn:aws:rds:us-east-1:123456789012:cluster:my-aurora-pg-cluster",
+        "--db_type", "aurora-postgresql",
+        "--database", "postgres",
+        "--region", "us-east-1"
+      ],
+      "env": {
+        "AWS_PROFILE": "default",
+        "AWS_REGION": "us-east-1"
+      }
+    }
+  }
+}

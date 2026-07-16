@@ -1,0 +1,70 @@
+# mysql-aidba Configuration
+# Author: Kiran Mayee Mulupuru, Sr. Specialist Database TAM, AWS Premium Support
+#
+# Copy this file to config.yaml and fill in your values.
+# Supports both MySQL and PostgreSQL clusters.
+
+aws:
+  region: "us-east-1"                  # AWS region where your Aurora/RDS cluster resides
+  profile: "default"                   # AWS CLI profile to use (or use IAM role if on EC2/ECS)
+
+bedrock:
+  model_id: "anthropic.claude-3-5-sonnet-20241022-v2:0"   # Bedrock model for AI analysis
+  # Alternatives:
+  #   anthropic.claude-3-opus-20240229-v1:0
+  #   anthropic.claude-3-haiku-20240307-v1:0
+  max_tokens: 4096
+  temperature: 0.2                     # Low temperature for precise DBA analysis
+
+# MCP connection — choose ONE connection method per cluster
+# You can define multiple clusters under named keys
+clusters:
+  primary:
+    engine: "mysql"                    # Options: mysql | postgresql
+    connection_mode: "rds_data_api"    # Options: rds_data_api | direct
+    # --- RDS Data API (recommended for Aurora Serverless v2) ---
+    resource_arn: "arn:aws:rds:us-east-1:123456789012:cluster:my-aurora-cluster"
+    secret_arn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-db-secret"
+    database: "mydb"
+    readonly: true                     # Set false to allow write operations
+
+  replica:
+    engine: "mysql"                    # Options: mysql | postgresql
+    connection_mode: "direct"          # Direct TCP connection to reader endpoint
+    hostname: "my-cluster.cluster-ro-xxxx.us-east-1.rds.amazonaws.com"
+    secret_arn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-db-secret"
+    database: "mydb"
+    port: 3306
+    readonly: true
+
+  # PostgreSQL cluster example
+  pg-primary:
+    engine: "postgresql"               # Activates PostgreSQL health check queries
+    connection_mode: "rds_data_api"
+    resource_arn: "arn:aws:rds:us-east-1:123456789012:cluster:my-aurora-pg-cluster"
+    secret_arn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-pg-secret"
+    database: "postgres"
+    readonly: true
+
+  pg-replica:
+    engine: "postgresql"
+    connection_mode: "direct"
+    hostname: "my-pg-cluster.cluster-ro-xxxx.us-east-1.rds.amazonaws.com"
+    secret_arn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:my-pg-secret"
+    database: "postgres"
+    port: 5432
+    readonly: true
+
+# CLI / UX settings
+cli:
+  output_format: "rich"               # Options: rich | plain | json
+  history_file: "~/.mysql_aidba_history"
+  max_history: 500
+  banner: true
+
+# Health check settings
+health_checks:
+  slow_query_threshold_seconds: 1     # Queries slower than this are flagged
+  connection_usage_warn_pct: 75       # Warn when connection usage exceeds this %
+  replication_lag_warn_seconds: 30    # Warn when replica lag exceeds this value
+  innodb_buffer_pool_usage_warn_pct: 90
