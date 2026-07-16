@@ -40,7 +40,7 @@ Follow these steps **in order** — each one depends on the previous:
 
 2. **Test the deployment** ([Step 2](#test-the-deployment) below) — confirm the endpoint actually works before wiring it into DevOps Agent.
 3. **Connect the MCP server to your Agent Space** ([Step 3](#step-3--connect-the-mcp-server-to-your-agent-space) below) — register it and allowlist its tools.
-4. **Upload this skill** ([Uploading to AWS DevOps Agent](#uploading-to-aws-devops-agent) below).
+4. **Upload this skill** ([Step 4 — Uploading to AWS DevOps Agent](#step-4--uploading-to-aws-devops-agent) below).
 5. **(Optional) Create the custom agent** ([Create a Custom Agent](#optional-create-a-custom-agent) below) — a dedicated agent pre-wired to this skill.
 6. **Use it** ([How to Use This Skill](#how-to-use-this-skill) below) — ask the DevOps Agent things like "run a health check on my Redshift cluster" in Chat.
 
@@ -127,21 +127,6 @@ sam deploy \
   --region us-east-1 \
   --no-confirm-changeset \
   --no-fail-on-empty-changeset
-```
-
-No `--use-container` and no Docker/Finch needed — `template.yaml` uses a `Makefile`-based custom build (`src/Makefile`) that installs dependencies with a plain `pip install --platform manylinux2014_aarch64 --only-binary=:all:`. Every dependency this deployment needs (`uv`, `mcp-proxy`, and their transitive deps like `cryptography` and `pydantic-core`) publishes prebuilt manylinux/arm64 wheels, so this produces a Lambda-compatible package without compiling anything or running a container.
-
-This command deploys with all default parameter values and skips every interactive prompt. `CAPABILITY_NAMED_IAM` is always used (instead of the narrower `CAPABILITY_IAM`) so the same command works whether or not you later add `CreateDevOpsAgentRole=true`. To change a parameter (e.g. log level, or granting a caller role invoke access at deploy time), append `--parameter-overrides`:
-
-```bash
-sam deploy \
-  --stack-name redshift-mcp \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --resolve-s3 \
-  --region us-east-1 \
-  --no-confirm-changeset \
-  --no-fail-on-empty-changeset \
-  --parameter-overrides CallerRoleArn=arn:aws:iam::<account-id>:role/<caller-role>
 ```
 
 After a successful deploy, SAM prints the stack outputs. Example (values shown are illustrative — yours will have your own account ID, region, and generated API/function names):
@@ -273,7 +258,16 @@ Repeat for every caller role (for example, each role used by an agent platform's
 
 Before moving to Step 3, confirm the deployment actually works. The quickest smoke test is `deployment/scripts/list_clusters.py` — it calls the deployed endpoint's `list_clusters` MCP tool and prints every cluster/workgroup in the account, confirming SigV4 auth, API Gateway, and the Lambda all work end-to-end.
 
-Requires `boto3` (`python3 -c "import boto3"` to check; `pip3 install boto3` if missing — on some systems you'll need `pip3 install --user boto3` or a virtualenv due to PEP 668's externally-managed-environment restriction).
+The only dependency is `boto3`. On most systems (macOS with Homebrew Python, recent Linux distros), `pip3 install boto3` fails with an "externally-managed-environment" error (PEP 668). Use a virtual environment instead:
+
+```bash
+cd skills/redshift-support-specialist
+python3 -m venv venv
+source venv/bin/activate      # on Windows: venv\Scripts\activate
+pip install boto3
+```
+
+Then, with the virtualenv still active:
 
 ```bash
 export AWS_PROFILE="your-profile"   # optional, uses default credential chain if unset
@@ -281,6 +275,8 @@ export MCP_FUNCTION_URL="https://<api-id>.execute-api.<region>.amazonaws.com/Pro
 
 python3 deployment/scripts/list_clusters.py
 ```
+
+When you're done testing, run `deactivate` to leave the virtualenv.
 
 Expected output:
 ```text
@@ -295,7 +291,7 @@ Found 3 clusters/workgroups:
 
 If this works, the deployment is good — continue to Step 3. If it fails, fix the deployment before proceeding; connecting a broken endpoint to DevOps Agent will just produce the same failure inside Chat, with less visibility into why.
 
-For a deeper test that runs actual SQL through the MCP server, use `mcp_call.py` with a real cluster identifier and database from the list above:
+For a deeper test that runs actual SQL through the MCP server, use `mcp_call.py` with a real cluster identifier and database from the list above (same virtualenv, still active):
 
 ```bash
 python3 deployment/scripts/mcp_call.py execute_query \
@@ -368,11 +364,9 @@ Once the MCP server is deployed and you've confirmed it works (Step 2's **Test t
    - Otherwise, choose **Create a new role manually** and follow the console's prompts (trust policy for `aidevops.amazonaws.com`, permissions for `execute-api:Invoke` on this API — see Step 2's **Grant invoke access to a caller** for the policy shape).
 2. **AWS Region** — the region you deployed to (e.g. `us-east-1`).
 3. **Service Name** — `execute-api`.
-4. Choose **Next**.
+4. Choose **Add**, then wait for AWS DevOps Agent to register the MCP server successfully. If registration fails, re-check the endpoint URL and that the IAM role has both `execute-api:Invoke` and `lambda:InvokeFunction` (see Step 2's **Grant invoke access to a caller**).
 
-**3d. Review and submit:** review the details, choose **Submit**. AWS DevOps Agent validates the connection immediately — if it fails, re-check the endpoint URL and that the IAM role has both `execute-api:Invoke` and `lambda:InvokeFunction` (see Step 2's **Grant invoke access to a caller**).
-
-**3e. Add it to your Agent Space:**
+**3d. Add it to your Agent Space:**
 
 1. In the AWS DevOps Agent console, select your Agent Space → **Capabilities** tab.
 2. In the **MCP Servers** section, choose **Add** → select the server you just registered.
@@ -396,7 +390,7 @@ This skill is intended for:
 
 Select **Generic** at upload time if you want the skill available to all agent types.
 
-## Uploading to AWS DevOps Agent
+## Step 4 — Uploading to AWS DevOps Agent
 
 > Reference: [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill)
 
@@ -404,7 +398,12 @@ You can deploy this skill in one of three ways:
 
 **Option A: Import from GitHub (recommended)**
 
-If you have a [GitHub connection configured](https://docs.aws.amazon.com/devopsagent/latest/userguide/connecting-to-cicd-pipelines-connecting-github.html) in your Agent Space, import this skill directly from the repository. In the DevOps Agent web app, go to Settings → Add Skill → Import from repository, then point to the `skills/redshift-support-specialist` directory. See [Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) for full instructions.
+This requires a GitHub connection on your Agent Space, set up in two steps:
+
+1. **Register GitHub at the account level** — in the AWS Management Console, go to **Capability Providers** (account-level, not inside a specific Agent Space) → find **GitHub** → **Register**. Choose User or Organization, pick GitHub App permissions, submit, then authorize and install the app on GitHub. Full steps: [Connecting GitHub](https://docs.aws.amazon.com/devopsagent/latest/userguide/connecting-to-cicd-pipelines-connecting-github.html).
+2. **Attach it to your Agent Space** — open your Agent Space's own console page (not the DevOps Agent web app) → **Capabilities** tab → **Pipeline** section → **Add** → select the GitHub registration from step 1 → choose the repository (this one, if importing this skill) → **Add**.
+
+Once connected, import this skill directly from the repository: in the DevOps Agent web app, go to Settings → Add Skill → Import from repository, then point to the `skills/redshift-support-specialist` directory. See [Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) for full instructions.
 
 **Option B: Upload as a zip file**
 
