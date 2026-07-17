@@ -155,6 +155,26 @@ from the `RedshiftMcpFunctionArn` output.) The stack output
 `GrantInvokeCommand` gives you this command pre-filled with the actual
 API ID and function ARN.
 
+## Grant database-level permissions inside Redshift
+
+Getting invoke access on the API doesn't grant anything inside the Redshift database itself.
+Amazon Redshift maps the Lambda's execution role to a database user (`IAMR:<role-name>`,
+using the `IAMR:` prefix since it's an IAM role, not an IAM user), and by default that
+database user can only see its own queries — not other users' activity that this skill
+needs to review.
+
+Two stack outputs give you the exact SQL to run (as a database superuser) on each
+cluster/workgroup this skill will query, pre-filled with the actual deployed role name:
+
+- `GrantSysMonitorCommand` — grants the `sys:monitor` role, letting the database user
+  see all users' queries in monitoring views (`SYS_QUERY_HISTORY`, `SVL_QLOG`, etc.).
+- `GrantTableInfoCommand` — grants `SELECT` on `SVV_TABLE_INFO`, which is superuser-visible
+  by default and isn't covered by `sys:monitor`.
+
+Both are safe to re-run; they don't need to be repeated per session since grants persist
+against the database user. See the parent [`../README.md`](../README.md#database-level-permissions-inside-redshift)
+for the full explanation.
+
 ## Create a DevOps Agent IAM role
 
 Connecting this MCP server to an AWS DevOps Agent Agent Space normally

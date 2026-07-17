@@ -66,7 +66,7 @@ Lambda execution environment (arm64, Python 3.13 runtime)
 
 ### Permissions required to deploy
 
-The credentials you deploy with (not the Lambda's own execution role — see below) need permission to create the IAM role, the Lambda function, and the API Gateway REST API. [`deployer-permissions-policy.json`](deployer-permissions-policy.json) is a ready-to-use IAM policy scoped to this deployment's specific resource names (`redshift-mcp-lambda-role` role, `redshift-mcp-proxy-zip*` function). If you deploy under a different function/role name, update the ARNs in that file to match, or use a broader policy (e.g. `AdministratorAccess`) for a one-off test in a sandbox account.
+The credentials you deploy with (not the Lambda's own execution role — see below) need permission to create the IAM role, the Lambda function, and the API Gateway REST API. [`deployer-permissions-policy.json`](deployer-permissions-policy.json) is a ready-to-use IAM policy scoped to this deployment's specific resource names (`redshift-mcp-lambda-execution-role` role, `redshift-mcp-proxy-zip*` function). If you deploy under a different function/role name, update the ARNs in that file to match, or use a broader policy (e.g. `AdministratorAccess`) for a one-off test in a sandbox account.
 
 Attach it to your own IAM user/role, or hand it to whoever will run `deploy.sh` / `sam deploy`:
 
@@ -86,6 +86,32 @@ If you deploy with `CreateDevOpsAgentRole=true` (see [`sam-app/README.md`](sam-a
 ### The MCP server's own execution role
 
 The connected MCP server's Lambda execution role needs Redshift/Redshift Data API read permissions — see [`redshift-access-policy.json`](redshift-access-policy.json) for the exact policy used. Both deploy options attach this automatically; you don't need to do anything extra. No additional permissions are required on the DevOps Agent's own IAM role, since all Redshift access happens through the MCP server, not the agent directly.
+
+### Database-level permissions inside Redshift
+
+The IAM permissions above (`GetClusterCredentialsWithIAM`/`GetClusterCredentials`) only control whether the Lambda's execution role is allowed to fetch temporary database credentials — they don't control what that database user can actually see once connected. Amazon Redshift derives the database user name directly from the calling IAM identity — specifically the Lambda's **execution role**, not the function itself. This deployment names that role `redshift-mcp-lambda-execution-role` (see `RedshiftMcpFunctionRole` in `sam-app/template.yaml`, or `ROLE_NAME` in `deploy.sh`), which maps to the database user `IAMR:redshift-mcp-lambda-execution-role` — **IAM roles use the `IAMR:` prefix, not `IAM:`** (that prefix is for IAM users only) ([source](https://docs.aws.amazon.com/redshift-data/latest/APIReference/API_ListDatabases.html)).
+
+By default, that database user can only see **its own** queries in the monitoring views this skill relies on (`SYS_QUERY_HISTORY`, `SVL_QLOG`, etc.) — it can't see other users' activity, which is normally the point of running operational reviews and diagnostics. To let it see everyone's queries, a Redshift superuser needs to grant the built-in `sys:monitor` role to that IAM-mapped database user, once per cluster/workgroup:
+
+```sql
+GRANT ROLE sys:monitor TO "IAMR:redshift-mcp-lambda-execution-role";
+```
+
+**Don't assume the role name is exactly `redshift-mcp-lambda-execution-role`** — always confirm the actual deployed name first:
+
+- **SAM**: use the `GrantSysMonitorCommand` and `GrantTableInfoCommand` stack outputs, which are pre-filled with the exact role name (including any suffix CloudFormation may add).
+- **Plain CLI**: `deploy.sh` prints the exact `GRANT` commands at the end of a successful run.
+- Or check directly: `aws lambda get-function --function-name <function-name> --query Configuration.Role --output text`, then use the role name (the part after `role/`) in the grant.
+
+`sys:monitor` grants visibility into all users' queries and workload activity; it does not grant `sys:operator` (which would additionally allow canceling other users' queries or running VACUUM) — this skill never needs that, since `execute_query` only runs read-only SELECTs. See [Amazon Redshift system-defined roles](https://docs.aws.amazon.com/redshift/latest/dg/r_roles-default.html) for the full list of `sys:*` roles.
+
+Some views used by this skill (notably `SVV_TABLE_INFO`, used for table-health checks) are superuser-visible by default and aren't covered by `sys:monitor`. If a query against one of these fails with `permission denied for relation ...`, grant `SELECT` on that specific view too:
+
+```sql
+GRANT SELECT ON SVV_TABLE_INFO TO "IAMR:redshift-mcp-lambda-execution-role";
+```
+
+Run both grants once per database on each cluster/workgroup this skill will query — they don't need to be repeated per session, since they're persisted against the database user.
 
 ## Authentication model
 

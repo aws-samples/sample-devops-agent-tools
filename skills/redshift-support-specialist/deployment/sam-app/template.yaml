@@ -59,6 +59,46 @@ Conditions:
   ShouldCreateDevOpsAgentRole: !Equals [!Ref CreateDevOpsAgentRole, 'true']
 
 Resources:
+  # Explicitly named so it has a stable identity to reference outside this
+  # stack -- notably, this is the IAM identity Amazon Redshift maps to a
+  # database user for via GetClusterCredentialsWithIAM (database username
+  # becomes "IAM:redshift-mcp-lambda-execution-role"). Without an explicit
+  # name, SAM would auto-generate one with a random suffix on every
+  # deploy, making that mapping unstable.
+  RedshiftMcpFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: redshift-mcp-lambda-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: RedshiftMcpAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - redshift:DescribeClusters
+                  - redshift:GetClusterCredentialsWithIAM
+                  - redshift:GetClusterCredentials
+                  - redshift-serverless:ListWorkgroups
+                  - redshift-serverless:GetWorkgroup
+                  - redshift-serverless:GetCredentials
+                  - redshift-data:ExecuteStatement
+                  - redshift-data:DescribeStatement
+                  - redshift-data:GetStatementResult
+                Resource: '*'
+      Tags:
+        - Key: Project
+          Value: redshift-mcp
+
   RedshiftMcpFunction:
     Type: AWS::Serverless::Function
     Metadata:
@@ -76,6 +116,7 @@ Resources:
       Architectures: [arm64]
       MemorySize: 512
       Timeout: 60
+      Role: !GetAtt RedshiftMcpFunctionRole.Arn
       Layers:
         - !Sub 'arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerArm64:${LambdaWebAdapterLayerVersion}'
       Environment:
@@ -84,20 +125,6 @@ Resources:
           AWS_LWA_PORT: '8000'
           AWS_LWA_READINESS_CHECK_PATH: /mcp
           FASTMCP_LOG_LEVEL: !Ref FastMcpLogLevel
-      Policies:
-        - Statement:
-            - Effect: Allow
-              Action:
-                - redshift:DescribeClusters
-                - redshift:GetClusterCredentialsWithIAM
-                - redshift:GetClusterCredentials
-                - redshift-serverless:ListWorkgroups
-                - redshift-serverless:GetWorkgroup
-                - redshift-serverless:GetCredentials
-                - redshift-data:ExecuteStatement
-                - redshift-data:DescribeStatement
-                - redshift-data:GetStatementResult
-              Resource: '*'
       Events:
         McpApi:
           Type: Api
@@ -316,3 +343,32 @@ Outputs:
       MCP server to your Agent Space capability provider.
     Condition: ShouldCreateDevOpsAgentRole
     Value: !GetAtt DevOpsAgentRole.Arn
+  RedshiftMcpFunctionRoleName:
+    Description: >
+      Name of the Lambda's execution role. Amazon Redshift maps this IAM
+      role to the database user IAMR:<this value> via
+      GetClusterCredentialsWithIAM (IAM roles use the IAMR: prefix, IAM
+      users use IAM: -- see
+      https://docs.aws.amazon.com/redshift-data/latest/APIReference/API_ListDatabases.html).
+      Use this value (or the ready-made GrantSysMonitorCommand /
+      GrantTableInfoCommand outputs below) to run the required database
+      grants on each cluster/workgroup this skill will query.
+    Value: !Ref RedshiftMcpFunctionRole
+  GrantSysMonitorCommand:
+    Description: >
+      Run this SQL (as a database superuser, via the Redshift query editor
+      or psql) on each cluster/workgroup this skill will query. Grants the
+      MCP server's database user visibility into ALL users' queries in
+      monitoring views (SYS_QUERY_HISTORY, SVL_QLOG, etc.), not just its
+      own. Does not grant sys:operator (canceling queries, VACUUM) -- this
+      skill never needs that since execute_query is read-only.
+    Value: !Sub 'GRANT ROLE sys:monitor TO "IAMR:${RedshiftMcpFunctionRole}";'
+  GrantTableInfoCommand:
+    Description: >
+      Run this SQL (as a database superuser) on each cluster/workgroup
+      this skill will query. SVV_TABLE_INFO (used for table-health checks)
+      is superuser-visible by default and is not covered by sys:monitor,
+      so it needs this separate grant. Without it, queries against
+      SVV_TABLE_INFO fail with "permission denied for relation
+      svv_table_info".
+    Value: !Sub 'GRANT SELECT ON SVV_TABLE_INFO TO "IAMR:${RedshiftMcpFunctionRole}";'

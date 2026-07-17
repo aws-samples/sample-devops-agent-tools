@@ -125,6 +125,16 @@ cd skills/redshift-support-specialist/deployment
 
 `build_zip.sh` runs a plain `pip install --platform manylinux2014_aarch64` on the host — no Docker or Finch required, for the same reason as Option A above. The optional third argument to `deploy.sh` grants that caller role `execute-api:Invoke` on the API and `lambda:InvokeFunction` on the function automatically, so you can skip the manual grant step below.
 
+### Database-level permissions inside Redshift
+
+The IAM policy above only controls whether the Lambda can fetch temporary database credentials — it doesn't control what the resulting database user can see once connected. By default, that user can only see its own queries in monitoring views, not other users' activity. On each cluster/workgroup this skill will query, run once as a database superuser:
+
+```sql
+GRANT ROLE sys:monitor TO "IAMR:<lambda-execution-role-name>";
+```
+
+**Get the exact role name from your deployment**, don't assume it — use the `GrantSysMonitorCommand` stack output (SAM) or the command printed at the end of `deploy.sh` (plain CLI), both pre-filled with the real role name. See [`deployment/README.md`](deployment/README.md#database-level-permissions-inside-redshift) for the full explanation, why IAM roles use the `IAMR:` prefix (not `IAM:`), and an additional grant needed for `SVV_TABLE_INFO`.
+
 ### Test the deployment
 
 Before moving to Step 2, confirm the deployment actually works. The quickest smoke test is `deployment/scripts/list_clusters.py` — it calls the deployed endpoint's `list_clusters` MCP tool and prints every cluster/workgroup in the account, confirming SigV4 auth, API Gateway, and the Lambda all work end-to-end.
@@ -185,9 +195,9 @@ Replace `redshift-mcp` and `us-east-1` with the stack name and region you deploy
 ```bash
 aws apigateway delete-rest-api --rest-api-id <api-id>
 aws lambda delete-function --function-name <function-name>
-aws iam delete-role-policy --role-name redshift-mcp-lambda-role --policy-name RedshiftMcpAccess
-aws iam detach-role-policy --role-name redshift-mcp-lambda-role --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-aws iam delete-role --role-name redshift-mcp-lambda-role
+aws iam delete-role-policy --role-name redshift-mcp-lambda-execution-role --policy-name RedshiftMcpAccess
+aws iam detach-role-policy --role-name redshift-mcp-lambda-execution-role --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+aws iam delete-role --role-name redshift-mcp-lambda-execution-role
 ```
 (Get `<api-id>` from the `deploy.sh` output, or `aws apigateway get-rest-apis`.)
 
@@ -312,6 +322,16 @@ See [`custom-agents/redshift-support-specialist/README.md`](../../custom-agents/
 ## Step 5 — How to Use the Skill
 
 This skill is intended for Chat — just describe what you need in plain language. The agent matches your request to one of the six capabilities below, discovers the cluster/workgroup itself, and collects diagnostics live through the MCP server. You never need to supply a cluster identifier from memory, an AWS CLI profile, or a CSV export.
+
+### Using the custom agent
+
+If you created the custom agent in Step 4, start there:
+
+1. Start a new chat and ask for the `redshift-support-specialist` custom agent by name (e.g. "Use the redshift-support-specialist agent").
+2. Ask it to show what it can do (e.g. "What can you help me with?") and follow its instructions from there.
+3. If it ever offers a background-mode option (e.g. for a Detailed Operational Review), explicitly ask it to run interactively in the chat instead — e.g. "Run this interactively in the chat, not in the background." The custom agent's system prompt is designed to always run in the active chat session, but if you see a background-mode prompt anyway, this confirms your intent.
+
+If you're not using the custom agent, the base DevOps Agent Chat with this skill uploaded works the same way — just describe what you need directly, without naming an agent.
 
 ### Chat — sample prompts
 
