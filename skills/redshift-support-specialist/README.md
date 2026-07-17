@@ -239,7 +239,7 @@ Once the MCP server is deployed and you've confirmed it works (Step 1's **Test t
 
 > Reference: [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill)
 
-You can upload this skill in one of three ways:
+You can upload this skill in one of two ways:
 
 **Option A: Import from GitHub (recommended)**
 
@@ -247,8 +247,7 @@ This requires a GitHub connection on your Agent Space, set up in two steps:
 
 1. **Register GitHub at the account level** — in the AWS Management Console, go to **Capability Providers** (account-level, not inside a specific Agent Space) → find **GitHub** → **Register**. Choose User or Organization, pick GitHub App permissions, submit, then authorize and install the app on GitHub. Full steps: [Connecting GitHub](https://docs.aws.amazon.com/devopsagent/latest/userguide/connecting-to-cicd-pipelines-connecting-github.html).
 2. **Attach it to your Agent Space** — open your Agent Space's own console page (not the DevOps Agent web app) → **Capabilities** tab → **Pipeline** section → **Add** → select the GitHub registration from step 1 → choose the repository (this one, if importing this skill) → **Add**.
-
-Once connected, import this skill directly from the repository: in the DevOps Agent web app, go to Settings → Add Skill → Import from repository, then point to the `skills/redshift-support-specialist` directory. See [Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) for full instructions.
+3. **Import the skill** — in the DevOps Agent web app, go to **Knowledge** → **Skills** → **Add Skill** → Import from repository, then point to the `skills/redshift-support-specialist` directory. See [Importing a skill from a repository](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#creating-skills) for full instructions.
 
 **Option B: Upload as a zip file**
 
@@ -280,8 +279,8 @@ Once connected, import this skill directly from the repository: in the DevOps Ag
    - `SKILL.md` is required and must include `name` and `description` frontmatter.
    - A `scripts/` directory is not allowed — this skill does not include one.
 
-2. In the AWS DevOps Agent web app, navigate to the **Skills** page.
-3. Click **Add skill** → **Upload skill**.
+2. In the AWS DevOps Agent web app, go to **Knowledge** → **Skills**.
+3. Click **Add Skill** → **Upload skill**.
 4. Drag and drop the zip file (or browse to it).
 5. Select agent type: **Chat** (or leave **Generic** to make it available to all agent types).
 6. Review the validation results.
@@ -289,7 +288,7 @@ Once connected, import this skill directly from the repository: in the DevOps Ag
 
 ## Step 4 — Create the Custom Agent
 
-In addition to using this skill from the base DevOps Agent Chat, create a dedicated **custom agent** pre-wired to this skill and its MCP tools — useful if you want a purpose-built entry point for Redshift work, or want to enforce agent-specific behavior (this custom agent always runs in the active chat session and never switches to background mode).
+In addition to using this skill from the base DevOps Agent Chat, create a dedicated **custom agent** pre-wired to this skill and its MCP tools — useful if you want a purpose-built entry point for Redshift work, or want to enforce agent-specific behavior.
 
 The custom agent's system prompt, README, and changelog live in [`custom-agents/redshift-support-specialist/`](../../custom-agents/redshift-support-specialist/) at the repo root.
 
