@@ -277,10 +277,6 @@ Once connected, import this skill directly from the repository: in the DevOps Ag
 6. Review the validation results.
 7. Click **Upload**.
 
-**Option C: Upload via the Asset API**
-
-Use the AWS DevOps Agent Asset API to programmatically manage skills — useful for CI/CD pipelines or automation workflows. Assign the skill to the `CHAT` agent type. See [Managing a skill end-to-end](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-managing-assets.html#managing-a-skill-end-to-end) for the full API workflow.
-
 ## Step 4 — Create the Custom Agent
 
 In addition to using this skill from the base DevOps Agent Chat, create a dedicated **custom agent** pre-wired to this skill and its MCP tools — useful if you want a purpose-built entry point for Redshift work, or want to enforce agent-specific behavior (this custom agent always runs in the active chat session and never switches to background mode).
