@@ -381,6 +381,41 @@ A companion custom agent system prompt for pairing with this skill lives in [`cu
 
 Only `SKILL.md`, `references/`, `assets/`, and `evals/` are part of the [Agent Skills specification](https://agentskills.io/specification) upload package (see packaging command above). `deployment/` is supplementary material for this repository and is excluded from the skill zip.
 
+## Architecture
+
+```text
+Caller (SigV4-signed request, service=execute-api)
+                       │
+                       ▼
+API Gateway REST API
+(AWS_IAM auth, /mcp)
+                       │
+                       ▼
+Lambda execution environment (arm64, Python 3.13 runtime)
+  ├─ Lambda Web Adapter (layer, /opt/extensions/lambda-adapter)
+  │     forwards HTTP traffic to 127.0.0.1:8000
+  └─ run.sh (function handler)
+        └─ mcp-proxy --port=8000 --stateless --pass-environment -- \
+             uvx awslabs.redshift-mcp-server@latest
+                 └─ talks to Redshift via the Redshift Data API (boto3)
+```
+
+## How the Pieces Fit Together
+
+```text
+AWS DevOps Agent Chat
+        |  (natural language: "why is this Redshift query slow?")
+        v
+This skill: redshift-support-specialist
+        |  (calls the 6 MCP tools: list_clusters, list_databases,
+        |   list_schemas, list_tables, list_columns, execute_query)
+        v
+Redshift MCP Server on Lambda, behind API Gateway (AWS_IAM auth)   (deployment/)
+        |  (Redshift Data API -- no VPC, no container image, no ECR)
+        v
+Amazon Redshift (provisioned clusters / Serverless workgroups)
+```
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
