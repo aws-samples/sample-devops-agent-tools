@@ -225,21 +225,6 @@ Once the MCP server is deployed and you've confirmed it works (Step 1's **Test t
 
 > Full reference: [Connecting MCP Servers](https://docs.aws.amazon.com/devopsagent/latest/userguide/configuring-integrations-and-knowledge-connecting-mcp-servers.html)
 
-## Limitations
-
-- **No AWS CLI or CloudWatch access.** Every Redshift interaction goes through the six MCP server tools only (`list_clusters`, `list_databases`, `list_schemas`, `list_tables`, `list_columns`, `execute_query`). Checks that require CloudWatch metrics/alarms, snapshot inventory, SSL/audit-log/parameter-group configuration, or Reserved Instance coverage are reported as "Not Available" rather than guessed — see Capabilities 4 and 5 in `SKILL.md`.
-- **Read-only.** `execute_query` runs inside a read-only transaction — the skill never runs INSERT/UPDATE/DELETE/ALTER/DROP/CREATE/GRANT/VACUUM/ANALYZE; it only recommends such statements for the user to run themselves.
-- **One query per `execute_query` call.** Diagnostics that need multiple result sets require multiple tool calls; there is no multi-statement/transaction support.
-- **No data retention.** Every session collects data fresh; nothing from a prior report or customer is cached or reused across sessions.
-
-## Agent Types
-
-This skill is intended for:
-
-- **Chat** — conversational invocation ("why is this Redshift query slow?", "run a Redshift health check on my cluster").
-
-Select **Generic** at upload time if you want the skill available to all agent types.
-
 ## Step 3 — Create the redshift-support-specialist Skill
 
 > Reference: [Uploading a skill](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent-devops-agent-skills.html#uploading-a-skill)
@@ -380,6 +365,21 @@ redshift-support-specialist/
 A companion custom agent system prompt for pairing with this skill lives in [`custom-agents/redshift-support-specialist/`](../../custom-agents/redshift-support-specialist/) — see [Step 4 — Create the Custom Agent](#step-4--create-the-custom-agent) above.
 
 Only `SKILL.md`, `references/`, `assets/`, and `evals/` are part of the [Agent Skills specification](https://agentskills.io/specification) upload package (see packaging command above). `deployment/` is supplementary material for this repository and is excluded from the skill zip.
+
+## Limitations
+
+- **No AWS CLI or CloudWatch access.** Every Redshift interaction goes through the six MCP server tools only (`list_clusters`, `list_databases`, `list_schemas`, `list_tables`, `list_columns`, `execute_query`). Checks that require CloudWatch metrics/alarms, snapshot inventory, SSL/audit-log/parameter-group configuration, or Reserved Instance coverage are reported as "Not Available" rather than guessed — see Capabilities 4 and 5 in `SKILL.md`.
+- **Read-only.** `execute_query` runs inside a read-only transaction — the skill never runs INSERT/UPDATE/DELETE/ALTER/DROP/CREATE/GRANT/VACUUM/ANALYZE; it only recommends such statements for the user to run themselves.
+- **One query per `execute_query` call.** Diagnostics that need multiple result sets require multiple tool calls; there is no multi-statement/transaction support.
+- **No data retention.** Every session collects data fresh; nothing from a prior report or customer is cached or reused across sessions.
+
+## Agent Types
+
+This skill is intended for:
+
+- **Chat** — conversational invocation ("why is this Redshift query slow?", "run a Redshift health check on my cluster").
+
+Select **Generic** at upload time if you want the skill available to all agent types.
 
 ## Architecture
 
