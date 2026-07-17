@@ -73,9 +73,10 @@ After Year 3, AWS may force-upgrade the resource.
    - If unclear, ask: "Which service would you like me to analyze? (EKS, RDS, Lambda, ElastiCache, OpenSearch, or all)"
 
 2. **Determine account scope:**
-   - **Default: ALL associated accounts** — Always scan all accounts connected to the Agent Space unless the user explicitly restricts scope
+   - **Default: ALL associated accounts** — Scan resources in ALL AWS accounts connected to this Agent Space (primary + all secondary cloud sources)
+   - The agent has access to multiple accounts through its cloud source associations — discover resources in EACH account, not just the primary
+   - To identify available accounts: attempt resource discovery in all accounts the agent has access to. The Agent Space configuration determines which accounts are available.
    - If user says "only this account" or specifies an account ID → limit to that account
-   - The agent discovers associated accounts automatically via the Agent Space configuration
 
 3. **Determine region scope:**
    - If user specifies regions → use those

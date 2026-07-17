@@ -37,11 +37,8 @@ If an EOS Cost Impact Report artifact already exists for the same scope, update 
 
 ## Notifications
 
-After generating the report, check if a communication tool integration exists (Slack, Jira, ServiceNow, or similar). If available, send a summary notification containing:
-- Total monthly Extended Support cost
-- Number of CRITICAL resources currently incurring charges
-- Number of HIGH urgency resources approaching EOS
-- Top impacted account and service
-- Link or reference to the full artifact for details
-
-Do not send a notification if no resources are affected (all supported).
+After generating the report, attempt to send a summary notification via Slack or any available communication tool:
+- Try to post a message to the configured Slack channel with: total monthly ES cost, number of CRITICAL resources, top impacted account and service
+- If Slack posting succeeds: note "Notification sent to Slack" in the report
+- If Slack posting fails or no communication tool is available: note "Notification skipped — no communication tool available or posting failed" in the report
+- Do not send a notification if no resources are affected (all supported)
