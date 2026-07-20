@@ -1,0 +1,45 @@
+{
+  "name": "eks-node-log-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for DevOps Agent to collect EKS node logs via SSM Automation",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest && python3 -m pytest tests/ -v",
+    "lint:cfn": "npx cdk synth --quiet -o cdk.out && cfn-lint cdk.out/EksNodeLogMcpStack.template.json",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "destroy": "cdk destroy"
+  },
+  "keywords": [
+    "aws",
+    "cdk",
+    "ssm",
+    "automation",
+    "mcp",
+    "devops-agent",
+    "eks",
+    "troubleshooting"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "AWS",
+  "license": "MIT-0",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.0.0",
+    "aws-cdk": "^2.170.0",
+    "fast-check": "^4.5.3",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.6",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.170.0",
+    "constructs": "^10.0.0"
+  }
+}

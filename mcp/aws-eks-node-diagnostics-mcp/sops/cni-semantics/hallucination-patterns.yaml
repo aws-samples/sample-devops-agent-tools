@@ -1,0 +1,323 @@
+# =============================================================================
+# "Looks Real but Wrong" Hallucination Pattern Mining
+# Source of truth: amazon-vpc-cni-k8s (github.com/aws/amazon-vpc-cni-k8s)
+# Patterns that LLMs commonly misinterpret about VPC CNI behavior
+# =============================================================================
+
+patterns:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P1: Security-sounding keys that don't do what the name implies
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P1-enforcing-mode-sounds-like-firewall
+    trigger_words: ["enforcingMode", "strict", "enforcing", "security group enforcing"]
+    hallucination_risk: CRITICAL
+    why_llms_get_this_wrong: >
+      "strict" and "enforcing" sound like firewall/deny semantics. LLMs
+      pattern-match these words to "default-deny" or "blocking" behavior.
+      In reality, strict mode only changes the veth prefix from "eni" to
+      "vlan" for SGP-annotated pods, opting them out of SNAT and Calico.
+    actual_behavior: >
+      POD_SECURITY_GROUP_ENFORCING_MODE controls veth naming for pods that
+      already have branch ENIs (PodVlanId != 0). It has zero effect on
+      unannotated pods. The "strict" vs "standard" choice only determines
+      whether SGP pods get SNAT and Calico management or not.
+    common_false_claim: >
+      "podSGEnforcingMode: strict is creating a default-deny posture that
+      blocks traffic to pods without explicit security group rules."
+    repo_proof: "pkg/sgpp/utils.go — BuildHostVethNamePrefix() just returns a string prefix"
+    guardrail_ref: G1-sgp-pod-eni
+
+  - id: P2-enable-pod-eni-sounds-like-all-pods
+    trigger_words: ["ENABLE_POD_ENI", "pod ENI", "branch ENI", "trunk ENI"]
+    hallucination_risk: HIGH
+    why_llms_get_this_wrong: >
+      "ENABLE_POD_ENI" sounds like it enables ENIs for all pods. LLMs
+      assume this changes networking for every pod on the node.
+    actual_behavior: >
+      ENABLE_POD_ENI=true only attaches a trunk ENI to the node and enables
+      the SGP feature. Individual pods still need a SecurityGroupPolicy CRD
+      match AND the vpc.amazonaws.com/pod-eni annotation (set by VPC Resource
+      Controller) to actually get a branch ENI. Unannotated pods are unaffected.
+    common_false_claim: >
+      "ENABLE_POD_ENI=true causes all pods to use branch ENIs, which changes
+      their networking behavior and security group assignment."
+    repo_proof: "pkg/ipamd/rpc_handler.go — only pods with resource limit 'vpc.amazonaws.com/pod-eni' enter the branch ENI path"
+    guardrail_ref: G1-sgp-pod-eni
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P3: Annotation-dependent features mistaken for global settings
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P3-annotation-gated-features
+    trigger_words: ["pod-eni annotation", "SecurityGroupPolicy", "ENIConfig"]
+    hallucination_risk: HIGH
+    why_llms_get_this_wrong: >
+      LLMs see env vars like ENABLE_POD_ENI or AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG
+      and assume they globally change behavior. They miss that the actual
+      behavior change requires per-pod annotations or per-node CRDs.
+    actual_behavior: >
+      Several VPC CNI features are two-stage: (1) env var enables the feature
+      at node level, (2) annotation/CRD selects which pods/nodes are affected.
+      Without the annotation/CRD, the env var alone does nothing to traffic.
+      Examples: SGP requires pod-eni annotation, custom networking requires
+      ENIConfig CRD matching the node.
+    common_false_claim: >
+      "Setting ENABLE_POD_ENI=true or AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG=true
+      immediately changes networking for all pods on the node."
+    repo_proof: "pkg/ipamd/rpc_handler.go — annotation check; pkg/ipamd/ipamd.go — ENIConfig lookup"
+    guardrail_ref: G1-sgp-pod-eni
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P4: kube-proxy ownership areas blamed on CNI
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P4-kube-proxy-blamed-on-cni
+    trigger_words: ["KUBE-SERVICES", "ClusterIP", "service unreachable", "DNAT", "service routing"]
+    hallucination_risk: CRITICAL
+    why_llms_get_this_wrong: >
+      LLMs know VPC CNI manages iptables rules, so they assume it manages
+      ALL iptables rules including service routing. They don't distinguish
+      between CNI-owned chains (AWS-SNAT-CHAIN-0, AWS-CONNMARK-CHAIN-0)
+      and kube-proxy-owned chains (KUBE-SERVICES, KUBE-SVC-*, KUBE-SEP-*).
+    actual_behavior: >
+      The VPC CNI has ZERO involvement in service routing. It never creates,
+      modifies, or reads KUBE-SERVICES or any KUBE-* chain. Service ClusterIP
+      DNAT, NodePort DNAT, and LoadBalancer routing are 100% kube-proxy.
+      The CNI only creates AWS-SNAT-CHAIN-0 and AWS-CONNMARK-CHAIN-0.
+    common_false_claim: >
+      "The VPC CNI's strict enforcing mode or SNAT configuration is preventing
+      service ClusterIP from being reachable."
+    repo_proof: "grep -r 'KUBE-SERVICES' amazon-vpc-cni-k8s/ returns ZERO results"
+    guardrail_ref: G6-service-vs-pod-routing
+
+  - id: P5-empty-kube-services-blamed-on-cni
+    trigger_words: ["KUBE-SERVICES empty", "no iptables rules", "service chain missing"]
+    hallucination_risk: CRITICAL
+    why_llms_get_this_wrong: >
+      When KUBE-SERVICES chain is empty, LLMs see CNI config like
+      podSGEnforcingMode=strict and blame it, because "strict" sounds
+      like it could block or remove rules.
+    actual_behavior: >
+      An empty KUBE-SERVICES chain means kube-proxy is not running or not
+      syncing. The CNI cannot empty this chain because it never touches it.
+      Common causes: kube-proxy DaemonSet not scheduled to node, kube-proxy
+      crashlooping, kube-proxy unable to reach API server.
+    common_false_claim: >
+      "podSGEnforcingMode: strict is causing KUBE-SERVICES chain to be empty
+      or blocking service routing rules from being created."
+    repo_proof: "The string 'KUBE-SERVICES' does not appear anywhere in the VPC CNI codebase"
+    guardrail_ref: G6-service-vs-pod-routing
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P6: SNAT confusion — CNI SNAT vs kube-proxy masquerade
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P6-snat-vs-masquerade-confusion
+    trigger_words: ["SNAT", "masquerade", "NAT", "source NAT"]
+    hallucination_risk: MEDIUM
+    why_llms_get_this_wrong: >
+      LLMs conflate the CNI's SNAT (AWS-SNAT-CHAIN-0 for off-VPC traffic)
+      with kube-proxy's masquerade (KUBE-POSTROUTING for service traffic).
+      They assume changing AWS_VPC_K8S_CNI_EXTERNALSNAT affects service SNAT.
+    actual_behavior: >
+      Two independent SNAT mechanisms exist:
+      (1) CNI: AWS-SNAT-CHAIN-0 — SNATs pod traffic leaving the VPC
+      (2) kube-proxy: KUBE-POSTROUTING — masquerades service traffic
+      They use different marks (CNI=0x80, kube-proxy=0x0000c000) and
+      different chains. Changing one does not affect the other.
+    common_false_claim: >
+      "Setting AWS_VPC_K8S_CNI_EXTERNALSNAT=true breaks service masquerade."
+    repo_proof: "pkg/networkutils/network.go — only creates AWS-SNAT-CHAIN-0, never touches KUBE-POSTROUTING"
+    guardrail_ref: G2-snat-external-snat
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P7: Node-local config mistaken for cluster-wide effect
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P7-node-local-vs-cluster-wide
+    trigger_words: ["cluster-wide", "all nodes", "global setting"]
+    hallucination_risk: MEDIUM
+    why_llms_get_this_wrong: >
+      LLMs see aws-node DaemonSet env vars and assume they're cluster-wide
+      settings. They don't realize each node independently reads its own
+      env vars and applies its own iptables rules.
+    actual_behavior: >
+      All VPC CNI configuration is node-local. Each node's IPAMD reads env
+      vars from its own aws-node pod, applies iptables rules locally, and
+      manages its own ENIs. Cross-node pod communication uses VPC routing
+      (route tables pointing secondary IPs to ENIs), not CNI iptables.
+    common_false_claim: >
+      "Changing WARM_IP_TARGET on one node affects IP allocation on other nodes."
+    repo_proof: "pkg/ipamd/ipamd.go — all env vars read via os.Getenv, local to the process"
+    guardrail_ref: G5-node-vs-pod-routing
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P8: Prefix delegation mistaken for routing change
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P8-prefix-delegation-routing-confusion
+    trigger_words: ["prefix delegation", "/28", "ENABLE_PREFIX_DELEGATION"]
+    hallucination_risk: LOW
+    why_llms_get_this_wrong: >
+      "/28 prefix" sounds like a routing prefix, leading LLMs to think
+      prefix delegation changes routing behavior or subnet masks.
+    actual_behavior: >
+      Prefix delegation only changes how IPs are allocated from ENIs —
+      /28 blocks instead of individual IPs. Routing, iptables, SNAT,
+      and security groups are completely unaffected. It's purely an
+      IPAM optimization for higher pod density.
+    common_false_claim: >
+      "ENABLE_PREFIX_DELEGATION=true changes the pod subnet mask or routing."
+    repo_proof: "pkg/ipamd/ipamd.go — prefix delegation only affects assignPodIPv4AddressUnsafe()"
+    guardrail_ref: G4-prefix-delegation
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P9: DISABLE_TCP_EARLY_DEMUX sounds like it disables TCP
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P9-tcp-early-demux-sounds-scary
+    trigger_words: ["DISABLE_TCP_EARLY_DEMUX", "tcp_early_demux", "disable TCP"]
+    hallucination_risk: MEDIUM
+    why_llms_get_this_wrong: >
+      "DISABLE_TCP" in the name sounds like it disables TCP functionality.
+      LLMs may claim this breaks TCP connections.
+    actual_behavior: >
+      DISABLE_TCP_EARLY_DEMUX=true sets the kernel sysctl net/ipv4/tcp_early_demux
+      to 0. This disables an optimization where the kernel skips routing lookup
+      for established TCP connections. It's needed for SGP strict mode so
+      kubelet probes can reach pods on branch ENIs. The only effect is a minor
+      performance impact on TCP connection setup — TCP itself works fine.
+    common_false_claim: >
+      "DISABLE_TCP_EARLY_DEMUX=true is breaking TCP connections on the node."
+    repo_proof: "cmd/aws-vpc-cni-init/main.go — procSys.Set('net/ipv4/tcp_early_demux', '0')"
+    guardrail_ref: null
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P10: NETWORK_POLICY_ENFORCING_MODE confused with SGP enforcing mode
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P10-network-policy-vs-sgp-enforcing
+    trigger_words: ["NETWORK_POLICY_ENFORCING_MODE", "network policy strict", "default deny"]
+    hallucination_risk: CRITICAL
+    why_llms_get_this_wrong: >
+      Both settings contain "ENFORCING_MODE" and both have a "strict" option.
+      LLMs conflate them because the names are nearly identical. But they
+      control completely different subsystems with different code paths.
+    actual_behavior: >
+      NETWORK_POLICY_ENFORCING_MODE controls Kubernetes NetworkPolicy enforcement
+      via aws-network-policy-agent (eBPF). "strict" = default-deny until
+      NetworkPolicy allows. POD_SECURITY_GROUP_ENFORCING_MODE controls veth
+      naming for SGP pods. They share zero code paths.
+    common_false_claim: >
+      "NETWORK_POLICY_ENFORCING_MODE=strict is the same as SGP strict mode
+      and blocks traffic to pods without security groups."
+    repo_proof: "pkg/ipamd/ipamd.go — two separate env var reads, two separate code paths"
+    guardrail_ref: G9-network-policy-enforcing-mode
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P11: DISABLE_NETWORK_RESOURCE_PROVISIONING sounds like it breaks networking
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P11-disable-network-resource-provisioning
+    trigger_words: ["DISABLE_NETWORK_RESOURCE_PROVISIONING", "disable network", "resource provisioning"]
+    hallucination_risk: HIGH
+    why_llms_get_this_wrong: >
+      "DISABLE_NETWORK" in the name sounds like it disables networking.
+      LLMs pattern-match "disable" + "network" to "networking is broken."
+    actual_behavior: >
+      This only disables ENI provisioning during pod init — used when an
+      external controller manages ENIs. Existing networking is unaffected.
+      The name is misleading but the behavior is narrow.
+    common_false_claim: >
+      "DISABLE_NETWORK_RESOURCE_PROVISIONING=true disables all pod networking."
+    repo_proof: "pkg/ipamd/ipamd.go — only skips ENI creation in tryAllocateENI()"
+    guardrail_ref: G20-disable-network-resource-provisioning
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P12: WARM_IP_TARGET confused with max pods limit
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P12-warm-ip-vs-max-pods
+    trigger_words: ["WARM_IP_TARGET", "warm IP", "max pods", "pod limit"]
+    hallucination_risk: MEDIUM
+    why_llms_get_this_wrong: >
+      "IP TARGET" sounds like a limit on IPs available for pods. LLMs
+      assume it caps the number of pods that can run.
+    actual_behavior: >
+      WARM_IP_TARGET controls pre-allocation of FREE IPs in the warm pool.
+      It does NOT limit max pods. Max pods is kubelet --max-pods (set by
+      EKS bootstrap based on instance ENI/IP limits). IPAMD only checks:
+      if totalIPs >= maxPods, pool is not low (prevents over-allocation).
+    common_false_claim: >
+      "WARM_IP_TARGET=5 means only 5 pods can run on the node."
+    repo_proof: "pkg/ipamd/ipamd.go — getWarmIPTarget() only affects warm pool, not max pods"
+    guardrail_ref: G21-warm-ip-vs-max-pods
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P13: AWS_VPC_ENI_MTU confused with pod MTU
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P13-eni-mtu-vs-pod-mtu
+    trigger_words: ["AWS_VPC_ENI_MTU", "ENI MTU", "pod MTU", "MTU 9001"]
+    hallucination_risk: LOW
+    why_llms_get_this_wrong: >
+      LLMs see "ENI MTU" and assume it's the MTU inside pods. They don't
+      know about the separate POD_MTU setting.
+    actual_behavior: >
+      AWS_VPC_ENI_MTU sets host ENI MTU (eth0, eth1). POD_MTU sets pod
+      veth MTU. If POD_MTU=0 (default), pods inherit ENI MTU. They are
+      configured in different files and applied at different layers.
+    common_false_claim: >
+      "Setting AWS_VPC_ENI_MTU=1500 changes the MTU inside all pods."
+    repo_proof: "pkg/networkutils/network.go — GetEthernetMTU() vs cmd/aws-vpc-cni/main.go — envPodMTU"
+    guardrail_ref: G22-eni-mtu-vs-pod-mtu
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P14: Empty route table flagged as broken (normal with multiple ENIs)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P14-empty-route-table-multi-eni
+    trigger_words: ["empty route table", "no default gateway", "missing routes", "route table empty"]
+    hallucination_risk: MEDIUM
+    why_llms_get_this_wrong: >
+      Traditional Linux networking expects a default gateway in the main
+      route table. LLMs flag its absence as critical. On EKS multi-ENI
+      nodes, per-ENI policy routing replaces the main table.
+    actual_behavior: >
+      VPC CNI creates per-ENI route tables (2, 3, 4...) with ip rules
+      directing pod traffic. The main route table may be empty or minimal.
+      This is NORMAL and EXPECTED on multi-ENI nodes.
+    common_false_claim: >
+      "The main route table has no default gateway — routing is broken."
+    repo_proof: "pkg/networkutils/network.go — SetupENINetwork() creates per-ENI tables"
+    guardrail_ref: G23-empty-route-table-multi-eni
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P15: ENABLE_IMDS_ONLY_MODE sounds like it disables networking
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P15-imds-only-mode-sounds-like-disable
+    trigger_words: ["ENABLE_IMDS_ONLY_MODE", "IMDS only", "skip EC2 API"]
+    hallucination_risk: MEDIUM
+    why_llms_get_this_wrong: >
+      "IMDS only mode" sounds restrictive. LLMs may assume it disables
+      networking features or breaks ENI management entirely.
+    actual_behavior: >
+      ENABLE_IMDS_ONLY_MODE=true only changes how IPAMD discovers ENI
+      metadata — using IMDS instead of EC2 API. It implicitly disables
+      ENI provisioning and leaked ENI cleanup (which need EC2 API), but
+      existing pod networking is completely unaffected.
+    common_false_claim: >
+      "ENABLE_IMDS_ONLY_MODE=true is breaking pod networking because
+      IPAMD can't manage ENIs."
+    repo_proof: "pkg/awsutils/awsutils.go — only skips DescribeNetworkInterfaces, uses IMDS metadata instead"
+    guardrail_ref: G27-imds-only-mode
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # P16: ENABLE_V4_EGRESS confused with ENABLE_V6_EGRESS
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: P16-v4-v6-egress-confusion
+    trigger_words: ["ENABLE_V4_EGRESS", "ENABLE_V6_EGRESS", "egress plugin", "egress-v4", "egress-v6"]
+    hallucination_risk: MEDIUM
+    why_llms_get_this_wrong: >
+      The naming is counterintuitive. ENABLE_V6_EGRESS is for IPv4 clusters
+      (enables IPv6 egress). ENABLE_V4_EGRESS is for IPv6 clusters (enables
+      IPv4 egress). LLMs assume V4 egress is for IPv4 clusters.
+    actual_behavior: >
+      ENABLE_V6_EGRESS=true → IPv4 cluster gets IPv6 egress capability
+      (egress-v6 plugin, ip6tables CNI-E6-* chains).
+      ENABLE_V4_EGRESS=true → IPv6 cluster gets IPv4 egress capability
+      (egress-v4 plugin, iptables CNI-E4-* chains, 169.254.172.0/22 IPAM).
+    common_false_claim: >
+      "ENABLE_V4_EGRESS controls IPv4 egress on IPv4 clusters."
+    repo_proof: "cmd/aws-vpc-cni/main.go lines 230-240 — V4 egress only in IPv6 mode, V6 egress only in IPv4 mode"
+    guardrail_ref: G28-v4-v6-egress-confusion

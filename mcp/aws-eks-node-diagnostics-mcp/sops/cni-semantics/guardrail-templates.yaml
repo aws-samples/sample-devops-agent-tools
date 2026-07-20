@@ -1,0 +1,708 @@
+# =============================================================================
+# VPC CNI Guardrail Templates
+# Source of truth: amazon-vpc-cni-k8s (github.com/aws/amazon-vpc-cni-k8s)
+# Each guardrail prevents a specific class of hallucination/misdiagnosis
+# =============================================================================
+
+guardrails:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G1: Security Groups for Pods (SGP) / pod-eni
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G1-sgp-pod-eni
+    category: security_groups_for_pods
+    common_mistaken_interpretation: >
+      "podSGEnforcingMode: strict creates a default-deny posture for all pods,
+      blocking traffic to pods that don't have explicit security group rules."
+    repo_verified_correct_interpretation: >
+      podSGEnforcingMode ONLY affects pods with vpc.amazonaws.com/pod-eni
+      annotation (assigned by VPC Resource Controller when a SecurityGroupPolicy
+      CRD matches the pod). The PodVlanId != 0 gate in rpc_handler.go is the
+      sole branch point — pods without this annotation get VlanId=0 and go
+      through SetupPodNetwork(), completely bypassing all SGP logic. Strict
+      mode only changes the veth prefix from "eni" to "vlan" for annotated
+      pods, which opts them out of SNAT and Calico management.
+    required_evidence_to_blame:
+      - "Pod MUST have vpc.amazonaws.com/pod-eni annotation"
+      - "SecurityGroupPolicy CRD MUST exist matching the pod"
+      - "ENABLE_POD_ENI MUST be true on the node"
+      - "Trunk ENI MUST be attached to the node"
+    explicit_disqualifiers:
+      - "If pod lacks vpc.amazonaws.com/pod-eni annotation → SGP is NOT involved"
+      - "If ENABLE_POD_ENI is false → SGP is completely disabled"
+      - "If kube-proxy KUBE-SERVICES chain is empty → that's a kube-proxy issue, not SGP"
+      - "If service ClusterIP is unreachable → check kube-proxy first, not SGP"
+    repo_citation:
+      gate: "pkg/ipamd/rpc_handler.go lines 95-180 — PodVlanId != 0 check"
+      veth_logic: "pkg/sgpp/utils.go — BuildHostVethNamePrefix()"
+      constants: "pkg/sgpp/constants.go — DefaultEnforcingMode = strict"
+      cni_fork: "cmd/routed-eni-cni-plugin/cni.go line 270 — if r.PodVlanId != 0"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G2: SNAT / externalSNAT
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G2-snat-external-snat
+    category: snat_configuration
+    common_mistaken_interpretation: >
+      "AWS_VPC_K8S_CNI_EXTERNALSNAT=true disables all NAT on the node,
+      breaking service routing and pod-to-external connectivity."
+    repo_verified_correct_interpretation: >
+      externalSNAT only controls the CNI's AWS-SNAT-CHAIN-0 in the nat
+      POSTROUTING hook. When true, the CNI does not create SNAT rules for
+      pod traffic leaving the VPC. It does NOT affect kube-proxy's
+      KUBE-POSTROUTING chain (service masquerade) or KUBE-SERVICES chain
+      (ClusterIP DNAT). Pod-to-pod within VPC is unaffected. An external
+      NAT gateway must handle outbound SNAT instead.
+    required_evidence_to_blame:
+      - "Pod traffic to external (non-VPC) destinations is failing"
+      - "iptables -t nat -L shows AWS-SNAT-CHAIN-0 is empty or absent"
+      - "No NAT gateway in the VPC route table for 0.0.0.0/0"
+    explicit_disqualifiers:
+      - "If service ClusterIP routing is broken → that's kube-proxy, not SNAT"
+      - "If pod-to-pod within VPC fails → SNAT is not involved"
+      - "If ENABLE_IPv6=true → no SNAT rules exist regardless of this setting"
+    repo_citation:
+      env_def: "pkg/networkutils/network.go — envExternalSNAT constant"
+      skip_logic: "pkg/networkutils/network.go — useExternalSNAT() function"
+      chain_build: "pkg/networkutils/network.go — buildIptablesSNATRules()"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G3: Custom Networking (ENIConfig)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G3-custom-networking
+    category: custom_networking
+    common_mistaken_interpretation: >
+      "AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG=true changes the node's primary
+      ENI subnet and affects all traffic routing on the node."
+    repo_verified_correct_interpretation: >
+      Custom networking only affects SECONDARY ENIs. The primary ENI retains
+      its original subnet and security groups. Pods get IPs from the
+      ENIConfig-specified subnet, but the node's primary IP and host
+      networking are unchanged. SNAT rules still use VPC CIDRs.
+    required_evidence_to_blame:
+      - "Pod IPs are from unexpected subnet"
+      - "ENIConfig CRD exists for the node's AZ"
+      - "AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG=true in aws-node env"
+    explicit_disqualifiers:
+      - "If node primary IP is affected → not custom networking"
+      - "If iptables rules are wrong → check SNAT config, not custom networking"
+      - "If ENIConfig CRD doesn't exist → custom networking has no effect"
+    repo_citation:
+      env_def: "pkg/ipamd/ipamd.go — envCustomNetworkCfg"
+      init_logic: "pkg/ipamd/ipamd.go — nodeInit() reads ENIConfig"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G4: Prefix Delegation / IPAMD Warm Pool
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G4-prefix-delegation
+    category: prefix_delegation
+    common_mistaken_interpretation: >
+      "ENABLE_PREFIX_DELEGATION=true changes how pods route traffic or
+      affects iptables rules and security groups."
+    repo_verified_correct_interpretation: >
+      Prefix delegation only changes IP allocation strategy — /28 prefixes
+      (16 IPs each) instead of individual secondary IPs. This increases
+      max pods per node but does NOT change routing, iptables, SNAT, or
+      security groups. The warm pool targets (WARM_IP_TARGET,
+      WARM_PREFIX_TARGET, MINIMUM_IP_TARGET) control pre-allocation only.
+    required_evidence_to_blame:
+      - "IP allocation failures (insufficient IPs)"
+      - "Max pods limit reached unexpectedly"
+      - "ENI/prefix attachment errors in ipamd logs"
+    explicit_disqualifiers:
+      - "If routing or iptables is broken → prefix delegation is not involved"
+      - "If SNAT is wrong → check SNAT config, not PD"
+      - "If service routing fails → check kube-proxy, not PD"
+    repo_citation:
+      env_def: "pkg/ipamd/ipamd.go — usePrefixDelegation()"
+      allocation: "pkg/ipamd/ipamd.go — tryAllocateENI() and assignPodIPv4AddressUnsafe()"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G5: Node-Local vs Pod-Level Routing
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G5-node-vs-pod-routing
+    category: routing_scope
+    common_mistaken_interpretation: >
+      "VPC CNI configuration changes affect cluster-wide routing behavior
+      and can break cross-node pod communication."
+    repo_verified_correct_interpretation: >
+      VPC CNI configuration is strictly node-local. Each node runs its own
+      IPAMD and applies its own iptables rules. Pod-to-pod across nodes
+      uses VPC routing (the VPC route table has routes for each node's
+      secondary IPs pointing to the node's ENI). Cross-node issues are
+      VPC route table or security group problems, not CNI config problems.
+      The CNI only manages: (1) ip rules for per-ENI route tables,
+      (2) AWS-SNAT-CHAIN-0 and AWS-CONNMARK-CHAIN-0 in iptables,
+      (3) veth pairs between host and pod namespaces.
+    required_evidence_to_blame:
+      - "Issue is isolated to pods on a SINGLE node"
+      - "iptables or ip rules on that specific node are wrong"
+      - "ipamd logs on that node show errors"
+    explicit_disqualifiers:
+      - "If issue affects pods across multiple nodes → VPC routing, not CNI"
+      - "If issue is cross-node pod-to-pod → check VPC route tables and SGs"
+      - "If issue is service routing → check kube-proxy on each node"
+    repo_citation:
+      ip_rules: "pkg/networkutils/network.go — SetupENINetwork()"
+      host_setup: "pkg/networkutils/network.go — SetupHostNetwork()"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G6: Service Routing vs Pod Routing (kube-proxy ownership)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G6-service-vs-pod-routing
+    category: kube_proxy_ownership
+    common_mistaken_interpretation: >
+      "VPC CNI manages service ClusterIP routing and DNAT. If a service
+      is unreachable, the CNI configuration must be wrong."
+    repo_verified_correct_interpretation: >
+      Service routing (ClusterIP DNAT, NodePort DNAT, LoadBalancer) is
+      100% owned by kube-proxy via KUBE-SERVICES, KUBE-SVC-*, KUBE-SEP-*
+      chains. The CNI has ZERO involvement in service routing. The CNI
+      only handles: pod IP assignment, per-ENI routing tables, SNAT for
+      off-VPC traffic, and connmark for NodePort return path. If
+      KUBE-SERVICES chain is empty, kube-proxy is broken — not the CNI.
+    required_evidence_to_blame:
+      - "Pod-to-pod direct IP connectivity fails (not via service)"
+      - "SNAT is wrong for external traffic"
+      - "ip rules or per-ENI route tables are misconfigured"
+    explicit_disqualifiers:
+      - "If service ClusterIP unreachable → kube-proxy issue"
+      - "If KUBE-SERVICES chain empty → kube-proxy not running/syncing"
+      - "If endpoints exist but DNAT fails → kube-proxy iptables issue"
+      - "If NodePort works but ClusterIP doesn't → kube-proxy issue"
+    repo_citation:
+      cni_chains: "pkg/networkutils/network.go — only creates AWS-SNAT-CHAIN-0 and AWS-CONNMARK-CHAIN-0"
+      no_kube_svc: "grep -r 'KUBE-SERVICES' amazon-vpc-cni-k8s/ returns ZERO results"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G7: iptables Chain Ownership (CNI vs kube-proxy)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G7-chain-ownership
+    category: iptables_chain_ownership
+    common_mistaken_interpretation: >
+      "The VPC CNI manages all iptables rules on the node. If any iptables
+      chain is broken, the CNI must be reconfigured or restarted."
+    repo_verified_correct_interpretation: >
+      The CNI owns EXACTLY two custom chains: AWS-SNAT-CHAIN-0 (nat/POSTROUTING)
+      and AWS-CONNMARK-CHAIN-0 (nat/PREROUTING). Everything else in iptables
+      is owned by other components:
+      - kube-proxy: KUBE-SERVICES, KUBE-SVC-*, KUBE-SEP-*, KUBE-POSTROUTING, KUBE-MARK-MASQ
+      - Calico: cali-*, felix-*
+      - Network Policy Agent: AWSCNI-NTWK-POLICY-*
+      Mark space is partitioned: CNI=0x80, kube-proxy=0x0000c000, Calico=0xffff0000.
+    required_evidence_to_blame:
+      - "AWS-SNAT-CHAIN-0 or AWS-CONNMARK-CHAIN-0 rules are wrong"
+      - "Issue is specifically with SNAT or connmark behavior"
+    explicit_disqualifiers:
+      - "If KUBE-* chains are broken → kube-proxy issue"
+      - "If cali-* chains are broken → Calico issue"
+      - "If AWSCNI-NTWK-POLICY-* chains are wrong → network policy agent issue"
+    repo_citation:
+      snat_chain: "pkg/networkutils/network.go — buildIptablesSNATRules() creates AWS-SNAT-CHAIN-0"
+      connmark_chain: "pkg/networkutils/network.go — buildIptablesConnmarkRules() creates AWS-CONNMARK-CHAIN-0"
+      mark_comment: "pkg/networkutils/network.go line 121 — 'kube-proxy uses 0x0000c000'"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G8: IPv6 Mode — No SNAT/Connmark
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G8-ipv6-no-snat
+    category: ipv6_mode
+    common_mistaken_interpretation: >
+      "IPv6 mode has the same SNAT and connmark rules as IPv4, just with
+      ip6tables instead of iptables."
+    repo_verified_correct_interpretation: >
+      In IPv6 mode, the CNI creates NO SNAT rules and NO connmark rules.
+      The updateHostIptablesRules() function returns immediately when
+      v6Enabled=true. Traffic enters and exits from the ENI it came from.
+      This is a fundamental architectural difference from IPv4 mode.
+    required_evidence_to_blame:
+      - "N/A — there are no SNAT/connmark rules to blame in IPv6 mode"
+    explicit_disqualifiers:
+      - "If ENABLE_IPv6=true → AWS-SNAT-CHAIN-0 and AWS-CONNMARK-CHAIN-0 should NOT exist"
+      - "If someone reports missing SNAT rules in IPv6 mode → that's expected behavior"
+    repo_citation:
+      early_return: "pkg/networkutils/network.go line 441 — 'if v6Enabled { return nil }'"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G9: Network Policy Enforcing Mode (NOT the same as SGP enforcing mode)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G9-network-policy-enforcing-mode
+    category: network_policy
+    common_mistaken_interpretation: >
+      "NETWORK_POLICY_ENFORCING_MODE=strict is the same as
+      POD_SECURITY_GROUP_ENFORCING_MODE=strict — they both block traffic."
+    repo_verified_correct_interpretation: >
+      These are TWO COMPLETELY DIFFERENT settings. NETWORK_POLICY_ENFORCING_MODE
+      controls Kubernetes NetworkPolicy enforcement via the aws-network-policy-agent
+      (eBPF-based, separate binary). "strict" means default-deny until a
+      NetworkPolicy explicitly allows traffic. POD_SECURITY_GROUP_ENFORCING_MODE
+      controls veth naming for SGP-annotated pods only. They share the word
+      "enforcing" but have zero overlap in code paths.
+    required_evidence_to_blame:
+      - "NETWORK_POLICY_ENFORCING_MODE=strict is set"
+      - "Pod has NO NetworkPolicy allowing its traffic"
+      - "aws-network-policy-agent is running on the node"
+    explicit_disqualifiers:
+      - "If no NetworkPolicy CRDs exist → network policy agent allows all traffic"
+      - "If aws-network-policy-agent is not running → no enforcement happens"
+      - "If pod is on GPU instance, Fargate, Windows, or hostNetwork=true → not supported"
+      - "Do NOT confuse with POD_SECURITY_GROUP_ENFORCING_MODE"
+    repo_citation:
+      env_def: "pkg/ipamd/ipamd.go — envNetworkPolicyEnforcingMode"
+      agent_binary: "Separate binary: aws-network-policy-agent (NOT in VPC CNI repo)"
+      grpc_socket: "/var/run/aws-node/networkpolicy/aws-node.sock"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G10: nm-cloud-setup incompatibility
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G10-nm-cloud-setup
+    category: os_compatibility
+    common_mistaken_interpretation: >
+      "nm-cloud-setup is a normal NetworkManager service that helps with
+      cloud networking. It should be left running."
+    repo_verified_correct_interpretation: >
+      nm-cloud-setup (NetworkManager-cloud-setup) is INCOMPATIBLE with VPC CNI.
+      It creates routing tables 30200 and 30400 that overwrite the ip rules
+      VPC CNI installs for per-ENI policy routing. This breaks pod networking
+      on secondary ENIs. Known to affect RHEL 8 AMIs. Must be disabled.
+    required_evidence_to_blame:
+      - "ip rule list shows rules referencing table 30200 or 30400"
+      - "systemctl status nm-cloud-setup.service shows active"
+      - "Pod networking on secondary ENIs is broken"
+    explicit_disqualifiers:
+      - "If table 30200/30400 not present → nm-cloud-setup is not the issue"
+      - "If only primary ENI pods affected → different issue"
+    repo_citation:
+      known_issue: "README.md — nm-cloud-setup incompatibility documented"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G11: iptables vs nftables mode detection
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G11-iptables-nftables
+    category: os_compatibility
+    common_mistaken_interpretation: >
+      "Missing iptables rules means VPC CNI is broken or not running."
+    repo_verified_correct_interpretation: >
+      If the host OS uses nftables (RHEL 8.x+, Ubuntu 21.x+) but VPC CNI
+      uses iptables-legacy mode, rules created by the CNI are invisible to
+      nft commands and vice versa. In current VPC CNI versions (v1.13.1+),
+      the ENABLE_NFTABLES env var has been REMOVED — the CNI auto-detects
+      iptables mode from kubelet. The env var no longer exists in the codebase.
+      For older versions, manual configuration was required.
+    required_evidence_to_blame:
+      - "iptables-save shows no AWS-SNAT-CHAIN-0 but nft list ruleset does"
+      - "Host OS is nftables-based (check: readlink /usr/sbin/iptables)"
+      - "VPC CNI version < 1.13.1 (older versions lacked auto-detection)"
+    explicit_disqualifiers:
+      - "If iptables-save shows CNI chains → iptables mode is working correctly"
+      - "If VPC CNI >= 1.13.1 → auto-detection should handle this"
+    repo_citation:
+      env_def: "ENABLE_NFTABLES has been REMOVED from pkg/networkutils/network.go — auto-detection replaced it"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G12: IP cooldown period — transient errors are normal
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G12-ip-cooldown-transient
+    category: ip_management
+    common_mistaken_interpretation: >
+      "'IP not in datastore' or 'no available IPs' errors mean IPAMD is
+      broken and needs to be restarted."
+    repo_verified_correct_interpretation: >
+      After pod deletion, VPC CNI holds the IP in a cooldown cache
+      (IP_COOLDOWN_PERIOD, default 30s) before returning it to the warm pool.
+      During this window, transient "IP not in datastore" or "no available IP"
+      messages are NORMAL and self-resolving. The cooldown exists to let
+      kube-proxy finish updating iptables rules for the deleted pod.
+      Additionally, IPAMD has a reconciliation cooldown cache (60s) and
+      insufficient CIDR cooldown (120s) that cause temporary pauses.
+    required_evidence_to_blame:
+      - "Errors persist for > 2 minutes (beyond all cooldown windows)"
+      - "ipamd logs show repeated failures, not just transient messages"
+      - "New pods stuck in ContainerCreating for > 5 minutes"
+    explicit_disqualifiers:
+      - "If errors last < 30 seconds → normal cooldown behavior"
+      - "If errors last 30-120 seconds → may be reconciliation cooldown"
+      - "Do NOT restart aws-node for transient cooldown messages"
+    repo_citation:
+      cooldown: "cmd/aws-vpc-cni/main.go — envIPCooldownPeriod default 30"
+      reconcile_cache: "pkg/ipamd/ipamd.go — reconcileCooldownCache 60s"
+      insufficient_cidr: "pkg/ipamd/ipamd.go — insufficientCIDRCooldown 120s"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G13: Warm pool over-provisioning → EC2 API throttling
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G13-warm-pool-ec2-throttling
+    category: ip_management
+    common_mistaken_interpretation: >
+      "Setting high WARM_IP_TARGET or WARM_ENI_TARGET values ensures pods
+      always get IPs quickly with no downside."
+    repo_verified_correct_interpretation: >
+      High warm pool targets cause frequent EC2 API calls (CreateNetworkInterface,
+      AssignPrivateIpAddresses, AttachNetworkInterface). EC2 API throttling is
+      per-account per-region, so aggressive warm pool settings on many nodes
+      can exhaust the API quota for ALL instances in the account. This prevents
+      new ENIs/IPs from being attached to ANY node. Default WARM_ENI_TARGET=1
+      is recommended for most clusters. WARM_IP_TARGET takes precedence over
+      WARM_ENI_TARGET. WARM_PREFIX_TARGET is overridden by WARM_IP_TARGET.
+    required_evidence_to_blame:
+      - "ipamd logs show 'Client.RequestLimitExceeded' or 'Throttling' errors"
+      - "Multiple nodes simultaneously failing to attach ENIs"
+      - "WARM_IP_TARGET or WARM_ENI_TARGET set to high values"
+    explicit_disqualifiers:
+      - "If only one node affected → likely not throttling (check ENI limits)"
+      - "If ipamd logs show 'InsufficientCidrBlocks' → subnet exhaustion, not throttling"
+    repo_citation:
+      warm_check: "pkg/ipamd/ipamd.go — nodeIPPoolReconcile() every 60s"
+      pool_monitor: "pkg/ipamd/ipamd.go — ipPoolMonitorInterval/2 = 2.5s"
+      precedence: "pkg/ipamd/ipamd.go — WARM_IP_TARGET overrides WARM_ENI_TARGET"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G14: iptables FORWARD policy must be ACCEPT
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G14-forward-policy-accept
+    category: os_compatibility
+    common_mistaken_interpretation: >
+      "iptables FORWARD DROP is a security best practice and should be
+      kept on EKS nodes."
+    repo_verified_correct_interpretation: >
+      VPC CNI requires iptables FORWARD policy to be ACCEPT. Pod-to-pod
+      traffic traverses the FORWARD chain via veth pairs. Custom AMIs
+      often set FORWARD to DROP as a hardening measure, which breaks all
+      pod networking. The EKS-optimized AMI sets FORWARD ACCEPT by default.
+      Fix: add "ExecStartPre=/sbin/iptables -P FORWARD ACCEPT" to kubelet.service.
+    required_evidence_to_blame:
+      - "iptables -L FORWARD shows policy DROP"
+      - "Pod-to-pod traffic fails on the node"
+      - "Custom AMI is being used"
+    explicit_disqualifiers:
+      - "If FORWARD policy is ACCEPT → this is not the issue"
+      - "If using EKS-optimized AMI → FORWARD is already ACCEPT"
+    repo_citation:
+      init_container: "cmd/aws-vpc-cni-init/main.go — sets FORWARD ACCEPT"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G15: systemd-udev MACAddressPolicy (Ubuntu 22.04+)
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G15-macaddress-policy
+    category: os_compatibility
+    common_mistaken_interpretation: >
+      "MACAddressPolicy=persistent is a standard systemd setting and
+      should not affect container networking."
+    repo_verified_correct_interpretation: >
+      On Ubuntu 22.04+ and other systemd-based distros, MACAddressPolicy=persistent
+      in /usr/lib/systemd/network/99-default.link can change the MAC address of
+      host-side veth interfaces after they are moved to the host namespace. This
+      breaks the static ARP entry inside pods (169.254.1.1 → original MAC).
+      Fix: set MACAddressPolicy=none in the link file.
+    required_evidence_to_blame:
+      - "Ubuntu 22.04+ or similar systemd-based distro"
+      - "Pod networking intermittently fails after veth creation"
+      - "ARP table inside pod shows stale MAC for 169.254.1.1"
+    explicit_disqualifiers:
+      - "If Amazon Linux 2/2023 → this issue does not apply"
+      - "If MACAddressPolicy=none already set → not the issue"
+    repo_citation:
+      known_issue: "README.md — MACAddressPolicy documented as known issue"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G16: Conntrack table exhaustion vs kube-proxy failure
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G16-conntrack-exhaustion
+    category: conntrack
+    common_mistaken_interpretation: >
+      "'nf_conntrack: table full' means kube-proxy is broken or VPC CNI
+      is misconfigured."
+    repo_verified_correct_interpretation: >
+      Conntrack table exhaustion is a kernel resource issue, not a kube-proxy
+      or CNI bug. Each connection (TCP, UDP, ICMP) consumes a conntrack entry
+      (~300 bytes). High-traffic nodes (ingress controllers, load balancers)
+      exhaust the table first. Fix: increase nf_conntrack_max via kube-proxy
+      conntrack.min/conntrack.maxPerCore settings. The CNI's connmark (0x80)
+      and kube-proxy's mark (0x4000) both create conntrack entries but are
+      independent systems.
+    required_evidence_to_blame:
+      - "dmesg shows 'nf_conntrack: table full, dropping packet'"
+      - "sysctl net.netfilter.nf_conntrack_count near nf_conntrack_max"
+      - "High connection rate on the node"
+    explicit_disqualifiers:
+      - "If conntrack table is not full → different issue"
+      - "Do NOT blame VPC CNI configuration for conntrack exhaustion"
+      - "Do NOT blame kube-proxy binary for conntrack exhaustion"
+    repo_citation:
+      connmark: "pkg/networkutils/network.go — defaultConnmark = 0x80"
+      kp_mark: "pkg/networkutils/network.go line 121 — kube-proxy 0x0000c000"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G17: kube-proxy version skew
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G17-kube-proxy-version-skew
+    category: kube_proxy
+    common_mistaken_interpretation: >
+      "kube-proxy version doesn't matter as long as it's running."
+    repo_verified_correct_interpretation: >
+      kube-proxy must be within 1 minor version of the cluster control plane.
+      Version skew beyond this can cause service routing failures due to API
+      incompatibilities. After cluster upgrade, the kube-proxy add-on must be
+      updated to match. kube-proxy is NOT part of VPC CNI — it's a separate
+      Kubernetes component managed as an EKS add-on.
+    required_evidence_to_blame:
+      - "kube-proxy version is > 1 minor version behind control plane"
+      - "Service routing failures after cluster upgrade"
+    explicit_disqualifiers:
+      - "If kube-proxy version matches control plane → not a skew issue"
+      - "Do NOT blame VPC CNI for kube-proxy version skew"
+    repo_citation:
+      not_in_cni: "kube-proxy is NOT part of the VPC CNI codebase"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G18: kube-proxy static stability during API server outage
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G18-kube-proxy-static-stability
+    category: kube_proxy
+    common_mistaken_interpretation: >
+      "If kube-proxy can't reach the API server, all service routing breaks."
+    repo_verified_correct_interpretation: >
+      kube-proxy has static stability — during API server disconnections,
+      existing iptables/IPVS rules continue to function. In-cluster service
+      routing remains available. kube-proxy pods continue running. Only NEW
+      services/endpoints will not be reflected until API server connectivity
+      is restored. Do NOT restart kube-proxy during API server outages.
+    required_evidence_to_blame:
+      - "New services created after API server disconnect are unreachable"
+      - "kube-proxy logs show API server connection errors"
+    explicit_disqualifiers:
+      - "If existing services work → static stability is functioning correctly"
+      - "Do NOT restart kube-proxy during API server outages"
+    repo_citation:
+      not_in_cni: "kube-proxy static stability is a Kubernetes feature, not VPC CNI"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G19: kube-proxy IPVS mode — missing iptables chains are expected
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G19-kube-proxy-ipvs
+    category: kube_proxy
+    common_mistaken_interpretation: >
+      "Missing KUBE-SVC-* iptables chains means kube-proxy is broken."
+    repo_verified_correct_interpretation: >
+      In IPVS mode, kube-proxy uses kernel IPVS hash tables instead of
+      iptables chains for service routing. KUBE-SVC-* and KUBE-SEP-* chains
+      will NOT exist — this is EXPECTED. Validate with "ipvsadm -L" instead
+      of iptables-save. KUBE-SERVICES chain may still exist as a fallback
+      but will have minimal rules. Required kernel modules: ip_vs, ip_vs_rr,
+      ip_vs_wrr, ip_vs_sh, nf_conntrack.
+    required_evidence_to_blame:
+      - "kube-proxy is in IPVS mode AND ipvsadm -L shows no entries"
+      - "Required kernel modules are not loaded"
+    explicit_disqualifiers:
+      - "If kube-proxy is in IPVS mode → missing KUBE-SVC chains is NORMAL"
+      - "Do NOT flag missing iptables chains as broken in IPVS mode"
+    repo_citation:
+      not_in_cni: "kube-proxy IPVS mode is a Kubernetes feature, not VPC CNI"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G20: DISABLE_NETWORK_RESOURCE_PROVISIONING — does NOT break networking
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G20-disable-network-resource-provisioning
+    category: ip_management
+    common_mistaken_interpretation: >
+      "DISABLE_NETWORK_RESOURCE_PROVISIONING=true disables all networking
+      on the node, breaking pod connectivity."
+    repo_verified_correct_interpretation: >
+      This setting only disables ENI provisioning during pod initialization.
+      It's used when an external controller (like VPC Resource Controller)
+      manages ENI lifecycle. Existing pod networking is UNAFFECTED. The name
+      is misleading — it disables resource PROVISIONING, not networking itself.
+    required_evidence_to_blame:
+      - "New pods cannot get IPs AND no external controller is managing ENIs"
+    explicit_disqualifiers:
+      - "If existing pods work fine → this setting is not breaking networking"
+      - "If an external ENI controller is running → this is expected configuration"
+    repo_citation:
+      env_def: "pkg/ipamd/ipamd.go — envDisableNetworkResourceProvisioning"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G21: WARM_IP_TARGET confused with max pods limit
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G21-warm-ip-vs-max-pods
+    category: ip_management
+    common_mistaken_interpretation: >
+      "WARM_IP_TARGET limits the maximum number of pods on the node."
+    repo_verified_correct_interpretation: >
+      WARM_IP_TARGET controls how many FREE IPs to keep in the warm pool —
+      it does NOT limit max pods. Max pods is determined by the kubelet
+      --max-pods flag (set by the EKS bootstrap script based on instance
+      type ENI/IP limits). IPAMD checks: if totalIPs >= maxPods, pool is
+      NOT low (prevents over-allocation). But WARM_IP_TARGET itself is
+      purely about pre-allocation speed, not capacity limits.
+    required_evidence_to_blame:
+      - "Pods stuck in ContainerCreating with 'no available IPs'"
+      - "WARM_IP_TARGET is set too low for pod churn rate"
+    explicit_disqualifiers:
+      - "If max pods limit reached → that's kubelet --max-pods, not WARM_IP_TARGET"
+      - "WARM_IP_TARGET does NOT cap the number of running pods"
+    repo_citation:
+      max_pods_check: "pkg/ipamd/ipamd.go — if totalIPs >= maxPods, pool not low"
+      warm_target: "pkg/ipamd/ipamd.go — getWarmIPTarget()"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G22: AWS_VPC_ENI_MTU vs POD_MTU — two different settings
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G22-eni-mtu-vs-pod-mtu
+    category: mtu
+    common_mistaken_interpretation: >
+      "AWS_VPC_ENI_MTU controls the MTU inside pods."
+    repo_verified_correct_interpretation: >
+      AWS_VPC_ENI_MTU (default 9001) controls the MTU of ENI interfaces on
+      the host (eth0, eth1, etc.). POD_MTU (default 0 = use ENI MTU) controls
+      the MTU of veth interfaces inside pods. They are set in different places:
+      AWS_VPC_ENI_MTU in pkg/networkutils/network.go, POD_MTU in
+      cmd/aws-vpc-cni/main.go written into 10-aws.conflist. If POD_MTU=0,
+      pods inherit the ENI MTU value.
+    required_evidence_to_blame:
+      - "MTU mismatch between host ENI and pod veth"
+      - "Packet fragmentation or PMTUD failures"
+    explicit_disqualifiers:
+      - "If POD_MTU=0 → pods use ENI MTU, no mismatch possible"
+      - "Do NOT confuse AWS_VPC_ENI_MTU with POD_MTU"
+    repo_citation:
+      eni_mtu: "pkg/networkutils/network.go — GetEthernetMTU()"
+      pod_mtu: "cmd/aws-vpc-cni/main.go — envPodMTU"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G23: Empty per-ENI route table is normal with multiple ENIs
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G23-empty-route-table-multi-eni
+    category: routing
+    common_mistaken_interpretation: >
+      "An empty or minimal main route table means routing is broken."
+    repo_verified_correct_interpretation: >
+      On multi-ENI EKS nodes, the main route table may appear empty or have
+      no default gateway. This is NORMAL. VPC CNI creates per-ENI route tables
+      (table 2 for eth1, table 3 for eth2, etc.) with policy routing rules
+      (ip rule from <pod-ip> lookup <table>). Pod traffic uses these per-ENI
+      tables, not the main table. The main table is only used for host traffic.
+    required_evidence_to_blame:
+      - "ip rule list shows NO per-ENI rules (missing 'from <ip> lookup <table>')"
+      - "Per-ENI route tables are actually empty (ip route show table 2)"
+    explicit_disqualifiers:
+      - "If per-ENI route tables exist and have routes → routing is working"
+      - "Do NOT flag empty main route table as broken on multi-ENI nodes"
+    repo_citation:
+      setup_eni: "pkg/networkutils/network.go — SetupENINetwork()"
+      rule_priority: "pkg/networkutils/network.go — toContainerRulePriority=512, fromContainerRulePriority=1536"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G24: IPv6 egress plugin — separate from main CNI SNAT
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G24-ipv6-egress-plugin
+    category: egress
+    common_mistaken_interpretation: >
+      "ENABLE_V6_EGRESS changes the main CNI SNAT behavior."
+    repo_verified_correct_interpretation: >
+      The egress-v6 plugin is a SEPARATE CNI plugin in the conflist chain.
+      It creates per-pod SNAT chains (CNI-E6-<containerID>) for IPv6 egress
+      on IPv4 clusters. It does NOT modify AWS-SNAT-CHAIN-0 or any main CNI
+      chains. The egress plugin has its own randomizeSNAT setting and its own
+      iptables rules in ip6tables (not iptables).
+    required_evidence_to_blame:
+      - "ENABLE_V6_EGRESS=true AND IPv6 egress traffic fails"
+      - "ip6tables shows missing CNI-E6-* chains"
+    explicit_disqualifiers:
+      - "If IPv4 SNAT is broken → not related to egress-v6 plugin"
+      - "If ENABLE_V6_EGRESS=false → egress plugin is not involved"
+    repo_citation:
+      plugin: "cmd/egress-cni-plugin/main.go"
+      chains: "cmd/egress-cni-plugin/snat/snat.go — CNI-E6 and CNI-E4 chains"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G25: ENABLE_BANDWIDTH_PLUGIN — only affects annotated pods
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G25-bandwidth-plugin
+    category: traffic_shaping
+    common_mistaken_interpretation: >
+      "ENABLE_BANDWIDTH_PLUGIN=true applies traffic shaping to all pods."
+    repo_verified_correct_interpretation: >
+      The bandwidth plugin only affects pods with kubernetes.io/ingress-bandwidth
+      or kubernetes.io/egress-bandwidth annotations. Unannotated pods are
+      completely unaffected. The plugin is added to the CNI conflist chain
+      but is a no-op for pods without bandwidth annotations.
+    required_evidence_to_blame:
+      - "Pod has bandwidth annotations AND traffic shaping is wrong"
+    explicit_disqualifiers:
+      - "If pod has no bandwidth annotations → bandwidth plugin is not involved"
+    repo_citation:
+      conflist: "cmd/aws-vpc-cni/main.go — envEnBandwidthPlugin"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G26: Non-schedulable node ENI management
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G26-non-schedulable-eni
+    category: node_lifecycle
+    common_mistaken_interpretation: >
+      "Cordoned nodes should still have all ENIs attached for existing pods."
+    repo_verified_correct_interpretation: >
+      By default (AWS_MANAGE_ENIS_NON_SCHEDULABLE=false), IPAMD does NOT
+      manage ENIs on cordoned/non-schedulable nodes. This means warm pool
+      maintenance stops — no new ENIs attached, no excess ENIs removed.
+      Existing pod IPs remain functional. The non-schedulable check is a
+      real-time K8s API call, not cached. Set to true if you need ENI
+      management to continue during node drain operations.
+    required_evidence_to_blame:
+      - "Node is cordoned AND new pods can't get IPs on it"
+      - "AWS_MANAGE_ENIS_NON_SCHEDULABLE=false (default)"
+    explicit_disqualifiers:
+      - "If node is schedulable → this setting is irrelevant"
+      - "If existing pods work fine on cordoned node → expected behavior"
+    repo_citation:
+      env_def: "pkg/ipamd/ipamd.go — envManageENIsNonSchedulable"
+      api_check: "pkg/ipamd/ipamd.go — isNodeNonSchedulable() real-time K8s API call"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G27: ENABLE_IMDS_ONLY_MODE — does NOT disable networking
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G27-imds-only-mode
+    category: ip_management
+    common_mistaken_interpretation: >
+      "ENABLE_IMDS_ONLY_MODE=true disables networking or breaks ENI management."
+    repo_verified_correct_interpretation: >
+      ENABLE_IMDS_ONLY_MODE=true only skips EC2 API calls (DescribeNetworkInterfaces)
+      and uses IMDS metadata exclusively for ENI discovery. It implicitly disables
+      ENI provisioning and leaked ENI cleanup (since those require EC2 API). Existing
+      pod networking is UNAFFECTED. Used in environments with restricted EC2 API access.
+    required_evidence_to_blame:
+      - "ENABLE_IMDS_ONLY_MODE=true AND new pods cannot get IPs"
+      - "ipamd logs show IMDS-related errors"
+    explicit_disqualifiers:
+      - "If existing pods work fine → IMDS-only mode is not breaking networking"
+      - "If EC2 API calls are succeeding → IMDS-only mode is not active"
+    repo_citation:
+      env_def: "utils/constants.go — EnvEnableImdsOnlyMode"
+      usage: "pkg/ipamd/ipamd.go — enableImdsOnlyMode() → disableENIProvisioning()"
+      ec2_skip: "pkg/awsutils/awsutils.go — 'skipping EC2 API call and using IMDS metadata only'"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # G28: ENABLE_V4_EGRESS vs ENABLE_V6_EGRESS — different cluster modes
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: G28-v4-v6-egress-confusion
+    category: egress
+    common_mistaken_interpretation: >
+      "ENABLE_V4_EGRESS and ENABLE_V6_EGRESS are the same thing or can be
+      used interchangeably."
+    repo_verified_correct_interpretation: >
+      These are for OPPOSITE cluster modes. ENABLE_V6_EGRESS=true enables
+      IPv6 egress on IPv4 clusters (egress-v6 plugin, ip6tables CNI-E6-* chains).
+      ENABLE_V4_EGRESS=true (default) enables IPv4 egress on IPv6 clusters
+      (egress-v4 plugin, iptables CNI-E4-* chains, 169.254.172.0/22 IPAM).
+      Using the wrong one for your cluster mode has no effect.
+    required_evidence_to_blame:
+      - "Egress traffic in the non-native IP family fails"
+      - "Correct egress env var for cluster mode is set"
+    explicit_disqualifiers:
+      - "If cluster is IPv4 → ENABLE_V4_EGRESS is irrelevant (it's for IPv6 clusters)"
+      - "If cluster is IPv6 → ENABLE_V6_EGRESS is irrelevant (it's for IPv4 clusters)"
+      - "Do NOT confuse which egress var applies to which cluster mode"
+    repo_citation:
+      v4_egress: "cmd/aws-vpc-cni/main.go — envEnIPv4Egress, default true"
+      v6_egress: "cmd/aws-vpc-cni/main.go — envEnIPv6Egress"
+      v4_chains: "cmd/egress-cni-plugin/snat/snat.go — CNI-E4-<containerID>"
+      v6_chains: "cmd/egress-cni-plugin/snat/snat.go — CNI-E6-<containerID>"

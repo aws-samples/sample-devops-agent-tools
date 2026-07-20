@@ -1,0 +1,674 @@
+# =============================================================================
+# VPC CNI Semantics Index
+# Source of truth: amazon-vpc-cni-k8s (github.com/aws/amazon-vpc-cni-k8s)
+# Generated from repo scan — DO NOT edit manually without re-verifying against repo
+# =============================================================================
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 1: IPAMD Environment Variables (pkg/ipamd/ipamd.go)
+# These are read by the aws-k8s-agent binary (IPAMD daemon)
+# ─────────────────────────────────────────────────────────────────────────────
+
+- key_name: WARM_IP_TARGET
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "getWarmIPTarget() — os.LookupEnv"
+  default_value: "0 (disabled — WARM_ENI_TARGET takes precedence)"
+  semantic_summary: >
+    Number of free IPs to keep available in the warm pool. When set, overrides
+    WARM_ENI_TARGET. IPAMD allocates/deallocates IPs to maintain this target.
+    With prefix delegation, maintains warmth at /28 prefix granularity.
+  preconditions:
+    - "Must be a positive integer"
+    - "Overrides WARM_ENI_TARGET when set"
+  observable_signals:
+    - "ipamd logs: 'Warm IP target' messages"
+    - "aws-node metrics: awscni_warm_ip_target"
+  non_effects:
+    - "Does NOT affect pod networking or routing"
+    - "Does NOT affect iptables rules"
+    - "Does NOT affect security groups"
+
+- key_name: MINIMUM_IP_TARGET
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "getMinimumIPTarget() — os.LookupEnv"
+  default_value: "0 (disabled)"
+  semantic_summary: >
+    Floor for total IPs on node. IPAMD allocates max(WARM_IP_TARGET, MINIMUM_IP_TARGET - assigned).
+    Ensures a minimum number of IPs are always available regardless of current pod count.
+  preconditions:
+    - "Must be a positive integer"
+  observable_signals:
+    - "ipamd logs: 'Minimum IP target' messages"
+  non_effects:
+    - "Does NOT affect pod networking or routing"
+
+- key_name: WARM_ENI_TARGET
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "getWarmENITarget() — os.LookupEnv"
+  default_value: "1"
+  semantic_summary: >
+    Number of full ENIs worth of IPs to keep available. Default 1 means one
+    entire ENI's worth of IPs are pre-allocated. Overridden by WARM_IP_TARGET if set.
+  preconditions:
+    - "Must be a non-negative integer"
+    - "Ignored if WARM_IP_TARGET is set"
+  observable_signals:
+    - "ipamd logs: 'Warm ENI target' messages"
+    - "EC2 console: number of ENIs attached to instance"
+  non_effects:
+    - "Does NOT affect pod networking or routing"
+
+- key_name: MAX_ENI
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "getMaxENI() — os.LookupEnv"
+  default_value: "-1 (use instance type limit)"
+  semantic_summary: >
+    Maximum number of ENIs IPAMD will attach. -1 means use the instance type's
+    maximum. Capped by instance type limit regardless of setting.
+  preconditions:
+    - "Must be >= 1 or -1"
+  observable_signals:
+    - "ipamd logs: 'Max ENI' messages"
+  non_effects:
+    - "Does NOT affect routing or iptables"
+
+- key_name: ENABLE_PREFIX_DELEGATION
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "usePrefixDelegation() — utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    Allocates /28 IPv4 prefixes (16 IPs each) instead of individual secondary IPs.
+    Dramatically increases max pods per node. Requires Nitro instances.
+    With PD enabled, warm pool targets are converted to prefix granularity.
+  preconditions:
+    - "Nitro instance type required"
+    - "WARM_PREFIX_TARGET or WARM_IP_TARGET or MINIMUM_IP_TARGET must be set > 0"
+    - "Required for IPv6 mode"
+  observable_signals:
+    - "ipamd logs: 'Prefix delegation enabled'"
+    - "EC2 console: /28 prefixes on ENIs instead of individual IPs"
+    - "ip addr show: pod IPs from /28 ranges"
+  non_effects:
+    - "Does NOT change iptables rules"
+    - "Does NOT affect SNAT behavior"
+    - "Does NOT affect security groups"
+
+- key_name: WARM_PREFIX_TARGET
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "getWarmPrefixTarget() — os.LookupEnv"
+  default_value: "0"
+  semantic_summary: >
+    Number of /28 prefixes to keep in warm pool. Only applies when
+    ENABLE_PREFIX_DELEGATION=true. Overridden by WARM_IP_TARGET if both set.
+  preconditions:
+    - "ENABLE_PREFIX_DELEGATION must be true"
+  observable_signals:
+    - "ipamd logs: 'Warm prefix target'"
+  non_effects:
+    - "Does NOT affect routing or iptables"
+
+- key_name: ENABLE_POD_ENI
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "tryEnableSecurityGroupsForPods() — utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    Enables Security Groups for Pods (SGP). Attaches a trunk ENI to the node,
+    allowing branch ENIs to be created for pods with SecurityGroupPolicy CRD.
+    ONLY pods with vpc.amazonaws.com/pod-eni annotation get branch ENIs.
+    Unannotated pods are COMPLETELY UNAFFECTED.
+  preconditions:
+    - "Instance type must support trunk ENI (Nitro instances)"
+    - "SecurityGroupPolicy CRD must be installed"
+    - "VPC Resource Controller must be running in the cluster"
+    - "DISABLE_TCP_EARLY_DEMUX should be true for kubelet probes to work"
+  observable_signals:
+    - "ipamd logs: 'Trunk ENI attached'"
+    - "EC2 console: trunk ENI visible on instance"
+    - "Pod annotations: vpc.amazonaws.com/pod-eni present on SGP pods"
+  non_effects:
+    - "Does NOT affect pods without vpc.amazonaws.com/pod-eni annotation"
+    - "Does NOT create any default-deny behavior"
+    - "Does NOT change iptables rules for normal pods"
+    - "Does NOT affect kube-proxy or service routing"
+
+- key_name: AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "nodeInit() — utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    Enables custom networking via ENIConfig CRD. Secondary ENIs use subnet and
+    security groups from ENIConfig instead of primary ENI's. Pods get IPs from
+    the ENIConfig-specified subnet.
+  preconditions:
+    - "ENIConfig CRD must be created for each AZ/node"
+    - "Node must have label or annotation matching ENIConfig name"
+  observable_signals:
+    - "ipamd logs: 'Custom networking enabled'"
+    - "Pod IPs from different subnet than node primary IP"
+  non_effects:
+    - "Does NOT affect iptables SNAT rules (those use VPC CIDRs)"
+    - "Does NOT affect kube-proxy"
+
+- key_name: ENABLE_SUBNET_DISCOVERY
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "utils.GetBoolAsStringEnvVar"
+  default_value: "true"
+  semantic_summary: >
+    Enables enhanced subnet selection when creating ENIs. IPAMD discovers
+    subnets with available IPs instead of using only the primary ENI's subnet.
+  preconditions: []
+  observable_signals:
+    - "ipamd logs: subnet discovery messages"
+  non_effects:
+    - "Does NOT affect routing or iptables"
+
+- key_name: DISABLE_NETWORK_RESOURCE_PROVISIONING
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    Disables ENI provisioning during pod initialization. Used when an external
+    controller manages ENI lifecycle.
+  preconditions: []
+  observable_signals:
+    - "ipamd logs: 'Network resource provisioning disabled'"
+  non_effects:
+    - "Does NOT affect existing pod networking"
+
+- key_name: DISABLE_LEAKED_ENI_CLEANUP
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    Disables the background task that cleans up leaked ENIs (ENIs attached
+    to the instance but not tracked by IPAMD).
+  preconditions: []
+  observable_signals:
+    - "ipamd logs: 'Leaked ENI cleanup disabled'"
+  non_effects:
+    - "Does NOT affect pod networking"
+
+- key_name: AWS_MANAGE_ENIS_NON_SCHEDULABLE
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    Controls whether IPAMD allocates/deallocates ENIs on non-schedulable
+    (cordoned) nodes. Default false means ENIs are not managed on cordoned nodes.
+  preconditions: []
+  observable_signals:
+    - "ipamd logs: ENI management messages on cordoned nodes"
+  non_effects:
+    - "Does NOT affect pod networking on schedulable nodes"
+
+- key_name: ANNOTATE_POD_IP
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    When true, IPAMD annotates pods with their allocated IP address
+    (vpc.amazonaws.com/pod-ips). Helps with IP tracking and debugging.
+  preconditions: []
+  observable_signals:
+    - "Pod annotations: vpc.amazonaws.com/pod-ips"
+  non_effects:
+    - "Does NOT affect networking behavior"
+
+- key_name: NETWORK_POLICY_ENFORCING_MODE
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "os.LookupEnv"
+  default_value: '""'
+  semantic_summary: >
+    Controls network policy enforcement mode. Passed to the CNI plugin
+    to coordinate with the network policy agent.
+  preconditions:
+    - "Network policy agent must be running (separate container in aws-node)"
+  observable_signals:
+    - "network-policy-agent logs"
+    - "/var/log/aws-routed-eni/network-policy-agent.log"
+  non_effects:
+    - "Does NOT affect pods without NetworkPolicy applied"
+    - "Does NOT affect SNAT or service routing"
+
+- key_name: ENABLE_IPv4
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "utils.GetBoolAsStringEnvVar"
+  default_value: "true"
+  semantic_summary: "Enables IPv4 mode. Default and most common mode."
+  preconditions: []
+  observable_signals:
+    - "Pod IPs are IPv4 addresses"
+  non_effects: []
+
+- key_name: ENABLE_IPv6
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    Enables IPv6 mode. Requires prefix delegation. No SNAT rules in IPv6 mode.
+    Mutually exclusive with IPv4 in current implementation.
+  preconditions:
+    - "ENABLE_PREFIX_DELEGATION must be true"
+    - "VPC must have IPv6 CIDR"
+  observable_signals:
+    - "Pod IPs are IPv6 addresses"
+    - "No AWS-SNAT-CHAIN rules in iptables"
+  non_effects:
+    - "No SNAT rules created"
+    - "No connmark rules created"
+
+- key_name: MANAGE_UNTAGGED_ENI
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "utils.GetBoolAsStringEnvVar"
+  default_value: "true"
+  semantic_summary: >
+    Controls whether IPAMD manages ENIs that don't have the
+    node.k8s.amazonaws.com/instance_id tag.
+  preconditions: []
+  observable_signals:
+    - "ipamd logs: untagged ENI management messages"
+  non_effects:
+    - "Does NOT affect pod networking"
+
+- key_name: ENABLE_MULTI_NIC
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    Enables multi-NIC support. Configures ENIs on network cards > 0
+    for pods requiring multi-NIC attachments.
+  preconditions:
+    - "Instance type must support multiple network cards"
+  observable_signals:
+    - "Multiple network cards visible in EC2 console"
+  non_effects:
+    - "Does NOT affect single-NIC pod networking"
+
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 2: Network Utils Environment Variables (pkg/networkutils/network.go)
+# These control iptables rules, SNAT, connmark, MTU, and veth configuration
+# ─────────────────────────────────────────────────────────────────────────────
+
+- key_name: AWS_VPC_K8S_CNI_EXTERNALSNAT
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "useExternalSNAT() — os.Getenv"
+  default_value: "false"
+  semantic_summary: >
+    When true, disables the CNI's built-in SNAT rules (AWS-SNAT-CHAIN-0) and
+    off-VPC ip rules. Used when an external NAT gateway handles SNAT for
+    secondary ENI IPs. Does NOT affect kube-proxy or service routing.
+  preconditions:
+    - "External NAT gateway must be configured in VPC"
+    - "Route tables must route 0.0.0.0/0 to NAT gateway"
+  observable_signals:
+    - "iptables -t nat -L: AWS-SNAT-CHAIN-0 absent or empty"
+    - "ipamd logs: 'External SNAT enabled'"
+  non_effects:
+    - "Does NOT affect kube-proxy KUBE-SERVICES chain"
+    - "Does NOT affect pod-to-pod traffic within VPC"
+    - "Does NOT affect security groups"
+    - "Does NOT affect service routing (DNAT)"
+
+- key_name: AWS_VPC_K8S_CNI_EXCLUDE_SNAT_CIDRS
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "parseCIDRString(envExcludeSNATCIDRs)"
+  default_value: '""'
+  semantic_summary: >
+    Comma-separated list of IPv4 CIDRs to exclude from SNAT. Adds iptables
+    rules in AWS-SNAT-CHAIN-0 to skip SNAT for traffic to these CIDRs.
+    Used for VPN, DirectConnect, or peered VPC traffic.
+  preconditions:
+    - "AWS_VPC_K8S_CNI_EXTERNALSNAT must be false (otherwise no SNAT chain exists)"
+  observable_signals:
+    - "iptables -t nat -L AWS-SNAT-CHAIN-0: exclusion rules for specified CIDRs"
+  non_effects:
+    - "Does NOT affect kube-proxy rules"
+    - "Does NOT affect pod-to-pod traffic"
+
+- key_name: AWS_EXTERNAL_SERVICE_CIDRS
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "parseCIDRString(envExternalServiceCIDRs)"
+  default_value: '""'
+  semantic_summary: >
+    Comma-separated list of IPv4 CIDRs that require routing lookup in the
+    main routing table. An ip rule is created for each CIDR at priority 1535.
+  preconditions: []
+  observable_signals:
+    - "ip rule list: rules at priority 1535 for specified CIDRs"
+  non_effects:
+    - "Does NOT affect iptables rules"
+
+- key_name: AWS_VPC_K8S_CNI_RANDOMIZESNAT
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "typeOfSNAT() — os.Getenv"
+  default_value: '"prng"'
+  semantic_summary: >
+    Controls SNAT port randomization. "hashrandom" adds --random flag,
+    "prng" adds --random-fully flag, anything else uses sequential.
+    Only affects the MASQUERADE rule in AWS-SNAT-CHAIN-0.
+  preconditions:
+    - "AWS_VPC_K8S_CNI_EXTERNALSNAT must be false"
+  observable_signals:
+    - "iptables -t nat -L AWS-SNAT-CHAIN-0: --random or --random-fully on MASQUERADE"
+  non_effects:
+    - "Does NOT affect kube-proxy SNAT"
+    - "Does NOT affect service routing"
+
+- key_name: AWS_VPC_CNI_NODE_PORT_SUPPORT
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "nodePortSupportEnabled() — os.Getenv"
+  default_value: "true"
+  semantic_summary: >
+    Enables NodePort support by loosening RPF check and adding connmark
+    rules. Required for NodePort traffic to reach pods on secondary ENIs.
+  preconditions: []
+  observable_signals:
+    - "sysctl net.ipv4.conf.eth0.rp_filter = 2 (loose mode)"
+    - "iptables -t nat -L AWS-CONNMARK-CHAIN-0: connmark rules present"
+  non_effects:
+    - "Does NOT affect ClusterIP service routing (that's kube-proxy)"
+
+- key_name: AWS_VPC_K8S_CNI_CONNMARK
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "getConnmark() — os.Getenv"
+  default_value: "0x80"
+  semantic_summary: >
+    Connection mark used to mark traffic from primary ENI so return traffic
+    is forced out the same interface. Needed for NodePort DNAT + source-based
+    routing to work together. Mark space: CNI=0x80, kube-proxy=0x0000c000,
+    Calico=0xffff0000.
+  preconditions: []
+  observable_signals:
+    - "iptables -t nat -L AWS-CONNMARK-CHAIN-0: CONNMARK rules with 0x80"
+    - "conntrack -L: entries with mark 0x80"
+  non_effects:
+    - "Does NOT affect kube-proxy's mark (0x0000c000)"
+    - "Does NOT affect Calico marks"
+
+- key_name: AWS_VPC_ENI_MTU
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "GetEthernetMTU() — os.Getenv"
+  default_value: "9001"
+  semantic_summary: >
+    MTU for ENI interfaces. Range 576-9001 for IPv4, 1280-9001 for IPv6.
+    Applied to all ENIs attached by IPAMD.
+  preconditions: []
+  observable_signals:
+    - "ip link show eth0: mtu value"
+  non_effects:
+    - "Does NOT affect pod veth MTU (that's POD_MTU)"
+
+- key_name: AWS_VPC_K8S_CNI_VETHPREFIX
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "getVethPrefixName() — os.Getenv"
+  default_value: '"eni"'
+  semantic_summary: >
+    Prefix for host-side veth device names. Default "eni" creates devices
+    like "eni1234abcd". In SGP strict mode, branch ENI pods use "vlan"
+    prefix instead (hardcoded in pkg/sgpp/utils.go).
+  preconditions: []
+  observable_signals:
+    - "ip link show: veth devices with specified prefix"
+  non_effects:
+    - "Does NOT affect routing or iptables rules"
+
+- key_name: ENABLE_V6_EGRESS
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "ipV6EgressEnabled() — os.Getenv"
+  default_value: "false"
+  semantic_summary: >
+    Enables IPv6 egress support on IPv4 clusters. Configures egress-v6
+    plugin for IPv6 outbound traffic.
+  preconditions:
+    - "Cluster must be IPv4 mode"
+    - "VPC must have IPv6 CIDR"
+  observable_signals:
+    - "egress-v6 plugin configuration in 10-aws.conflist"
+  non_effects:
+    - "Does NOT affect IPv4 SNAT rules"
+
+- key_name: ENABLE_V4_EGRESS
+  source_file_path: cmd/aws-vpc-cni/main.go
+  parse_location: "envEnIPv4Egress — utils.GetBoolAsStringEnvVar"
+  default_value: "true"
+  semantic_summary: >
+    Enables IPv4 egress support on IPv6 clusters. Configures egress-v4
+    plugin for IPv4 outbound traffic from IPv6 pods. Default true means
+    IPv4 egress is enabled by default on IPv6 clusters.
+  preconditions:
+    - "Cluster must be IPv6 mode"
+  observable_signals:
+    - "egress-v4 plugin configuration in 10-aws.conflist"
+    - "169.254.172.0/22 IPAM subnet for egress-v4"
+  non_effects:
+    - "Does NOT affect IPv6 pod networking"
+    - "Does NOT affect IPv4 clusters (only relevant for IPv6 clusters)"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 3: CNI Plugin Environment Variables (cmd/aws-vpc-cni/main.go)
+# These are read by the entrypoint script that generates 10-aws.conflist
+# and are passed to the routed-eni-cni-plugin binary via the conflist
+# ─────────────────────────────────────────────────────────────────────────────
+
+- key_name: POD_SECURITY_GROUP_ENFORCING_MODE
+  source_file_path: cmd/aws-vpc-cni/main.go
+  parse_location: "envPodSGEnforcingMode — written into 10-aws.conflist"
+  default_value: '"strict"'
+  semantic_summary: >
+    Controls how SGP pods' veth interfaces are named and whether they opt out
+    of SNAT/Calico. "strict" uses "vlan" prefix (opts out of SNAT + Calico).
+    "standard" uses normal "eni" prefix (SNAT + Calico apply).
+    CRITICAL: This ONLY affects pods with vpc.amazonaws.com/pod-eni annotation.
+    Unannotated pods are COMPLETELY UNAFFECTED by this setting.
+  preconditions:
+    - "ENABLE_POD_ENI must be true"
+    - "Pod must have vpc.amazonaws.com/pod-eni annotation"
+    - "Pod must have SecurityGroupPolicy CRD matching it"
+  observable_signals:
+    - "SGP pod veth: 'vlan' prefix (strict) or 'eni' prefix (standard)"
+    - "10-aws.conflist: podSGEnforcingMode field"
+  non_effects:
+    - "Does NOT create default-deny for unannotated pods"
+    - "Does NOT affect iptables rules for normal pods"
+    - "Does NOT affect kube-proxy or service routing"
+    - "Does NOT affect SNAT for normal pods"
+    - "Does NOT block any traffic for pods without pod-eni annotation"
+  repo_proof:
+    gate_code: "pkg/ipamd/rpc_handler.go — PodVlanId != 0 gate"
+    veth_logic: "pkg/sgpp/utils.go — BuildHostVethNamePrefix()"
+    cni_fork: "cmd/routed-eni-cni-plugin/cni.go — if r.PodVlanId != 0"
+
+- key_name: POD_MTU
+  source_file_path: cmd/aws-vpc-cni/main.go
+  parse_location: "envPodMTU — written into 10-aws.conflist"
+  default_value: "0 (uses ENI MTU)"
+  semantic_summary: >
+    MTU for pod veth interfaces. If 0, uses the ENI MTU value.
+    Written into 10-aws.conflist and applied by the CNI plugin.
+  preconditions: []
+  observable_signals:
+    - "ip link show inside pod: mtu value on eth0"
+  non_effects:
+    - "Does NOT affect ENI MTU (that's AWS_VPC_ENI_MTU)"
+
+- key_name: ENABLE_BANDWIDTH_PLUGIN
+  source_file_path: cmd/aws-vpc-cni/main.go
+  parse_location: "envEnBandwidthPlugin — controls bandwidth plugin in conflist"
+  default_value: "false"
+  semantic_summary: >
+    Enables the bandwidth CNI plugin in the conflist chain. Allows
+    kubernetes.io/ingress-bandwidth and kubernetes.io/egress-bandwidth
+    annotations on pods for traffic shaping.
+  preconditions: []
+  observable_signals:
+    - "10-aws.conflist: bandwidth plugin entry present"
+  non_effects:
+    - "Does NOT affect pods without bandwidth annotations"
+
+- key_name: IP_COOLDOWN_PERIOD
+  source_file_path: cmd/aws-vpc-cni/main.go
+  parse_location: "envIPCooldownPeriod — written into 10-aws.conflist"
+  default_value: "30"
+  semantic_summary: >
+    Seconds to wait before recycling a released IP address. Prevents
+    IP reuse conflicts during pod churn.
+  preconditions: []
+  observable_signals:
+    - "10-aws.conflist: ipCooldownPeriod field"
+  non_effects:
+    - "Does NOT affect routing or iptables"
+
+- key_name: DISABLE_POD_V6
+  source_file_path: cmd/aws-vpc-cni/main.go
+  parse_location: "envDisablePodV6 — written into 10-aws.conflist"
+  default_value: "false"
+  semantic_summary: >
+    Disables IPv6 inside pod network namespace. Sets
+    net.ipv6.conf.all.disable_ipv6=1 via sysctl plugin.
+  preconditions: []
+  observable_signals:
+    - "Inside pod: sysctl net.ipv6.conf.all.disable_ipv6 = 1"
+  non_effects:
+    - "Does NOT affect host IPv6 settings"
+
+- key_name: ENABLE_MULTI_NIC
+  source_file_path: cmd/aws-vpc-cni/main.go
+  parse_location: "envEnableMultiNICSupport — written into 10-aws.conflist"
+  default_value: "false"
+  semantic_summary: >
+    Enables multi-NIC support in the CNI plugin. Allows pods to request
+    multiple network interfaces across different network cards.
+  preconditions:
+    - "Instance type must support multiple network cards"
+  observable_signals:
+    - "10-aws.conflist: enableMultiNICSupport field"
+  non_effects:
+    - "Does NOT affect single-NIC pods"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 4: Init Container Environment Variables (cmd/aws-vpc-cni-init/main.go)
+# These are read by the aws-vpc-cni-init container during node bootstrap
+# ─────────────────────────────────────────────────────────────────────────────
+
+- key_name: ENABLE_IMDS_ONLY_MODE
+  source_file_path: utils/constants.go
+  parse_location: "utils.EnvEnableImdsOnlyMode — utils.GetBoolAsStringEnvVar"
+  default_value: "false"
+  semantic_summary: >
+    When true, IPAMD skips EC2 API calls and uses only IMDS metadata to
+    discover ENI information. Also implicitly disables ENI provisioning
+    and leaked ENI cleanup. Used in environments where EC2 API access is
+    restricted or unavailable.
+  preconditions:
+    - "IMDS must be accessible from the node"
+  observable_signals:
+    - "ipamd logs: 'ENABLE_IMDS_ONLY_MODE is enabled, skipping EC2 API call'"
+    - "No EC2 DescribeNetworkInterfaces calls from IPAMD"
+  non_effects:
+    - "Does NOT disable pod networking"
+    - "Does NOT affect iptables rules"
+    - "Does NOT affect kube-proxy"
+
+- key_name: AWS_VPC_K8S_CNI_BACKING_STORE
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "dsBackingStorePath() — os.Getenv"
+  default_value: "/var/run/aws-node/ipam.json"
+  semantic_summary: >
+    Path where IPAMD persists its IP-to-container allocation state.
+    Used for crash recovery — on restart, IPAMD reads this file to
+    reconstruct its datastore without losing track of assigned IPs.
+  preconditions: []
+  observable_signals:
+    - "File exists at specified path with JSON content"
+  non_effects:
+    - "Does NOT affect networking behavior"
+    - "Does NOT affect iptables rules"
+
+- key_name: MY_NODE_NAME
+  source_file_path: pkg/ipamd/ipamd.go
+  parse_location: "os.Getenv(envNodeName)"
+  default_value: '""'
+  semantic_summary: >
+    Kubernetes node name, set via Downward API in the aws-node DaemonSet.
+    Used by IPAMD to identify itself when querying the K8s API for node
+    status (e.g., checking if node is schedulable).
+  preconditions:
+    - "Must be set via Downward API (fieldRef: spec.nodeName)"
+  observable_signals:
+    - "aws-node pod env: MY_NODE_NAME=<node-name>"
+  non_effects:
+    - "Does NOT affect networking behavior"
+
+- key_name: DISABLE_TCP_EARLY_DEMUX
+  source_file_path: cmd/aws-vpc-cni-init/main.go
+  parse_location: "configureSystemParams() — procSys.Set('net/ipv4/tcp_early_demux')"
+  default_value: "false"
+  semantic_summary: >
+    When true, sets net/ipv4/tcp_early_demux to 0. Required for SGP pods
+    in strict mode so kubelet health probes can reach pods on branch ENIs.
+    Without this, TCP early demux routes probe packets to the wrong interface.
+  preconditions:
+    - "Kernel must support tcp_early_demux sysctl"
+    - "Should be true when ENABLE_POD_ENI=true and using strict mode"
+  observable_signals:
+    - "sysctl net.ipv4.tcp_early_demux = 0"
+    - "init container logs: 'Updated net/ipv4/tcp_early_demux to 0'"
+  non_effects:
+    - "Does NOT affect pod networking directly"
+    - "Does NOT affect iptables rules"
+    - "Does NOT affect SNAT"
+    - "Minor performance impact on TCP connection setup for all pods on node"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECTION 5: iptables Chain Ownership Map
+# Defines which component owns which iptables chains
+# ─────────────────────────────────────────────────────────────────────────────
+
+- key_name: "__IPTABLES_CHAIN_OWNERSHIP_MAP__"
+  source_file_path: pkg/networkutils/network.go
+  parse_location: "buildIptablesSNATRules() + buildIptablesConnmarkRules()"
+  semantic_summary: "Reference map of iptables chain ownership across components"
+  cni_owned_chains:
+    - chain: AWS-SNAT-CHAIN-0
+      table: nat
+      hook: POSTROUTING
+      purpose: "SNAT for pod traffic leaving VPC"
+      created_by: "pkg/networkutils/network.go — buildIptablesSNATRules()"
+      skipped_when: "AWS_VPC_K8S_CNI_EXTERNALSNAT=true OR ENABLE_IPv6=true"
+    - chain: AWS-CONNMARK-CHAIN-0
+      table: nat
+      hook: PREROUTING
+      purpose: "Mark traffic from primary ENI for NodePort return routing"
+      created_by: "pkg/networkutils/network.go — buildIptablesConnmarkRules()"
+      skipped_when: "ENABLE_IPv6=true"
+      mark_value: "0x80 (configurable via AWS_VPC_K8S_CNI_CONNMARK)"
+  kube_proxy_owned_chains:
+    - chain: KUBE-SERVICES
+      table: nat
+      hook: "PREROUTING + OUTPUT"
+      purpose: "Service ClusterIP DNAT — routes service VIPs to pod endpoints"
+      owner: "kube-proxy"
+      cni_involvement: "NONE — CNI never touches this chain"
+    - chain: "KUBE-SVC-*"
+      table: nat
+      purpose: "Per-service endpoint selection chains"
+      owner: "kube-proxy"
+    - chain: "KUBE-SEP-*"
+      table: nat
+      purpose: "Per-endpoint DNAT rules"
+      owner: "kube-proxy"
+    - chain: KUBE-POSTROUTING
+      table: nat
+      hook: POSTROUTING
+      purpose: "Masquerade for service traffic"
+      owner: "kube-proxy"
+      mark_value: "0x0000c000"
+  mark_space:
+    cni: "0x80"
+    kube_proxy: "0x0000c000"
+    calico: "0xffff0000"

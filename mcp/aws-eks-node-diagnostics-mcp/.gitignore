@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+lib/
+*.js
+*.d.ts
+
+# CDK output
+cdk.out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Python cache
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Hypothesis test framework cache
+.hypothesis/
+
+# Deployment-specific outputs (contain account IDs, secrets)
+mcp-config.txt
+cdk-outputs.json

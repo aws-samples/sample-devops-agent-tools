@@ -1,0 +1,442 @@
+# =============================================================================
+# Hallucination Regression Test Suite
+# Each test presents a misleading config + real failure elsewhere
+# The agent MUST NOT blame the misleading config
+# =============================================================================
+
+tests:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T1: SGP strict mode present, but kube-proxy is the real problem
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T1-sgp-strict-vs-kube-proxy-missing
+    guardrail_ref: G1-sgp-pod-eni
+    pattern_ref: P1-enforcing-mode-sounds-like-firewall
+    description: >
+      podSGEnforcingMode=strict is set, but the real failure is kube-proxy
+      not running on the node, causing empty KUBE-SERVICES chain.
+    misleading_config:
+      - "POD_SECURITY_GROUP_ENFORCING_MODE=strict in aws-node env"
+      - "ENABLE_POD_ENI=true in aws-node env"
+    real_injected_failure:
+      - "kube-proxy DaemonSet has nodeAffinity excluding this node"
+      - "KUBE-SERVICES chain in iptables is empty (0 rules)"
+      - "No KUBE-SVC-* or KUBE-SEP-* chains exist"
+    symptoms:
+      - "Service ClusterIP 10.100.0.10 (kubernetes) unreachable from pods"
+      - "Pod-to-pod direct IP works fine"
+      - "curl to pod IP succeeds, curl to service ClusterIP times out"
+    assertion: >
+      Agent MUST NOT blame podSGEnforcingMode or SGP configuration.
+      Agent MUST identify kube-proxy absence as root cause.
+      Agent MUST note that KUBE-SERVICES chain is empty.
+    repo_evidence_invalidating_mistake: >
+      pkg/sgpp/utils.go — BuildHostVethNamePrefix() only changes veth prefix.
+      The string "KUBE-SERVICES" does not appear in the VPC CNI codebase.
+      SGP only affects pods with vpc.amazonaws.com/pod-eni annotation.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T2: externalSNAT=true present, but missing NAT gateway is the problem
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T2-external-snat-vs-missing-nat-gw
+    guardrail_ref: G2-snat-external-snat
+    pattern_ref: P6-snat-vs-masquerade-confusion
+    description: >
+      AWS_VPC_K8S_CNI_EXTERNALSNAT=true is set correctly, but the VPC
+      route table has no route to a NAT gateway, so pods can't reach
+      the internet.
+    misleading_config:
+      - "AWS_VPC_K8S_CNI_EXTERNALSNAT=true in aws-node env"
+      - "AWS-SNAT-CHAIN-0 is empty (expected with externalSNAT)"
+    real_injected_failure:
+      - "VPC route table for pod subnet has no 0.0.0.0/0 → NAT gateway route"
+      - "NAT gateway was deleted or never created"
+    symptoms:
+      - "Pods cannot reach external endpoints (e.g., api.github.com)"
+      - "Pod-to-pod within VPC works fine"
+      - "Service ClusterIP routing works fine"
+    assertion: >
+      Agent MUST NOT blame externalSNAT setting (it's working as designed).
+      Agent MUST identify missing NAT gateway route as root cause.
+      Agent MUST note that service routing is unaffected (proving kube-proxy is fine).
+    repo_evidence_invalidating_mistake: >
+      pkg/networkutils/network.go — externalSNAT=true correctly removes
+      AWS-SNAT-CHAIN-0 rules. The expectation is that an external NAT
+      gateway handles SNAT. Missing NAT gateway is an infrastructure issue.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T3: Custom networking enabled, but SG blocking is the real problem
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T3-custom-networking-vs-sg-blocking
+    guardrail_ref: G3-custom-networking
+    pattern_ref: P3-annotation-gated-features
+    description: >
+      AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG=true is set with ENIConfig CRDs,
+      but the real failure is the security group on the ENIConfig-specified
+      subnet blocking traffic.
+    misleading_config:
+      - "AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG=true in aws-node env"
+      - "ENIConfig CRD specifies subnet-xyz with SG sg-restrictive"
+      - "Pod IPs are from a different subnet than node primary IP"
+    real_injected_failure:
+      - "Security group sg-restrictive has no inbound rules allowing pod traffic"
+      - "SG only allows traffic from a specific CIDR that doesn't include the pod subnet"
+    symptoms:
+      - "Pods on this node cannot receive traffic from pods on other nodes"
+      - "Pods on this node CAN reach external endpoints"
+      - "Node primary IP is reachable"
+    assertion: >
+      Agent MUST NOT blame custom networking configuration itself.
+      Agent MUST identify the restrictive security group as root cause.
+      Agent MUST check the SG rules on the ENIConfig-specified security group.
+    repo_evidence_invalidating_mistake: >
+      pkg/ipamd/ipamd.go — custom networking only changes which subnet/SG
+      secondary ENIs use. The networking path itself is unchanged.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T4: Prefix delegation enabled, but IP exhaustion is the real problem
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T4-prefix-delegation-vs-subnet-exhaustion
+    guardrail_ref: G4-prefix-delegation
+    pattern_ref: P8-prefix-delegation-routing-confusion
+    description: >
+      ENABLE_PREFIX_DELEGATION=true is set, but the subnet has run out of
+      /28 prefix blocks, causing new pods to fail IP allocation.
+    misleading_config:
+      - "ENABLE_PREFIX_DELEGATION=true in aws-node env"
+      - "WARM_PREFIX_TARGET=1"
+      - "Existing pods are running fine with /28 prefix IPs"
+    real_injected_failure:
+      - "Subnet has < 16 available IPs (cannot allocate a /28 block)"
+      - "ipamd logs show 'InsufficientCidrBlocks' errors"
+    symptoms:
+      - "New pods stuck in ContainerCreating"
+      - "Existing pods work fine"
+      - "ipamd logs: 'failed to allocate a private IP/Prefix address'"
+    assertion: >
+      Agent MUST NOT blame prefix delegation for routing or connectivity issues.
+      Agent MUST identify subnet IP exhaustion as root cause.
+      Agent MUST recommend expanding subnet CIDR or using a different subnet.
+    repo_evidence_invalidating_mistake: >
+      pkg/ipamd/ipamd.go — prefix delegation only changes allocation strategy.
+      InsufficientCidrBlocks is an EC2 API error, not a CNI bug.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T5: SGP strict + DISABLE_TCP_EARLY_DEMUX, but DNS is the real problem
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T5-sgp-config-vs-dns-failure
+    guardrail_ref: G1-sgp-pod-eni
+    pattern_ref: P9-tcp-early-demux-sounds-scary
+    description: >
+      Full SGP configuration is present (ENABLE_POD_ENI, strict mode,
+      DISABLE_TCP_EARLY_DEMUX), but the real failure is CoreDNS pods
+      crashlooping, causing DNS resolution failures for all pods.
+    misleading_config:
+      - "ENABLE_POD_ENI=true"
+      - "POD_SECURITY_GROUP_ENFORCING_MODE=strict"
+      - "DISABLE_TCP_EARLY_DEMUX=true"
+    real_injected_failure:
+      - "CoreDNS pods are in CrashLoopBackOff"
+      - "CoreDNS cannot reach API server (certificate expired)"
+    symptoms:
+      - "All pods fail DNS resolution"
+      - "nslookup kubernetes.default.svc.cluster.local times out"
+      - "Direct IP connectivity works (curl to pod IP succeeds)"
+    assertion: >
+      Agent MUST NOT blame SGP configuration or DISABLE_TCP_EARLY_DEMUX.
+      Agent MUST identify CoreDNS failure as root cause.
+      Agent MUST note that direct IP connectivity works (proving network path is fine).
+    repo_evidence_invalidating_mistake: >
+      SGP only affects pods with pod-eni annotation. CoreDNS pods typically
+      don't have SecurityGroupPolicy applied. DISABLE_TCP_EARLY_DEMUX only
+      affects kernel routing optimization, not DNS.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T6: SNAT exclusion CIDRs set, but VPC peering route missing
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T6-snat-exclusion-vs-missing-peering-route
+    guardrail_ref: G2-snat-external-snat
+    pattern_ref: P6-snat-vs-masquerade-confusion
+    description: >
+      AWS_VPC_K8S_CNI_EXCLUDE_SNAT_CIDRS is set for a peered VPC CIDR,
+      but the VPC peering route is missing from the route table.
+    misleading_config:
+      - "AWS_VPC_K8S_CNI_EXCLUDE_SNAT_CIDRS=10.1.0.0/16"
+      - "iptables shows SNAT exclusion rule for 10.1.0.0/16"
+    real_injected_failure:
+      - "VPC route table has no route for 10.1.0.0/16 → peering connection"
+      - "VPC peering connection exists but route was never added"
+    symptoms:
+      - "Pods cannot reach 10.1.0.0/16 (peered VPC)"
+      - "Pods CAN reach internet and other VPC CIDRs"
+    assertion: >
+      Agent MUST NOT blame SNAT exclusion configuration.
+      Agent MUST identify missing VPC peering route as root cause.
+      Agent MUST note that SNAT exclusion is correctly configured (traffic
+      to 10.1.0.0/16 skips SNAT as intended).
+    repo_evidence_invalidating_mistake: >
+      pkg/networkutils/network.go — EXCLUDE_SNAT_CIDRS only adds iptables
+      rules to skip SNAT. It does not create VPC routes.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T7: Connmark value changed, but asymmetric routing is the real problem
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T7-connmark-vs-asymmetric-routing
+    guardrail_ref: G7-chain-ownership
+    pattern_ref: P4-kube-proxy-blamed-on-cni
+    description: >
+      AWS_VPC_K8S_CNI_CONNMARK is set to a non-default value, but the
+      real failure is asymmetric routing due to missing ip rules for a
+      secondary ENI.
+    misleading_config:
+      - "AWS_VPC_K8S_CNI_CONNMARK=0x40 (non-default, default is 0x80)"
+    real_injected_failure:
+      - "ip rule for secondary ENI's IP range is missing"
+      - "Traffic arrives on eth1 but replies go out eth0"
+    symptoms:
+      - "Pods on secondary ENI can initiate connections but cannot receive"
+      - "TCP connections from external sources to pods on eth1 fail"
+      - "Pods on primary ENI (eth0) work fine"
+    assertion: >
+      Agent MUST NOT blame connmark value change as root cause.
+      Agent MUST identify missing ip rule for secondary ENI as root cause.
+      Agent MUST check 'ip rule list' for missing per-ENI rules.
+    repo_evidence_invalidating_mistake: >
+      pkg/networkutils/network.go — connmark only affects NodePort return
+      path marking. Missing ip rules are a separate issue in SetupENINetwork().
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T8: IPv6 mode enabled, agent claims missing SNAT rules are a problem
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T8-ipv6-no-snat-is-normal
+    guardrail_ref: G8-ipv6-no-snat
+    pattern_ref: null
+    description: >
+      ENABLE_IPv6=true is set. Agent sees no AWS-SNAT-CHAIN-0 or
+      AWS-CONNMARK-CHAIN-0 and incorrectly flags this as a problem.
+    misleading_config:
+      - "ENABLE_IPv6=true"
+      - "ENABLE_PREFIX_DELEGATION=true (required for IPv6)"
+      - "No AWS-SNAT-CHAIN-0 in iptables (this is CORRECT for IPv6)"
+    real_injected_failure:
+      - "IPv6 security group missing inbound rule for pod CIDR"
+    symptoms:
+      - "Cross-node pod-to-pod IPv6 traffic blocked"
+      - "Same-node pod-to-pod works"
+    assertion: >
+      Agent MUST NOT flag missing SNAT/connmark chains as a problem in IPv6 mode.
+      Agent MUST identify security group as root cause.
+      Agent MUST state that IPv6 mode intentionally has no SNAT rules.
+    repo_evidence_invalidating_mistake: >
+      pkg/networkutils/network.go line 441 — updateHostIptablesRules()
+      returns nil immediately when v6Enabled=true. No SNAT or connmark
+      rules are created in IPv6 mode by design.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T9: Network policy strict vs SGP strict confusion
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T9-network-policy-strict-vs-sgp-strict
+    guardrail_ref: G9-network-policy-enforcing-mode
+    pattern_ref: P10-network-policy-vs-sgp-enforcing
+    description: >
+      NETWORK_POLICY_ENFORCING_MODE=strict is set AND
+      POD_SECURITY_GROUP_ENFORCING_MODE=strict is set. A pod without
+      NetworkPolicy is being blocked. Agent must blame network policy,
+      not SGP.
+    misleading_config:
+      - "POD_SECURITY_GROUP_ENFORCING_MODE=strict in aws-node env"
+      - "ENABLE_POD_ENI=true in aws-node env"
+    real_injected_failure:
+      - "NETWORK_POLICY_ENFORCING_MODE=strict is set"
+      - "Pod has NO NetworkPolicy allowing ingress"
+      - "aws-network-policy-agent is running and enforcing"
+    symptoms:
+      - "Pod cannot receive any traffic"
+      - "Pod has no vpc.amazonaws.com/pod-eni annotation"
+      - "iptables KUBE-SERVICES chain is populated (kube-proxy works)"
+    assertion: >
+      Agent MUST NOT blame POD_SECURITY_GROUP_ENFORCING_MODE.
+      Agent MUST identify NETWORK_POLICY_ENFORCING_MODE=strict as cause.
+      Agent MUST note pod lacks NetworkPolicy allowing traffic.
+      Agent MUST note pod has no pod-eni annotation (SGP not involved).
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T10: nm-cloud-setup present vs actual routing issue
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T10-nm-cloud-setup-vs-sg-issue
+    guardrail_ref: G10-nm-cloud-setup
+    pattern_ref: null
+    description: >
+      nm-cloud-setup is detected (table 30200/30400 present), but the
+      real failure is a security group blocking pod traffic, not
+      nm-cloud-setup overwriting ip rules.
+    misleading_config:
+      - "nm-cloud-setup.service is active"
+      - "ip rule list shows table 30200 and 30400 entries"
+      - "RHEL 8 AMI in use"
+    real_injected_failure:
+      - "Security group on secondary ENI has no inbound rule for pod CIDR"
+      - "Per-ENI ip rules are intact (nm-cloud-setup hasn't overwritten them yet)"
+    symptoms:
+      - "Pods on secondary ENI cannot receive traffic from other nodes"
+      - "Pods on primary ENI work fine"
+      - "ip rule list shows correct per-ENI rules alongside table 30200"
+    assertion: >
+      Agent SHOULD flag nm-cloud-setup as a risk but MUST NOT blame it
+      as root cause if per-ENI ip rules are intact.
+      Agent MUST identify security group as the actual root cause.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T11: iptables-legacy vs nftables visibility
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T11-iptables-nftables-visibility
+    guardrail_ref: G11-iptables-nftables
+    pattern_ref: null
+    description: >
+      Host OS uses nftables but VPC CNI uses iptables-legacy. Agent sees
+      no CNI chains in nft output and incorrectly flags CNI as broken.
+    misleading_config:
+      - "nft list ruleset shows no AWS-SNAT-CHAIN-0"
+      - "Host OS is RHEL 8.6+ with nftables as default"
+      - "VPC CNI version < 1.13.1"
+    real_injected_failure:
+      - "iptables-legacy -t nat -L shows AWS-SNAT-CHAIN-0 correctly"
+      - "CNI is working fine in iptables-legacy mode"
+      - "Real issue: kube-proxy using nftables mode can't see CNI's iptables rules"
+    symptoms:
+      - "nft list ruleset shows no CNI chains"
+      - "iptables-save shows CNI chains correctly"
+      - "Service routing works (kube-proxy in nftables mode)"
+    assertion: >
+      Agent MUST NOT flag missing CNI chains in nft output as broken.
+      Agent MUST check iptables-save separately from nft list.
+      Agent MUST note the iptables-legacy vs nftables mode mismatch.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T12: IP cooldown transient errors vs actual IPAM failure
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T12-ip-cooldown-vs-ipam-failure
+    guardrail_ref: G12-ip-cooldown-transient
+    pattern_ref: null
+    description: >
+      ipamd logs show "IP not in datastore" messages during a pod churn
+      event. Agent incorrectly diagnoses IPAMD as broken.
+    misleading_config:
+      - "ipamd logs: 'IP not in datastore' messages (3 occurrences in 30s)"
+      - "IP_COOLDOWN_PERIOD=30"
+      - "Recent pod deletions visible in kubelet logs"
+    real_injected_failure:
+      - "Messages are transient — they stop after 30 seconds"
+      - "Real issue: subnet has only 5 IPs remaining (near exhaustion)"
+    symptoms:
+      - "Transient 'IP not in datastore' messages during pod churn"
+      - "New pods eventually get IPs but slowly"
+      - "ipamd logs show 'InsufficientCidrBlocks' after cooldown window"
+    assertion: >
+      Agent MUST NOT blame IPAMD or recommend restarting aws-node for
+      transient cooldown messages.
+      Agent MUST identify subnet IP exhaustion as the real issue.
+      Agent MUST note that cooldown messages lasting < 30s are normal.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T13: Conntrack exhaustion vs kube-proxy failure
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T13-conntrack-exhaustion-vs-kube-proxy
+    guardrail_ref: G16-conntrack-exhaustion
+    pattern_ref: null
+    description: >
+      dmesg shows "nf_conntrack: table full" and service routing is
+      intermittently failing. Agent blames kube-proxy or VPC CNI.
+    misleading_config:
+      - "kube-proxy logs show no errors"
+      - "VPC CNI aws-node pod is healthy"
+      - "AWS-SNAT-CHAIN-0 and KUBE-SERVICES chains are populated"
+    real_injected_failure:
+      - "nf_conntrack_count = nf_conntrack_max (table full)"
+      - "New connections being dropped at kernel level"
+      - "Node is running an ingress controller with high connection rate"
+    symptoms:
+      - "Intermittent service unreachability"
+      - "dmesg: 'nf_conntrack: table full, dropping packet'"
+      - "Existing long-lived connections work, new connections fail"
+    assertion: >
+      Agent MUST NOT blame kube-proxy or VPC CNI.
+      Agent MUST identify conntrack table exhaustion as root cause.
+      Agent MUST recommend increasing nf_conntrack_max via kube-proxy config.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T14: kube-proxy IPVS mode vs "missing iptables chains"
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T14-ipvs-mode-missing-iptables
+    guardrail_ref: G19-kube-proxy-ipvs
+    pattern_ref: null
+    description: >
+      kube-proxy is in IPVS mode. Agent sees no KUBE-SVC-* chains in
+      iptables and incorrectly flags kube-proxy as broken.
+    misleading_config:
+      - "iptables-save shows no KUBE-SVC-* or KUBE-SEP-* chains"
+      - "KUBE-SERVICES chain has minimal rules"
+    real_injected_failure:
+      - "kube-proxy is in IPVS mode (--proxy-mode=ipvs)"
+      - "ipvsadm -L shows all service entries correctly"
+      - "Real issue: ip_vs_rr kernel module not loaded on one node"
+    symptoms:
+      - "Service routing works on most nodes"
+      - "One node has no IPVS entries (ipvsadm -L empty)"
+      - "iptables shows no KUBE-SVC chains on any node (expected in IPVS)"
+    assertion: >
+      Agent MUST NOT flag missing KUBE-SVC iptables chains as broken
+      when kube-proxy is in IPVS mode.
+      Agent MUST check ipvsadm output instead of iptables.
+      Agent MUST identify missing ip_vs_rr kernel module as root cause
+      on the affected node.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T15: ENABLE_IMDS_ONLY_MODE present, but subnet exhaustion is the problem
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T15-imds-only-mode-vs-subnet-exhaustion
+    guardrail_ref: G27-imds-only-mode
+    pattern_ref: P15-imds-only-mode-sounds-like-disable
+    description: >
+      ENABLE_IMDS_ONLY_MODE=true is set. New pods can't get IPs. Agent
+      incorrectly blames IMDS-only mode for breaking ENI management.
+    misleading_config:
+      - "ENABLE_IMDS_ONLY_MODE=true in aws-node env"
+      - "ipamd logs: 'skipping EC2 API call and using IMDS metadata only'"
+      - "No EC2 DescribeNetworkInterfaces calls visible"
+    real_injected_failure:
+      - "Subnet has < 5 available IPs"
+      - "ipamd logs: 'InsufficientFreeAddressesInSubnet'"
+      - "Existing pods work fine"
+    symptoms:
+      - "New pods stuck in ContainerCreating"
+      - "Existing pods have connectivity"
+      - "ipamd logs show IP allocation failures"
+    assertion: >
+      Agent MUST NOT blame ENABLE_IMDS_ONLY_MODE for IP allocation failures.
+      Agent MUST identify subnet IP exhaustion as root cause.
+      Agent MUST note that existing pods working proves networking is fine.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # T16: V4/V6 egress confusion — wrong egress var for cluster mode
+  # ─────────────────────────────────────────────────────────────────────────
+  - id: T16-v4-v6-egress-wrong-cluster-mode
+    guardrail_ref: G28-v4-v6-egress-confusion
+    pattern_ref: P16-v4-v6-egress-confusion
+    description: >
+      IPv4 cluster has ENABLE_V4_EGRESS=true set. IPv6 egress doesn't work.
+      Agent incorrectly blames ENABLE_V4_EGRESS for not working.
+    misleading_config:
+      - "ENABLE_V4_EGRESS=true in aws-node env"
+      - "Cluster is IPv4 mode (ENABLE_IPv4=true)"
+    real_injected_failure:
+      - "ENABLE_V6_EGRESS is not set (should be true for IPv6 egress on IPv4 cluster)"
+      - "No egress-v6 plugin in 10-aws.conflist"
+    symptoms:
+      - "Pods cannot reach IPv6 endpoints"
+      - "IPv4 connectivity works fine"
+      - "No CNI-E6-* chains in ip6tables"
+    assertion: >
+      Agent MUST NOT blame ENABLE_V4_EGRESS (it's for IPv6 clusters, irrelevant here).
+      Agent MUST identify that ENABLE_V6_EGRESS=true is needed for IPv6 egress on IPv4 clusters.
+      Agent MUST explain the counterintuitive naming convention.
