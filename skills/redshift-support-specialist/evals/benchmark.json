@@ -1,0 +1,644 @@
+{
+  "skill_name": "redshift-support-specialist",
+  "skill_path": "<repo-root>/skills/redshift-support-specialist",
+  "eval_count": 6,
+  "runs_per_eval": 1,
+  "metadata": {
+    "timestamp": "2026-07-21T17:06:26Z"
+  },
+  "runs": [
+    {
+      "eval_id": "redshift-support-mcp-tools",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "redshift-support-mcp-tools",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'list_clusters'",
+            "passed": true,
+            "evidence": "Substring found: 'list_clusters'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'list_databases'",
+            "passed": true,
+            "evidence": "Substring found: 'list_databases'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'execute_query'",
+            "passed": true,
+            "evidence": "Substring found: 'execute_query'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'AWS CLI' or contains 'CloudWatch'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'aws cli' \u2014 Substring found: 'aws cli'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 413,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 38384
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 26.298526416998357
+        },
+        "raw_output": "Based on the skill documentation, the six MCP tools from `awslabs.redshift-mcp-server` are:\n\n1. **`list_clusters`** \u2014 discover every provisioned cluster and serverless workgroup in the account\n2. **`list_databases`** \u2014 list databases in a cluster/workgroup\n3. **`list_schemas`** \u2014 list schemas in a database\n4. **`list_tables`** \u2014 list tables in a schema\n5. **`list_columns`** \u2014 list columns in a table\n6. **`execute_query`** \u2014 run one read-only SQL statement through the MCP server\n\nThey must be called in that sequence \u2014 each call after the first uses identifiers returned by the previous one.\n\nRegarding AWS CLI / CloudWatch access, the skill states plainly:\n\n> \"You do NOT have AWS CLI or CloudWatch access, and you do NOT have any other database driver or connection. Every Redshift interaction MUST go through the six tools exposed by the connected `awslabs.redshift-mcp-server` MCP server.\"\n\nSeveral checks are explicitly called out as unavailable due to this limitation: SSL enforcement (`require_ssl`), audit logging, Enhanced VPC Routing, custom parameter groups, maintenance window, auto-upgrade setting, Multi-AZ, WLM parameter-group configuration, snapshot inventory, Reserved Instance coverage, and CPU/disk utilization trends. The skill is instructed to state this plainly rather than guess values."
+      },
+      "without_skill": {
+        "eval_id": "redshift-support-mcp-tools",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'list_clusters'",
+            "passed": false,
+            "evidence": "Substring not found: 'list_clusters'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'list_databases'",
+            "passed": false,
+            "evidence": "Substring not found: 'list_databases'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'execute_query'",
+            "passed": false,
+            "evidence": "Substring not found: 'execute_query'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'AWS CLI' or contains 'CloudWatch'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'aws cli' \u2014 Substring found: 'aws cli'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.25,
+        "summary": "Without skill: 25% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 8,
+          "token_counts": {
+            "input_tokens": 49,
+            "output_tokens": 1454,
+            "cache_read_input_tokens": 164794,
+            "cache_creation_input_tokens": 109172
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 123.50257533399417
+        },
+        "raw_output": "Let me look up the redshift-specialist agent definition to find the MCP tools it references.Let me search for the redshift-specialist agent definition file.Let me look for the agent definition through MCP resources.Based on reading the full redshift-specialist agent definition at `/Users/hasandre/.claude/agents/redshift-specialist.md`, **it does not list six MCP tools** for talking to Redshift, nor does it make any specific statements about AWS CLI or CloudWatch access as tooling dependencies.\n\nThe agent definition:\n- Declares `(Tools: All tools)` in its registry entry \u2014 meaning it inherits access to every available tool, without calling out a specific set of six Redshift MCP tools.\n- Mentions **CloudWatch metrics and Redshift-specific alarms** (line 52) as part of its domain expertise under \"Performance Tuning & Monitoring,\" but this is knowledge it applies \u2014 not a tool it invokes.\n- Has no references to `aws` CLI commands, no MCP tool names, and no explicit tool dependency list beyond the blanket \"All tools\" access.\n\nIn short: the skill doesn't contain the information you're asking about. Either the question refers to a different version of this agent, a different skill entirely, or the premise (six named MCP tools + AWS CLI/CloudWatch access statements) doesn't match what's actually defined here."
+      },
+      "delta_pass_rate": 0.75
+    },
+    {
+      "eval_id": "redshift-support-no-csv-rule",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "redshift-support-no-csv-rule",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'CSV'",
+            "passed": true,
+            "evidence": "Substring found: 'csv'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'execute_query'",
+            "passed": true,
+            "evidence": "Substring found: 'execute_query'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'never' or contains 'not' or contains 'don't' or contains 'do not'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'never' \u2014 Substring found: 'never'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 637,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 38391
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 25.69311883300543
+        },
+        "raw_output": "No \u2014 the skill explicitly forbids both. Core Rule 2 states:\n\n> **Never ask the user to type a cluster identifier or region from memory, and never ask them to run an extraction script or upload CSV files.**\n\nInstead, the agent must collect all diagnostics itself by running queries directly via the `execute_query` MCP tool. Specifically:\n\n- For **query optimization**, the agent fills in the diagnostic bundle SQL from `assets/queries/diagnostic-bundle.md` and executes it itself \u2014 \"Do not ask the user to run it or export a CSV.\"\n- For the **detailed operational review**, data collection is described as \"Fully automated \u2014 no CSV upload, no extraction script, and no CLI profile needed.\" The agent runs the queries from `assets/queries/operational-review-collection.md` directly through `execute_query`.\n\nThe design principle is that the six MCP tools (`list_clusters`, `list_databases`, `list_schemas`, `list_tables`, `list_columns`, `execute_query`) are the agent's only interaction path with Redshift, and it should use them autonomously rather than shifting work onto the user."
+      },
+      "without_skill": {
+        "eval_id": "redshift-support-no-csv-rule",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'CSV'",
+            "passed": true,
+            "evidence": "Substring found: 'csv'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'execute_query'",
+            "passed": false,
+            "evidence": "Substring not found: 'execute_query'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'never' or contains 'not' or contains 'don't' or contains 'do not'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'not' \u2014 Substring found: 'not'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.6666666666666666,
+        "summary": "Without skill: 67% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 9,
+          "token_counts": {
+            "input_tokens": 15,
+            "output_tokens": 1427,
+            "cache_read_input_tokens": 244351,
+            "cache_creation_input_tokens": 64314
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 94.79427583299548
+        },
+        "raw_output": "Let me look at the redshift-specialist agent definition to find the relevant guidance.Let me find the redshift-specialist agent definition to check its guidance on diagnostics collection.Based on the redshift-specialist agent definition, **no** \u2014 the agent should not ask the user to run an extraction script or upload a CSV file. Here's why and what it should do instead:\n\n**The relevant guideline** (Operational Guidelines, point 2):\n\n> **Prefer read-only diagnostic approaches**: When troubleshooting, start with SELECT queries against system tables rather than suggesting modifications. Use EXPLAIN before recommending query rewrites.\n\n**What it should do instead:**\n\nThe agent is expected to directly provide diagnostic SQL queries that the user can run against Redshift's built-in system tables and views (the `STL_`, `STV_`, `SVL_`, `SVV_` families). The Response Format section reinforces this:\n\n> Include diagnostic queries the user can run to gather more information\n\nSo the agent's contract is to **compose the right diagnostic queries itself** \u2014 leveraging its knowledge of Redshift system catalog views \u2014 and present them inline. It should not offload that responsibility to an opaque script or require the user to export data into a file and bring it back. The agent already knows which system tables contain the relevant metrics (query plans, disk usage, distribution skew, lock contention, etc.) and should write targeted SELECTs against them directly."
+      },
+      "delta_pass_rate": 0.33333333333333337
+    },
+    {
+      "eval_id": "redshift-support-detailed-review-outputs",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "redshift-support-detailed-review-outputs",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'HTML'",
+            "passed": true,
+            "evidence": "Substring found: 'html'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Markdown' or contains 'markdown'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'markdown' \u2014 Substring found: 'markdown'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'chat'",
+            "passed": true,
+            "evidence": "Substring found: 'chat'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 570,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 38381
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 26.944255374997738
+        },
+        "raw_output": "According to the skill's Capability 3 (step 9), the two output artifacts are:\n\n1. **Markdown (in-chat output)** \u2014 always produced. Posted directly as the chat response body so the user can read results inline. The skill calls this \"never optional \u2014 it is the report itself.\"\n\n2. **HTML (downloadable file)** \u2014 produced only if the user explicitly requests it during the scope confirmation step. This is a self-contained file with sidebar navigation, tabbed UI, expandable query lists, and a built-in self-download button that works offline.\n\n**Why both:** They serve different consumption modes. The Markdown report gives immediate, in-session visibility \u2014 the user sees findings without leaving the chat. The HTML report provides a richer interactive artifact (tabs, navigation, collapsible sections) that can be downloaded, shared with stakeholders, or opened in a browser independently. The skill separates them so every user gets the essential output (Markdown) without the overhead of generating the heavier artifact unless they actually need a portable, shareable deliverable."
+      },
+      "without_skill": {
+        "eval_id": "redshift-support-detailed-review-outputs",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'HTML'",
+            "passed": false,
+            "evidence": "Substring not found: 'html'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Markdown' or contains 'markdown'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'markdown': Substring not found: 'markdown'; contains 'markdown': Substring not found: 'markdown'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'chat'",
+            "passed": false,
+            "evidence": "Substring not found: 'chat'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 17,
+          "token_counts": {
+            "input_tokens": 22,
+            "output_tokens": 2668,
+            "cache_read_input_tokens": 503595,
+            "cache_creation_input_tokens": 170100
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 165.09931616700487
+        },
+        "raw_output": "Let me look for the skill documentation that describes the \"Detailed Operational Review\" capability.Let me search for this in the skill/agent definitions.This seems to be referring to the Redshift specialist skill. Let me check that agent's documentation.The term \"Detailed Operational Review\" doesn't appear in the redshift-specialist agent definition or any other skill file I can find in this environment. Let me check if there's an MCP resource or other skill reference I'm missing.Let me check if there are MCP resources that might contain this skill documentation.Let me check the working directory for any relevant files.The working directory is empty. Let me check the skill definitions more carefully \u2014 the question mentions \"the skill\" which likely refers to the redshift-specialist agent (since it's the only domain-specific skill here and \"Detailed Operational Review\" sounds like it could be a Redshift cluster capability). But I've already read that agent definition in full, and it does not mention a \"Detailed Operational Review\" capability or any specific \"two output artifacts.\"\n\nI cannot find a \"Detailed Operational Review\" capability documented in any skill, agent definition, or resource available in this environment. The redshift-specialist agent (the only domain-specific skill here) does not mention it, and no other skill files, MCP resources, or local files contain this term.\n\nCould you clarify which skill you're referring to? For example:\n- Is this from a specific internal document or wiki page?\n- Is it part of a custom skill definition that may not be loaded in this session?\n- Could it be named differently (e.g., \"operational health report\", \"cluster review\")?"
+      },
+      "delta_pass_rate": 1.0
+    },
+    {
+      "eval_id": "redshift-support-database-scope-question",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "redshift-support-database-scope-question",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'database'",
+            "passed": true,
+            "evidence": "Substring found: 'database'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'list_databases'",
+            "passed": false,
+            "evidence": "Substring not found: 'list_databases'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'all' or contains 'subset'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'all' \u2014 Substring found: 'all'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.6666666666666666,
+        "summary": "With skill: 67% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 401,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 38378
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 25.49700708399905
+        },
+        "raw_output": "According to the skill's Capability 3 (Detailed Operational Review), step 2, the agent must send **one combined confirmation message** covering three things before collecting any data:\n\n1. **Which cluster/workgroup** \u2014 name it explicitly even if there's only one candidate\n2. **Which database(s)** \u2014 all of them or a specific subset\n3. **Whether the user wants a downloadable HTML report** in addition to the in-chat Markdown summary\n\nThe agent must wait for the user's reply before calling `execute_query` or any other collection tool. It cannot proceed on assumption, split these into separate turns, or default to a single database without confirmation (per Core Rules 10 and 11)."
+      },
+      "without_skill": {
+        "eval_id": "redshift-support-database-scope-question",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'database'",
+            "passed": false,
+            "evidence": "Substring not found: 'database'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'list_databases'",
+            "passed": false,
+            "evidence": "Substring not found: 'list_databases'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'all' or contains 'subset'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'all': Substring not found: 'all'; contains 'subset': Substring not found: 'subset'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 180.00464079099766
+        },
+        "raw_output": ""
+      },
+      "delta_pass_rate": 0.6666666666666666
+    },
+    {
+      "eval_id": "redshift-support-read-only-rule",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "redshift-support-read-only-rule",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'INSERT' or contains 'UPDATE' or contains 'DELETE'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'insert' \u2014 Substring found: 'insert'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'read-only' or contains 'read only'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'read-only' \u2014 Substring found: 'read-only'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 274,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 38379
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 13.48308154100232
+        },
+        "raw_output": "According to Core Rule 7 of the skill, the agent must **never** run these SQL statement types through `execute_query`:\n\n- `INSERT`\n- `UPDATE`\n- `DELETE`\n- `ALTER`\n- `DROP`\n- `CREATE`\n- `GRANT`\n- `VACUUM`\n- `ANALYZE`\n\n**Why:** The `execute_query` tool runs inside a **read-only transaction** and will reject them anyway. Instead, the agent must provide such statements as **recommendations for the user to run themselves**."
+      },
+      "without_skill": {
+        "eval_id": "redshift-support-read-only-rule",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'INSERT' or contains 'UPDATE' or contains 'DELETE'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'insert': Substring not found: 'insert'; contains 'update': Substring not found: 'update'; contains 'delete': Substring not found: 'delete'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'read-only' or contains 'read only'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'read-only': Substring not found: 'read-only'; contains 'read only': Substring not found: 'read only'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 180.00452108299942
+        },
+        "raw_output": ""
+      },
+      "delta_pass_rate": 1.0
+    },
+    {
+      "eval_id": "redshift-support-error-transparency",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "redshift-support-error-transparency",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'error'",
+            "passed": true,
+            "evidence": "Substring found: 'error'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'not available' or contains 'quote'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'not available' \u2014 Substring found: 'not available'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'continue'",
+            "passed": true,
+            "evidence": "Substring found: 'continue'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 532,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 38391
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 26.327421834001143
+        },
+        "raw_output": "Per **Core Rule 9** of the skill, the agent must do something more specific:\n\n1. **Quote the actual error text** it received (e.g. `relation \"stv_partitions\" does not exist`, `permission denied for relation ...`, `Statement timed out`) \u2014 never report it as just \"failed\" or silently skip it.\n2. **Mark that section as \"not available\"** with the quoted error as the reason.\n3. **Continue to the next section** \u2014 do not stop the whole review over one failed query.\n\nThe rationale is that the chat UI may only show a generic \"failed\" badge and hide the underlying error message, but the agent still receives the real exception text in the tool result. The user needs to see the actual cause to understand what happened and whether it's expected (e.g., a view that simply doesn't exist on serverless clusters vs. a permissions problem they can fix)."
+      },
+      "without_skill": {
+        "eval_id": "redshift-support-error-transparency",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'error'",
+            "passed": false,
+            "evidence": "Substring not found: 'error'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'not available' or contains 'quote'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'not available': Substring not found: 'not available'; contains 'quote': Substring not found: 'quote'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'continue'",
+            "passed": false,
+            "evidence": "Substring not found: 'continue'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 180.0038730419983
+        },
+        "raw_output": ""
+      },
+      "delta_pass_rate": 1.0
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "mean_pass_rate": 0.9444,
+      "stddev_pass_rate": 0.1361,
+      "mean_tokens": 471.2,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 471.2,
+      "mean_total_tokens": 474.2,
+      "mean_tool_calls": 0.0
+    },
+    "without_skill": {
+      "mean_pass_rate": 0.1528,
+      "stddev_pass_rate": 0.2709,
+      "mean_tokens": 924.8,
+      "mean_input_tokens": 14.3,
+      "mean_output_tokens": 924.8,
+      "mean_total_tokens": 939.2,
+      "mean_tool_calls": 5.7
+    },
+    "delta": {
+      "pass_rate": 0.7917,
+      "tokens": -453.7,
+      "total_tokens": -465.0,
+      "input_tokens": -11.3,
+      "tool_calls": -5.7
+    },
+    "cost_efficiency": {
+      "quality_delta": 0.7917,
+      "cost_delta_pct": -49.5,
+      "classification": "PARETO_BETTER",
+      "emoji": "\ud83d\udfe2",
+      "description": "Skill improves quality while reducing cost"
+    },
+    "estimated_cost": {
+      "with_skill_per_run": {
+        "input_cost": 9e-06,
+        "output_cost": 0.007067,
+        "total_cost": 0.007077,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "without_skill_per_run": {
+        "input_cost": 4.3e-05,
+        "output_cost": 0.013873,
+        "total_cost": 0.013916,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "per_eval_pair": 0.020993,
+      "total_runs": 6,
+      "total_cost": 0.126,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "scores": {
+    "outcome": 0.9444,
+    "process": 0.0,
+    "style": 0.9444,
+    "efficiency": 1.0,
+    "overall": 0.7222
+  },
+  "passed": true
+}
