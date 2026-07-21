@@ -1,0 +1,485 @@
+<!--
+  Detailed Operational Review — HTML report template
+  ====================================================
+  STRUCTURAL template only. Contains NO customer data. Every value below is a
+  {{placeholder}} token or a single REPEAT example row — replace tokens with data
+  collected live via the awslabs.redshift-mcp-server MCP tools (list_clusters,
+  list_databases, execute_query) and the queries in
+  assets/queries/operational-review-collection.md. NEVER copy sample/example
+  values into a real report — this file is reference structure/CSS/JS only.
+
+  This HTML file is the DOWNLOADABLE artifact — save the filled-in file to disk
+  (or otherwise make it available to the user) and link it. It includes a
+  self-download button (#downloadReportBtn) so the report can re-save itself if
+  opened directly in a browser.
+
+  Always ALSO produce the companion Markdown version
+  (detailed-operational-review.md in this same directory) with identical section
+  structure, and post that Markdown directly in the chat response — raw HTML
+  pasted into chat renders as inert code, not an interactive page.
+
+  Rows marked <!-- REPEAT --> are single-row examples: repeat that <tr>/<div>/
+  <details> block once per returned data row, then delete the comment. Tab
+  buttons/panels follow the same pattern — add one button + one panel per
+  category actually populated with data; omit categories with zero findings.
+
+  The "Cluster Level Review (Power-2)" section requires CloudWatch metrics and
+  AWS CLI-sourced config checks the MCP tools cannot fetch — always render it as
+  "Not Available via MCP tools" unless the user supplies that data manually.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redshift Operational Review — {{cluster_or_workgroup}}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;min-height:100vh;background:#f5f6fa;color:#2d3436;font-size:14px;-webkit-font-smoothing:antialiased}
+nav{width:240px;background:#1e272e;color:#fff;position:fixed;top:0;left:0;height:100vh;overflow-y:auto;z-index:10}
+nav .logo{padding:24px 20px;border-bottom:1px solid #485460;font-size:14px}
+nav .logo h2{font-size:18px;margin-bottom:4px}
+nav .logo span{color:#a4b0be;font-size:12px}
+nav ul{list-style:none;padding:12px 0}
+nav li a{display:block;padding:10px 20px;color:#d2dae2;text-decoration:none;font-size:13px;border-left:3px solid transparent;transition:.2s;font-weight:400}
+nav li a:hover,nav li a.active{background:#485460;border-left-color:#0984e3;color:#fff}
+nav li.section-label{padding:16px 20px 6px;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#808e9b}
+main{margin-left:240px;flex:1;padding:32px;max-width:1200px}
+.stats-bar{display:flex;gap:16px;margin-bottom:28px;flex-wrap:wrap}
+.stat-card{background:#fff;border-radius:8px;padding:18px 22px;flex:1;min-width:140px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.stat-card .num{font-size:28px;font-weight:700;letter-spacing:-.5px}
+.stat-card .label{font-size:11px;color:#636e72;margin-top:2px;font-weight:500;text-transform:uppercase;letter-spacing:.3px}
+.stat-card.high .num{color:#d63031}
+.stat-card.med .num{color:#e17055}
+.stat-card.low .num{color:#f39c12}
+.stat-card.pass .num{color:#00b894}
+.stat-card.info .num{color:#0984e3}
+h1{font-size:24px;margin-bottom:4px;font-weight:700;letter-spacing:-.3px}
+h2{font-size:18px;margin:32px 0 16px;padding-bottom:8px;border-bottom:2px solid #dfe6e9;font-weight:600;letter-spacing:-.2px}
+h3{font-size:15px;margin:20px 0 10px;font-weight:600}
+p{line-height:1.6;margin-bottom:12px}
+.badge{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600;color:#fff}
+.badge.high{background:#d63031}
+.badge.medium{background:#e17055}
+.badge.low{background:#f39c12}
+.badge.pass{background:#00b894}
+.badge.info{background:#0984e3}
+.badge.na{background:#b2bec3}
+table{width:100%;border-collapse:collapse;margin:12px 0 24px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+th{background:#f8f9fa;text-align:left;padding:10px 14px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#636e72;border-bottom:2px solid #dfe6e9}
+td{padding:10px 14px;font-size:13px;border-bottom:1px solid #f1f2f6;line-height:1.5}
+tr:last-child td{border-bottom:none}
+tr:hover{background:#f8f9fa}
+details{background:#fff;border-radius:8px;margin:10px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+details summary{padding:14px 18px;cursor:pointer;font-weight:600;font-size:14px;list-style:none;display:flex;align-items:center;gap:8px;letter-spacing:-.1px}
+details summary::before{content:'▶';font-size:10px;transition:.2s}
+details[open] summary::before{transform:rotate(90deg)}
+details .detail-body{padding:0 18px 16px}
+.callout{background:#fff3e0;border-left:4px solid #e17055;border-radius:4px;padding:14px 18px;margin:12px 0;font-size:13px;line-height:1.6}
+.callout.success{background:#e8f8f5;border-left-color:#00b894}
+.callout.danger{background:#ffeaea;border-left-color:#d63031}
+.callout.info{background:#e3f2fd;border-left-color:#0984e3}
+.not-available{background:#f0f0f0;border:1px dashed #b5b5b5;border-radius:6px;padding:12px 16px;font-size:13px;color:#636e72}
+.priority-list{counter-reset:pri}
+.priority-item{background:#fff;border-radius:8px;padding:16px 18px;margin:10px 0;box-shadow:0 1px 3px rgba(0,0,0,.06);display:flex;gap:14px;align-items:flex-start}
+.priority-item::before{counter-increment:pri;content:counter(pri);background:#d63031;color:#fff;border-radius:50%;min-width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700}
+.section{background:#fff;border-radius:8px;padding:20px;margin:16px 0;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.tab-container{margin-top:12px}
+.tab-nav{display:flex;flex-wrap:wrap;gap:4px;border-bottom:2px solid #dfe6e9;padding-bottom:0}
+.tab-btn{padding:8px 16px;border:1px solid #dfe6e9;border-bottom:none;border-radius:6px 6px 0 0;background:#f8f9fa;cursor:pointer;font-size:0.85rem;font-weight:600;color:#636e72;transition:all 0.2s}
+.tab-btn:hover{background:#dfe6e9}
+.tab-btn.active{background:#fff;color:#2d3436;border-bottom:2px solid #fff;margin-bottom:-2px}
+.tab-btn .tab-count{display:inline-block;padding:1px 6px;border-radius:10px;font-size:0.75rem;margin-left:4px}
+.tab-btn .tab-count.cnt-fail{background:#ffeaea;color:#d63031}
+.tab-btn .tab-count.cnt-warn{background:#fff3e0;color:#e17055}
+.tab-btn .tab-count.cnt-info{background:#e3f2fd;color:#0984e3}
+.tab-panel{display:none;padding-top:12px}
+.tab-panel.active{display:block}
+.download-bar{display:flex;justify-content:flex-end;margin-bottom:16px}
+.download-btn{display:inline-flex;align-items:center;gap:8px;background:#0984e3;color:#fff;border:none;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none}
+.download-btn:hover{background:#0768b3}
+@media print{
+nav{display:none}main{margin-left:0;padding:20px}
+.stat-card,details,table,.section{break-inside:avoid}
+body{background:#fff}details[open]{break-inside:avoid}
+.download-bar{display:none}
+}
+</style>
+</head>
+<body>
+
+<nav>
+<div class="logo">
+  <h2>{{cluster_or_workgroup}}</h2>
+  <span>Redshift Operational Review<br>{{report_date}}</span>
+</div>
+<ul>
+  <li class="section-label">Overview</li>
+  <li><a href="#executive-summary">Executive Summary</a></li>
+  <li><a href="#cluster-overview">Cluster Overview</a></li>
+  <li class="section-label">Analysis</li>
+  <li><a href="#all-findings">All Findings</a></li>
+  <li><a href="#wlm-config">WLM Configuration</a></li>
+  <li><a href="#workload">Workload Analysis</a></li>
+  <li><a href="#top-queries">Top Queries</a></li>
+  <li><a href="#table-design">Table Design</a></li>
+  <li><a href="#spectrum">Spectrum / External</a></li>
+  <li><a href="#data-sharing">Data Sharing</a></li>
+  <li class="section-label">Actions</li>
+  <li><a href="#recommendations">Recommendations</a></li>
+</ul>
+</nav>
+
+<main>
+
+<div class="download-bar">
+  <button class="download-btn" id="downloadReportBtn" onclick="downloadReportHtml()">⬇ Download HTML Report</button>
+</div>
+
+<div style="background:linear-gradient(135deg,#232f3e 0%,#37475a 100%);border-radius:10px;padding:32px 36px;margin-bottom:28px;color:#fff">
+<h1 style="font-size:26px;font-weight:700;margin-bottom:8px;color:#fff">Redshift Detailed Operational Review</h1>
+<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:13px;opacity:.85">
+  <span>🏢 {{account_or_customer_label}}</span>
+  <span>📅 {{report_date}}</span>
+  <span>🔧 Cluster: {{node_type}} × {{node_count}} nodes | Slices: {{slice_count}}</span>
+</div>
+</div>
+
+<!-- ===================== EXECUTIVE SUMMARY ===================== -->
+<h2 id="executive-summary">Executive Summary</h2>
+<div class="section">
+<div class="stats-bar">
+<div class="stat-card pass"><div class="num">{{pass_count}}</div><div class="label">Pass</div></div>
+<div class="stat-card med"><div class="num">{{warn_count}}</div><div class="label">Warn</div></div>
+<div class="stat-card high"><div class="num">{{fail_count}}</div><div class="label">Fail</div></div>
+<div class="stat-card info"><div class="num">{{info_count}}</div><div class="label">Info</div></div>
+</div>
+<p><strong>Overall Health: {{overall_health_emoji_and_label}}</strong></p>
+<p>{{executive_summary_narrative}}</p>
+<p>A total of <strong>{{total_findings}}</strong> checks were evaluated: <strong>{{fail_count}} critical (FAIL)</strong>, <strong>{{warn_count}} warnings</strong>, <strong>{{pass_count}} passing</strong>, and {{info_count}} informational.</p>
+
+<h3>Critical Findings Requiring Immediate Attention</h3>
+<ul>
+<li><strong>{{critical_finding_category}} — {{critical_finding_title}}:</strong> {{critical_finding_detail}}</li>
+<!-- REPEAT per FAIL-severity finding -->
+</ul>
+
+<h3>Top Optimization Opportunities</h3>
+<ul>
+<li><strong>{{opportunity_category}} — {{opportunity_title}}:</strong> {{opportunity_detail}}</li>
+<!-- REPEAT per top WARN-severity opportunity -->
+</ul>
+
+<h3>Areas of Concern</h3>
+<ul>
+<li><strong>{{area_category}}</strong> — {{area_fail_count}} critical, {{area_warn_count}} warnings</li>
+<!-- REPEAT per finding category -->
+</ul>
+
+<p>The full breakdown is in the <a href="#all-findings">All Findings</a> section, and prioritized remediation steps are in <a href="#recommendations">Recommendations</a>.</p>
+</div>
+
+<!-- ===================== CLUSTER OVERVIEW ===================== -->
+<h2 id="cluster-overview">1. Cluster Overview</h2>
+<div class="section">
+<table>
+<tr><th>Metric</th><th>Value</th></tr>
+<tr><td>Node Type</td><td>{{node_type}}</td></tr>
+<tr><td>Node Count</td><td>{{node_count}}</td></tr>
+<tr><td>Total Slices</td><td>{{slice_count}}</td></tr>
+<tr><td>Storage Used</td><td>{{storage_used_gb}} GB / {{storage_capacity_gb}} GB ({{storage_utilization_pct}}% avg)</td></tr>
+<tr><td>Storage Skew (max/min)</td><td>{{storage_skew_ratio}}x</td></tr>
+<tr><td>WLM Mode</td><td>{{wlm_mode}}</td></tr>
+<tr><td>User Queues</td><td>{{user_queue_count}}</td></tr>
+<tr><td>SQA Enabled</td><td>{{sqa_enabled}}</td></tr>
+<tr><td>Databases Reviewed</td><td>{{database_list}}</td></tr>
+</table>
+</div>
+
+<!-- ===================== CLUSTER LEVEL REVIEW (POWER-2) ===================== -->
+<h2 id="power2-review">1b. Cluster Level Review (Power-2)</h2>
+<div class="section" data-source="not-available">
+<div class="not-available" style="margin-bottom:16px;">
+<strong>Not Available via MCP tools.</strong> This section covers CloudWatch metrics, support case
+history, and AWS CLI-sourced configuration checks (SSL enforcement, audit logging,
+Enhanced VPC Routing, Multi-AZ, cross-region snapshot copy, maintenance window,
+parameter groups). The connected <code>awslabs.redshift-mcp-server</code> MCP tools only
+provide <code>list_clusters</code>, <code>list_databases</code>, <code>list_schemas</code>,
+<code>list_tables</code>, <code>list_columns</code>, and <code>execute_query</code> — none of
+which expose CloudWatch or AWS CLI data. Populate the tables below only if the user
+supplies this data manually; otherwise leave every row as "Not Available."
+</div>
+<p style="margin-bottom:12px;"><strong>Account:</strong> {{account_id}} | <strong>Region:</strong> {{region}} | <strong>Cluster:</strong> {{cluster_identifier}} | <strong>Date:</strong> {{report_date}}</p>
+<table>
+<tr><th>Category</th><th>Check</th><th>Status</th><th>Detail</th><th>Recommendation</th></tr>
+<tr><td>Security</td><td>Encryption at rest</td><td><span class="badge na">N/A</span></td><td>Requires AWS CLI</td><td>—</td></tr>
+<tr><td>Security</td><td>SSL enforced (require_ssl)</td><td><span class="badge na">N/A</span></td><td>Requires AWS CLI</td><td>—</td></tr>
+<tr><td>Security</td><td>Audit logging</td><td><span class="badge na">N/A</span></td><td>Requires AWS CLI</td><td>—</td></tr>
+<tr><td>Security</td><td>Enhanced VPC Routing</td><td><span class="badge na">N/A</span></td><td>Requires AWS CLI</td><td>—</td></tr>
+<tr><td>Resilience</td><td>Multi-AZ</td><td><span class="badge na">N/A</span></td><td>Requires AWS CLI</td><td>—</td></tr>
+<tr><td>Backup</td><td>Automated snapshots / cross-region copy</td><td><span class="badge na">N/A</span></td><td>Requires AWS CLI</td><td>—</td></tr>
+<!-- REPEAT: add rows only if user manually supplies data -->
+</table>
+<h3>CloudWatch Metrics — 30-Day Trend</h3>
+<table>
+<tr><th>Metric</th><th>Min</th><th>Avg</th><th>Max</th><th>Threshold</th><th>Status</th></tr>
+<tr><td>CPU Utilization (Avg %)</td><td colspan="4">Requires CloudWatch access</td><td><span class="badge na">N/A</span></td></tr>
+<tr><td>Disk Space Used (Avg %)</td><td colspan="4">Requires CloudWatch access</td><td><span class="badge na">N/A</span></td></tr>
+<tr><td>Database Connections (Max)</td><td colspan="4">Requires CloudWatch access</td><td><span class="badge na">N/A</span></td></tr>
+<tr><td>Health Status (Min)</td><td colspan="4">Requires CloudWatch access</td><td><span class="badge na">N/A</span></td></tr>
+</table>
+<h3>Active Redshift Service Events</h3>
+<p class="not-available">Requires AWS CLI (describe-events) access — not available via MCP tools.</p>
+<h3>Open Redshift Support Cases</h3>
+<p class="not-available">Requires AWS Support API access — not available via MCP tools.</p>
+</div>
+
+<!-- ===================== ALL FINDINGS ===================== -->
+<h2 id="all-findings">2. All Findings</h2>
+<div class="section">
+<div class="stats-bar" style="margin-bottom:16px;">
+<div class="stat-card pass"><div class="num">{{pass_count}}</div><div class="label">Pass</div></div>
+<div class="stat-card med"><div class="num">{{warn_count}}</div><div class="label">Warn</div></div>
+<div class="stat-card high"><div class="num">{{fail_count}}</div><div class="label">Fail</div></div>
+<div class="stat-card info"><div class="num">{{info_count}}</div><div class="label">Info</div></div>
+</div>
+<div class="tab-container">
+<div class="tab-nav">
+<button class="tab-btn active" onclick="openFindingsTab(event, 'af-tab-0')">{{findings_category_1}} <span class="tab-count cnt-fail">{{findings_category_1_count}}</span></button>
+<button class="tab-btn" onclick="openFindingsTab(event, 'af-tab-1')">{{findings_category_2}} <span class="tab-count cnt-warn">{{findings_category_2_count}}</span></button>
+<!-- REPEAT one button per finding category actually populated -->
+</div>
+<div id="af-tab-0" class="tab-panel active">
+<table>
+<tr><th>Check</th><th>Status</th><th>Detail</th><th>Recommendation</th></tr>
+<tr><td>{{check_name}}</td><td><span class="badge high">❌ FAIL</span></td><td>{{check_detail}}</td><td>{{check_recommendation}}</td></tr>
+<!-- REPEAT per finding row in this category -->
+</table>
+</div>
+<div id="af-tab-1" class="tab-panel">
+<table>
+<tr><th>Check</th><th>Status</th><th>Detail</th><th>Recommendation</th></tr>
+<tr><td>{{check_name}}</td><td><span class="badge medium">⚠️ WARN</span></td><td>{{check_detail}}</td><td>{{check_recommendation}}</td></tr>
+<!-- REPEAT -->
+</table>
+</div>
+<!-- REPEAT one tab-panel div per category, matching each tab-nav button above -->
+</div>
+</div>
+
+<!-- ===================== WLM CONFIGURATION ===================== -->
+<h2 id="wlm-config">3. WLM Configuration</h2>
+<div class="section">
+<div class="stats-bar" style="margin-bottom:16px;">
+<div class="stat-card"><div class="num">{{wlm_mode}}</div><div class="label">WLM Mode</div></div>
+<div class="stat-card"><div class="num">{{total_wlm_slots}}</div><div class="label">Total Slots</div></div>
+<div class="stat-card"><div class="num">{{user_queue_count}}</div><div class="label">User Queues</div></div>
+<div class="stat-card"><div class="num">{{sqa_enabled}}</div><div class="label">SQA</div></div>
+<div class="stat-card"><div class="num">{{cluster_memory_gb}} GB</div><div class="label">Cluster Memory</div></div>
+</div>
+<h3>Queue Configuration</h3>
+<table>
+<tr><th>Queue</th><th>Service Class</th><th>Slots</th><th>Memory %</th><th>Memory/Slot</th><th>Concurrency Scaling</th><th>QMR Rules</th><th>Evictable</th><th>Routing</th></tr>
+<tr><td>{{queue_name}}</td><td>{{service_class}}</td><td>{{queue_slots}}</td><td>{{queue_memory_pct}}%</td><td>{{queue_memory_per_slot}}</td><td>{{queue_concurrency_scaling}}</td><td>{{queue_qmr_rule_count}}</td><td>{{queue_evictable}}</td><td style="font-size:11px;">{{queue_routing}}</td></tr>
+<!-- REPEAT per WLM queue -->
+</table>
+<h3>Memory Allocation</h3>
+<p style="font-size:12px;color:#636e72;">Total cluster memory: {{cluster_memory_gb}} GB ({{cluster_memory_mb}} MB). {{wlm_mode}} WLM divides memory across queues based on percentage allocation.</p>
+<table>
+<tr><th>Queue</th><th>Slots</th><th>Memory %</th><th>Memory per Slot</th><th>Total Queue Memory</th></tr>
+<tr><td>{{queue_name}} ({{service_class}})</td><td>{{queue_slots}}</td><td>{{queue_memory_pct}}%</td><td>{{queue_memory_per_slot}}</td><td>{{queue_total_memory}}</td></tr>
+<!-- REPEAT per WLM queue -->
+</table>
+<h3>QMR Rules (Query Monitoring Rules)</h3>
+<table>
+<tr><th>Queue</th><th>Rule Name</th><th>Metric &amp; Threshold</th><th>Action</th></tr>
+<tr><td>{{queue_name}}</td><td>{{qmr_rule_name}}</td><td>{{qmr_metric_threshold}}</td><td><span class="badge high">{{qmr_action}}</span></td></tr>
+<!-- REPEAT per QMR rule -->
+</table>
+<p style='font-size:12px;color:#636e72;margin-top:12px;'><strong>Key Settings:</strong> Auto WLM = {{auto_wlm_enabled}} | SQA = {{sqa_enabled}} | Statement Timeout = {{statement_timeout}}</p>
+</div>
+
+<!-- ===================== WORKLOAD ANALYSIS ===================== -->
+<h2 id="workload">4. Workload Analysis</h2>
+<div class="section">
+<h3>Workload Distribution</h3>
+<table>
+<tr><th>Type</th><th>% Total Workload</th><th>% Day Active</th><th>Query Count</th><th>Avg Exec (s)</th><th>Max Exec (s)</th><th>Avg Scan (MB)</th></tr>
+<tr><td>{{workload_type}}</td><td>{{workload_pct_total}}</td><td>{{workload_pct_day_active}}</td><td>{{workload_query_count}}</td><td>{{workload_avg_exec_sec}}</td><td>{{workload_max_exec_sec}}</td><td>{{workload_avg_scan_mb}}</td></tr>
+<!-- REPEAT per workload_type (small/medium/large) -->
+</table>
+<h3>Queue Performance Summary</h3>
+<table>
+<tr><th>Queue</th><th>Queries</th><th>Elapsed (s)</th><th>Queue Time (s)</th><th>Queue %</th><th>Disk Spill</th><th>Errors</th><th>Small Inserts</th></tr>
+<tr><td>{{queue_name}}</td><td>{{queue_query_count}}</td><td>{{queue_elapsed_sec}}</td><td>{{queue_wait_sec}}</td><td>{{queue_wait_pct}}%</td><td>{{queue_disk_spill}}</td><td>{{queue_error_count}}</td><td>{{queue_small_insert_count}}</td></tr>
+<!-- REPEAT per queue -->
+</table>
+</div>
+
+<!-- ===================== TOP QUERIES BY RUNTIME ===================== -->
+<h2 id="top-queries">5. Top Queries by Runtime</h2>
+<div class="section">
+<h3>Top 10 Query Performance Analysis</h3>
+<p style="font-size:12px;color:#636e72;margin-bottom:12px;">Queries grouped by primary issue. Expand each query for detailed time breakdown and resource utilization. Use the Query ID to locate the query in your cluster.</p>
+
+<div style="margin-top:20px;margin-bottom:12px;">
+<h3><span class="badge high">{{issue_group_count}}</span> {{issue_group_title}}</h3>
+<p style="font-size:12px;color:#636e72;margin-bottom:10px;">{{issue_group_description}}</p>
+<details style="margin-left:16px;">
+<summary><strong>#{{rank}}</strong> &nbsp; Query ID: <code>{{query_id}}</code> &nbsp;|&nbsp; {{elapsed_sec}}s &nbsp;|&nbsp; &times;{{run_count}} runs &nbsp;|&nbsp; {{query_type}} &nbsp;|&nbsp; {{queue_name}}</summary>
+<div class="detail-body">
+<div class="callout" style="margin-bottom:12px;"><strong>What's happening:</strong> {{issue_explanation}}<br><strong>Performance impact:</strong> {{performance_impact}}<br><strong>Root cause:</strong> {{root_cause}}<br><strong>Fix:</strong> {{fix_recommendation}}</div>
+<table>
+<tr><th>Metric</th><th>Value</th><th>% of Elapsed</th><th>Flag</th></tr>
+<tr><td>Execution Time</td><td>{{exec_sec}}s</td><td>{{exec_pct}}%</td><td></td></tr>
+<tr><td>Queue Wait</td><td>{{queue_wait_sec}}s</td><td>{{queue_wait_pct}}%</td><td></td></tr>
+<tr><td>Compile Time</td><td>{{compile_sec}}s</td><td>{{compile_pct}}%</td><td></td></tr>
+<tr><td>Planning Time</td><td>{{planning_sec}}s</td><td></td><td></td></tr>
+<tr><td>Lock Wait</td><td>{{lock_wait_sec}}s</td><td></td><td></td></tr>
+<tr><td>Disk Spill (Total)</td><td>{{spill_total_mb}} MB</td><td></td><td>{{spill_flag}}</td></tr>
+<tr><td>Disk Spill (Local)</td><td>{{spill_local_mb}} MB</td><td></td><td></td></tr>
+<tr><td>Disk Spill (Remote/S3)</td><td>{{spill_remote_mb}} MB</td><td></td><td>{{remote_spill_flag}}</td></tr>
+<tr><td>Range-Restricted Scan</td><td>{{range_restricted}}</td><td></td><td>{{range_restricted_flag}}</td></tr>
+</table>
+<p style="font-size:12px;margin-top:8px;"><strong>Query ID:</strong> <code>{{query_id}}</code> | <strong>User:</strong> {{query_user}} | <strong>Priority:</strong> {{query_priority}} | <strong>Compute:</strong> {{compute_type}}</p>
+<p style="font-size:12px;"><strong>Tables:</strong> {{referenced_tables}}</p>
+</div>
+</details>
+<!-- REPEAT per query within this issue group -->
+</div>
+<!-- REPEAT one issue-group block per category (e.g. Heavy Disk Spill, Long Running Query, etc.) -->
+
+<h3>Top 20 Summary</h3>
+<p style="font-size:12px;color:#636e72;margin-bottom:8px;">Flags: 💾 Spill &gt;100MB | ☁️ Remote spill (S3) | ⏳ Queue &gt;10% | 🔨 High compile | 🔄 Nested loop | 📡 Broadcast | 📊 Missing stats | 🔀 Unsorted | ❌ Error</p>
+<table>
+<tr><th>#</th><th>Query ID</th><th>Exec (s)</th><th>Elapsed (s)</th><th>Queue %</th><th>Count</th><th>Type</th><th>Queue</th><th>Spill (MB)</th><th>Flags</th></tr>
+<tr><td>{{rank}}</td><td>{{query_id}}</td><td>{{exec_sec}}</td><td>{{elapsed_sec}}</td><td>{{queue_wait_pct}}%</td><td>{{run_count}}</td><td>{{query_type}}</td><td>{{queue_name}}</td><td>{{spill_mb}}</td><td style='font-size:11px;'>{{flags}}</td></tr>
+<!-- REPEAT for up to 20 rows -->
+</table>
+</div>
+
+<!-- ===================== TABLE DESIGN ===================== -->
+<h2 id="table-design">6. Table Design</h2>
+<div class="section">
+<div class="stats-bar" style="margin-bottom:16px;">
+<div class="stat-card"><div class="num">{{table_design_total_issues}}</div><div class="label">Total Issues</div></div>
+<div class="stat-card high"><div class="num">{{table_design_fail_count}}</div><div class="label">Fail</div></div>
+<div class="stat-card med"><div class="num">{{table_design_warn_count}}</div><div class="label">Warn</div></div>
+<div class="stat-card info"><div class="num">{{table_design_info_count}}</div><div class="label">Info</div></div>
+<div class="stat-card"><div class="num">{{table_design_issue_type_count}}</div><div class="label">Issue Types</div></div>
+</div>
+<div class="tab-container">
+<div class="tab-nav">
+<button class="tab-btn active" onclick="openTab(event, 'td-tab-0')">{{issue_type_1}} <span class="tab-count cnt-fail">{{issue_type_1_count}}</span></button>
+<button class="tab-btn" onclick="openTab(event, 'td-tab-1')">{{issue_type_2}} <span class="tab-count cnt-warn">{{issue_type_2_count}}</span></button>
+<!-- REPEAT one button per table-design issue type actually populated -->
+</div>
+<div id="td-tab-0" class="tab-panel active">
+<p style="margin-bottom:8px;"><strong>Recommendation:</strong> {{issue_type_1_recommendation}}</p>
+<table>
+<tr><th>Table</th><th>Rows</th><th>Severity</th><th>Detail</th><th>Recommendation</th></tr>
+<tr><td>{{schema_dot_table}}</td><td>{{row_count}}</td><td class='fail'>FAIL</td><td>{{issue_detail}}</td><td>{{issue_recommendation}}</td></tr>
+<!-- REPEAT per affected table -->
+</table>
+</div>
+<!-- REPEAT one tab-panel div per issue type, matching each tab-nav button above -->
+</div>
+</div>
+
+<!-- ===================== SPECTRUM / EXTERNAL ===================== -->
+<h2 id="spectrum">7. Spectrum / External Queries</h2>
+<div class="section">
+<p>{{spectrum_table_count}} external tables queried. <strong>{{spectrum_poor_pruning_count}} partitioned tables with poor partition pruning (&lt;95%).</strong></p>
+<table>
+<tr><th>Table</th><th>Format</th><th>Partitions</th><th>Queries</th><th>Pruning %</th><th>Avg Elapsed (s)</th></tr>
+<tr><td>{{external_table_name}}</td><td>{{external_file_format}}</td><td>{{partition_count}}</td><td>{{external_query_count}}</td><td class='{{pruning_flag_class}}'>{{partition_pruning_pct}}%</td><td>{{external_avg_elapsed_sec}}</td></tr>
+<!-- REPEAT per external table, or replace this table with "No Spectrum usage detected." if none found -->
+</table>
+</div>
+
+<!-- ===================== DATA SHARING ===================== -->
+<h2 id="data-sharing">8. Data Sharing</h2>
+<div class="section">
+<table>
+<tr><th>Share Name</th><th>Objects</th></tr>
+<tr><td>{{share_name}}</td><td>{{share_object_count}}</td></tr>
+<!-- REPEAT per data share, or replace this table with "No data sharing configured." if none found -->
+</table>
+</div>
+
+<!-- ===================== UPGRADE / COST SAVINGS ===================== -->
+<div class="callout info" style="margin-top:24px;">
+<strong>💡 {{upgrade_recommendation_title}}</strong>
+<p style="margin-top:8px;">{{upgrade_recommendation_summary}}</p>
+
+<table style="margin-top:12px;">
+<tr><th>Aspect</th><th>Current Configuration</th><th>Recommended</th></tr>
+<tr><td>Instance Type</td><td>{{current_node_type}}</td><td>{{recommended_node_type}}</td></tr>
+<tr><td>Node Count</td><td>{{current_node_count}}</td><td>{{recommended_node_count}}</td></tr>
+<tr><td>On-Demand Price (per node/hr)</td><td>{{current_price_per_node_hr}}</td><td>{{recommended_price_per_node_hr}}</td></tr>
+<tr><td>Monthly Compute (On-Demand)</td><td>{{current_monthly_cost}}</td><td>{{recommended_monthly_cost}}</td></tr>
+<tr><td><strong>Estimated Monthly Savings</strong></td><td colspan="2"><strong>{{estimated_monthly_savings}} ({{estimated_savings_pct}}%)</strong></td></tr>
+</table>
+
+<p style="margin-top:12px;font-size:13px;"><strong>Migration method:</strong> {{migration_method}}</p>
+<p class="not-available" style="margin-top:8px;">
+Precise current-cost figures require AWS CLI/Cost Explorer access not available
+through the MCP tools. Treat savings estimates as directional unless the user
+supplies actual billing data.
+</p>
+</div>
+
+<!-- ===================== RECOMMENDATIONS ===================== -->
+<h2 id="recommendations">9. Prioritized Recommendations</h2>
+<div class="section">
+<div class="priority-list">
+<div class="priority-item">
+<div>
+  <strong><span class="badge high">FAIL</span> {{recommendation_1_title}}</strong>
+  <p style="font-size:13px;margin-top:4px">{{recommendation_1_detail}}</p>
+  <div class="callout" style="margin-top:6px;padding:8px 12px;">💡 {{recommendation_1_fix}}</div>
+</div>
+</div>
+<!-- REPEAT one priority-item per recommendation, ordered by severity (FAIL > WARN > INFO) -->
+</div>
+</div>
+
+</main>
+
+<script>
+function openFindingsTab(evt, tabId) {
+  var container = evt.currentTarget.closest('.section');
+  var panels = container.querySelectorAll('.tab-panel');
+  for (var i = 0; i < panels.length; i++) { panels[i].classList.remove('active'); }
+  var btns = container.querySelectorAll('.tab-btn');
+  for (var i = 0; i < btns.length; i++) { btns[i].classList.remove('active'); }
+  document.getElementById(tabId).classList.add('active');
+  evt.currentTarget.classList.add('active');
+}
+function openTab(evt, tabId) {
+  var container = evt.currentTarget.closest('.section');
+  var panels = container.querySelectorAll('.tab-panel');
+  for (var i = 0; i < panels.length; i++) { panels[i].classList.remove('active'); }
+  var btns = container.querySelectorAll('.tab-btn');
+  for (var i = 0; i < btns.length; i++) { btns[i].classList.remove('active'); }
+  document.getElementById(tabId).classList.add('active');
+  evt.currentTarget.classList.add('active');
+}
+// Self-download: saves the current rendered document (including this script)
+// as a standalone .html file, so the report works as its own download button
+// with no server round-trip needed.
+function downloadReportHtml() {
+  var htmlContent = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+  var blob = new Blob([htmlContent], { type: 'text/html' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = '{{report_filename}}';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

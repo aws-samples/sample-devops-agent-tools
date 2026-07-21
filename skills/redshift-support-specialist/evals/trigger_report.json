@@ -1,0 +1,94 @@
+{
+  "skill_name": "redshift-support-specialist",
+  "skill_path": "<repo-root>/skills/redshift-support-specialist",
+  "query_results": [
+    {
+      "query": "Which skill would help me tune a slow Amazon Redshift query? Just name it; do not run it.",
+      "should_trigger": true,
+      "trigger_count": 2,
+      "run_count": 2,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 129.0,
+      "mean_total_tokens": 132.0
+    },
+    {
+      "query": "Is there a skill available for running a Redshift operational review or cluster health check? Answer yes or no with the skill name; do not execute it.",
+      "should_trigger": true,
+      "trigger_count": 2,
+      "run_count": 2,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 192.5,
+      "mean_total_tokens": 195.5
+    },
+    {
+      "query": "Name the skill that covers Redshift cost optimization and serverless RPU sizing. Do not run any analysis.",
+      "should_trigger": true,
+      "trigger_count": 2,
+      "run_count": 2,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 173.5,
+      "mean_total_tokens": 176.5
+    },
+    {
+      "query": "Write a Python script that sorts a list of numbers",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 2,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 126.0,
+      "mean_total_tokens": 129.0
+    },
+    {
+      "query": "What's the weather forecast for Sydney this weekend?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 2,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 153.0,
+      "mean_total_tokens": 156.0
+    },
+    {
+      "query": "Create a CloudFormation template for an S3 bucket",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 2,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 318.5,
+      "mean_total_tokens": 322.5
+    }
+  ],
+  "summary": {
+    "total_queries": 6,
+    "passed": 6,
+    "failed": 0,
+    "trigger_precision": 1.0,
+    "no_trigger_precision": 1.0,
+    "mean_total_tokens_per_run": 185.2,
+    "estimated_cost": {
+      "per_run": {
+        "input_cost": 1e-05,
+        "output_cost": 0.002731,
+        "total_cost": 0.002741,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "total_runs": 6,
+      "total_cost": 0.0164,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "passed": true
+}
