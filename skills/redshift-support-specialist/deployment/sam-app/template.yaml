@@ -259,8 +259,16 @@ Resources:
             Condition:
               StringEquals:
                 aws:SourceAccount: !Ref AWS::AccountId
+              # Both ARN patterns are needed: the DevOps Agent docs show
+              # "service/*", but the AssumeRole calls the service actually
+              # makes (session "sigv4McpServerSession") use "agentspace/*"
+              # -- with only "service/*" the MCP registration fails with
+              # "Invalid STS role configuration ... Verify the role's
+              # trust policy."
               ArnLike:
-                aws:SourceArn: !Sub 'arn:aws:aidevops:${AWS::Region}:${AWS::AccountId}:service/*'
+                aws:SourceArn:
+                  - !Sub 'arn:aws:aidevops:${AWS::Region}:${AWS::AccountId}:service/*'
+                  - !Sub 'arn:aws:aidevops:${AWS::Region}:${AWS::AccountId}:agentspace/*'
       Policies:
         # Permission to invoke the API Gateway endpoint's /mcp method --
         # this is what AWS DevOps Agent's SigV4 auth actually needs

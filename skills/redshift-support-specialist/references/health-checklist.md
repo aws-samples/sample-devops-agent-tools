@@ -26,7 +26,6 @@ All API calls are made via `AWS CLI`. The following APIs are available for clust
 | API | Purpose | Key Response Fields |
 |-----|---------|---------------------|
 | `aws cloudwatch list-metrics` | Discover available metrics for a cluster (confirms active dimensions and namespaces) | `MetricName`, `Namespace`, `Dimensions` (ClusterIdentifier, NodeID) |
-| `aws cloudwatch describe-alarms` | Retrieve configured alarms and current state | `AlarmName`, `MetricName`, `Namespace`, `StateValue` (OK/ALARM/INSUFFICIENT_DATA), `Threshold`, `ComparisonOperator`, `EvaluationPeriods` |
 
 ---
 
@@ -59,9 +58,8 @@ Namespace: `AWS/Redshift`. Dimension: `ClusterIdentifier` (cluster-level) or `Cl
 **Available APIs:**
 
 - `aws cloudwatch list-metrics` — Discover which metrics are being emitted for the cluster (confirms active metric dimensions and namespaces)
-- `aws cloudwatch describe-alarms` — Retrieve all configured alarms and their current state (OK, ALARM, INSUFFICIENT_DATA)
 
-**Evaluation approach:** Use `aws cloudwatch list-metrics` to confirm which metrics are available for the cluster, then use `aws cloudwatch describe-alarms` to check for any alarms in ALARM state. For metric values, review the Redshift console or CloudWatch console dashboards.
+**Evaluation approach:** Use `aws cloudwatch list-metrics` to confirm which metrics are available for the cluster. For metric values, review the Redshift console or CloudWatch console dashboards.
 
 **Period:** 300 seconds (5 min). **Lookback:** 24 hours for current state, 7 days for trends.
 
@@ -148,8 +146,6 @@ Namespace: `AWS/Redshift-Serverless`. Dimension: `Workgroup`.
 | 4.11 | Parameter drift from defaults | Compare `aws redshift describe-cluster-parameters` vs `aws redshift describe-default-cluster-parameters` | Intentional deviations documented | Unexpected deviations | Review and document all non-default parameter values, and confirm they were changed intentionally |
 | 4.12 | Maintenance window configured | `aws redshift describe-clusters` → `PreferredMaintenanceWindow` | Set to low-traffic window | Default or peak-hours window | Adjust to off-peak hours |
 | 4.13 | Cluster version current | `aws redshift describe-clusters` → `ClusterVersion` + `AllowVersionUpgrade` | Current version; auto-upgrade enabled | Outdated version | Enable `AllowVersionUpgrade`; schedule maintenance |
-| 4.14 | CloudWatch alarms configured | `aws cloudwatch describe-alarms` (filter: Redshift namespace) | Alarms defined for key metrics (CPU, disk, health) | No alarms configured | Create alarms for critical metrics |
-| 4.15 | Alarms in healthy state | `aws cloudwatch describe-alarms` → `StateValue` | All alarms in OK state | Any alarm in ALARM state | Investigate and resolve alarming metrics |
 
 ---
 
@@ -174,7 +170,7 @@ These checks require running SQL queries against the cluster. Use system tables/
 
 ## Phase 6: WLM & Concurrency Assessment
 
-Uses `aws redshift describe-cluster-parameters` to retrieve WLM configuration (`wlm_json_configuration`), QMR rules, and SQA settings. Uses `aws cloudwatch describe-alarms` for Concurrency Scaling alarm state.
+Uses `aws redshift describe-cluster-parameters` to retrieve WLM configuration (`wlm_json_configuration`), QMR rules, and SQA settings.
 
 | # | Check | Source | 🟢 PASS | ⚠️ WARN | ❌ FAIL | Action |
 |---|-------|--------|---------|---------|---------|--------|
@@ -183,7 +179,6 @@ Uses `aws redshift describe-cluster-parameters` to retrieve WLM configuration (`
 | 6.3 | Queue depth | `STV_WLM_SERVICE_CLASS_STATE.num_queued_queries` | 0 | 1-5 | > 5 sustained | Increase concurrency or add Concurrency Scaling |
 | 6.4 | QMR rules configured | `aws redshift describe-cluster-parameters` → QMR settings | Rules defined for runaway queries | No rules | — | Define QMR rules (execution time, CPU, rows returned) |
 | 6.5 | SQA enabled | `aws redshift describe-cluster-parameters` → `max_execution_time` | SQA enabled | — | SQA disabled | Enable Short Query Acceleration |
-| 6.6 | Concurrency Scaling alarms | `aws cloudwatch describe-alarms` → ConcurrencyScaling metrics | Alarms configured and in OK state | No alarms configured | Alarms in ALARM state | Review cost; optimize burst queries |
 
 ---
 

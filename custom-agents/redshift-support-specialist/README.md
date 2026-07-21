@@ -1,20 +1,27 @@
 # Redshift Support Specialist — Custom Agent
 
+**Version: 1.3.0** (see [`CHANGELOG.md`](CHANGELOG.md)) | Requires skill version 1.8.0+ (see [`skills/redshift-support-specialist/`](../../skills/redshift-support-specialist/))
+
 ## Purpose
 
-This custom agent is a lean orchestrator for the [`redshift-support-specialist`](../../skills/redshift-support-specialist/) skill. It bridges that skill's domain knowledge (query optimization, operational reviews, disaster recovery guidance, incident detection guidance, cost optimization) to the six tools exposed by the connected `awslabs.redshift-mcp-server` MCP server, and enforces one important behavior rule: it runs in the active chat session by default and never offers or silently switches to background execution — even for the multi-step Detailed Operational Review — unless the user explicitly asks for background mode after confirming the cluster/database scope.
+This custom agent is a lean orchestrator for the [`redshift-support-specialist`](../../skills/redshift-support-specialist/) skill. It bridges that skill's domain knowledge (query optimization, operational reviews, cost optimization) to the six tools exposed by the connected `awslabs.redshift-mcp-server` MCP server, and enforces one important behavior rule: **no scope, no run**. Custom agents execute as asynchronous invocations (there is no interactive user to answer questions mid-run), so the target cluster/workgroup and database(s) must be provided in the invocation prompt — if they're missing, the agent ends the run immediately with a "Scope required — run not started" report instead of guessing or defaulting.
 
 ## Key Capabilities
 
 - Diagnoses slow Redshift queries live (EXPLAIN plan, disk spill, distribution/sort key issues) with concrete SQL/config fixes
 - Runs a quick PASS/WARN/FAIL operational review using cluster inventory data
 - Runs a full Detailed Operational Review (storage, WLM, table design, Advisor recommendations) and produces both an in-chat Markdown summary and a downloadable HTML report
-- Offers disaster recovery and CloudWatch alarm guidance as reference material where live AWS CLI/CloudWatch access isn't available through the MCP server
 - Performs cost optimization analysis, including provisioned-to-serverless RPU sizing
 
 ## Important behavior note
 
-This agent (and the skill itself, as of skill v1.7.0) runs interactively in the active foreground chat by default, so the user can watch progress and intervene at any point. It never offers background execution in its confirmation questions and never switches to background mode on its own — a platform prompt or default does not count. The only way to get a background run is to explicitly ask for one yourself, after the agent has confirmed the target cluster/workgroup and database scope with you. This is intentional: scoped confirmation always comes first, and interactive execution is the default.
+Custom agents in AWS DevOps Agent always execute as **asynchronous invocations** — "Run Now" on the agent page and "run the agent" in Chat both kick off a background run tracked in the **History** tab. This is platform behavior and cannot be switched to an interactive session ([Executing custom agents](https://docs.aws.amazon.com/devopsagent/latest/userguide/custom-agents-executing-custom-agents.html)).
+
+Because the agent cannot ask questions mid-run, this agent's system prompt (Section 0) enforces **no scope, no run**: the invocation prompt must name the target cluster/workgroup, the database(s), and what to do. Example:
+
+> "Run the custom redshift-support-specialist agent and perform a detailed operational review on cluster `my-cluster`, databases `analytics` and `sales`, with the HTML report."
+
+If scope is missing, the run ends immediately with a "Scope required — run not started" report listing the discovered clusters/workgroups — no data is collected and nothing is assumed. For an interactive, step-by-step experience (where the agent asks scope questions and waits for your answers), use the skill from the regular DevOps Agent Chat instead of executing this custom agent.
 
 ## Prerequisites
 
@@ -51,7 +58,14 @@ MCP tools cannot be assigned through the Form — they can only be configured th
 
 ## Executing the Agent
 
-You can execute the custom agent on-demand from the custom agent page or using chat. Follow the [Executing custom agents guide](https://docs.aws.amazon.com/devopsagent/latest/userguide/custom-agents-executing-custom-agents.html) for more information. Because this agent runs in the active chat session by default (background only when you explicitly ask, after scope confirmation), it's best suited to interactive use rather than scheduled runs — ask it things like "why is this Redshift query slow?" or "run a detailed operational review on my cluster."
+You can execute the custom agent on-demand from the custom agent page (**Run Now** → dropdown → **Run with prompt** to pass scope) or through Chat. Follow the [Executing custom agents guide](https://docs.aws.amazon.com/devopsagent/latest/userguide/custom-agents-executing-custom-agents.html) for more information. Always include the full scope in the prompt, for example:
+
+- "Run the custom redshift-support-specialist agent and perform a detailed operational review on cluster `my-cluster`, all databases, with the HTML report."
+- "Run the custom redshift-support-specialist agent and diagnose query 4823991 on cluster `my-cluster`, database `analytics`."
+
+To see the agent's capabilities and example prompts without starting an invocation, ask in Chat: "What else can the custom redshift-support-specialist agent do?"
+
+Track progress and results on the agent's page under the **History** tab (invocation trajectory). Runs invoked without scope end with a "Scope required — run not started" report. Because scope must be known upfront, this agent also works well with schedule triggers for recurring pre-scoped reviews.
 
 ## Related
 

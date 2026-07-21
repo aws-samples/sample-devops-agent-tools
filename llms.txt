@@ -22,7 +22,7 @@ Skills can be used with these AWS DevOps Agent types:
 - [Enrich with AWS Security Agent Skill](skills/enrich-with-aws-security-agent/SKILL.md): Queries AWS Security Agent CloudWatch logs to retrieve code-level security findings (file, line number, vulnerability type) during incident investigations with potential security root causes
 - [Wiz Security Context Skill](skills/wiz-security-context/SKILL.md): Queries the Wiz MCP server for a resource's security context (vulnerabilities, misconfigurations, secrets, active threats, malware, toxic combinations) to determine whether an operational anomaly is an operational issue or a security incident
 - [Service Quota Check Skill](skills/service-quota-check/SKILL.md): Checks AWS service quota utilization during investigations and before provisioning resources, flags quotas at 85%+ utilization, and requests increases via the Service Quotas API or recommends support cases
-- [Redshift Support Specialist Skill](skills/redshift-support-specialist/SKILL.md): Amazon Redshift domain expertise for query optimization, operational reviews, disaster recovery guidance, incident detection guidance, and cost optimization on provisioned clusters and Serverless workgroups, via the awslabs.redshift-mcp-server MCP server
+- [Redshift Support Specialist Skill](skills/redshift-support-specialist/SKILL.md): Amazon Redshift domain expertise for query optimization, operational reviews, and cost optimization on provisioned clusters and Serverless workgroups, via the awslabs.redshift-mcp-server MCP server
 
 ## Key Concepts
 

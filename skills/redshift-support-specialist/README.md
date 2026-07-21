@@ -1,6 +1,8 @@
 # Amazon Redshift Support Specialist — AWS DevOps Agent Skill
 
-A self-contained solution for connecting [AWS DevOps Agent](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent.html) to Amazon Redshift: this skill (query optimization, operational reviews, disaster recovery guidance, incident detection guidance, and cost optimization), plus a ready-to-use serverless deployment of the `awslabs.redshift-mcp-server` MCP server it relies on.
+**Skill version: 1.8.0** (see [`CHANGELOG.md`](CHANGELOG.md)) | Companion custom agent: 1.3.0 (see [`custom-agents/redshift-support-specialist/`](../../custom-agents/redshift-support-specialist/))
+
+A self-contained solution for connecting [AWS DevOps Agent](https://docs.aws.amazon.com/devopsagent/latest/userguide/about-aws-devops-agent.html) to Amazon Redshift: this skill (query optimization, operational reviews, and cost optimization), plus a ready-to-use serverless deployment of the `awslabs.redshift-mcp-server` MCP server it relies on.
 
 > ⚠️ **Non-production disclaimer:** This skill is sample code, not intended for production use without additional review and testing. Users should validate in a non-production environment first.
 
@@ -13,8 +15,7 @@ Amazon Redshift domain expertise for [AWS DevOps Agent](https://docs.aws.amazon.
 - **Query optimization** — diagnoses a specific slow query (EXPLAIN plan, disk spill, distribution/sort key issues) and returns concrete SQL/config fixes.
 - **High-level operational review** — quick PASS/WARN/FAIL health check using only `list_clusters` data.
 - **Detailed operational review** — full diagnostic sweep (storage, WLM, table design, Advisor recommendations) producing both a downloadable HTML report and an in-chat Markdown summary.
-- **Disaster recovery guidance** — reference checklist and RPO/RTO guidance for snapshot/backup posture (evaluated manually since AWS CLI access isn't available through the MCP server).
-- **Incident detection guidance** — recommended CloudWatch alarm set for provisioned clusters and Serverless workgroups.
+
 - **Cost optimization** — node/RPU right-sizing and serverless migration analysis using live table and workload data.
 
 ## Setup Overview
@@ -262,7 +263,7 @@ This requires a GitHub connection on your Agent Space, set up in two steps:
 
 ## Step 4 — Create the Custom Agent
 
-In addition to using this skill from the base DevOps Agent Chat, create a dedicated **custom agent** pre-wired to this skill and its MCP tools — useful if you want a purpose-built entry point for Redshift work, or want to enforce agent-specific behavior.
+In addition to using this skill from the base DevOps Agent Chat, create a dedicated **custom agent** pre-wired to this skill and its MCP tools. Note the platform behavior: custom agents always execute as **asynchronous invocations** (background runs tracked in the History tab) — they cannot hold an interactive conversation. Use the custom agent for repeatable, pre-scoped runs (scope goes in the invocation prompt); use the skill from the regular Chat for interactive, step-by-step work. See Step 5 for details on both modes.
 
 The custom agent's system prompt, README, and changelog live in [`custom-agents/redshift-support-specialist/`](../../custom-agents/redshift-support-specialist/) at the repo root.
 
@@ -290,21 +291,37 @@ MCP tools cannot be assigned through the Form — they can only be configured th
 
 3. Once the chat finishes, verify all six tools appear under **Tools** on the agent's page. This agent has no other way to reach Redshift — without these tools assigned, it cannot call the MCP server at all.
 
-See [`custom-agents/redshift-support-specialist/README.md`](../../custom-agents/redshift-support-specialist/README.md) for prerequisites, an important behavior note (this agent runs interactively in the active chat by default; background only on explicit request after scope confirmation), and how to execute the agent once created.
+See [`custom-agents/redshift-support-specialist/README.md`](../../custom-agents/redshift-support-specialist/README.md) for prerequisites, an important behavior note (custom agent runs are always asynchronous — scope must be provided in the invocation prompt, or the run stops with a "Scope required" report), and how to execute the agent once created.
 
 ## Step 5 — How to Use the Skill
 
 This skill is intended for Chat — just describe what you need in plain language. The agent matches your request to one of the six capabilities below, discovers the cluster/workgroup itself, and collects diagnostics live through the MCP server. You never need to supply a cluster identifier from memory, an AWS CLI profile, or a CSV export.
 
-### Using the custom agent
+### Interactive use vs. custom agent runs — pick the right mode
 
-If you created the custom agent in Step 4, start there:
+There are two different ways to use this solution, and they behave differently by platform design:
 
-1. Start a new chat and ask for the `redshift-support-specialist` custom agent by name (e.g. "Use the redshift-support-specialist agent").
-2. Ask it to show what it can do (e.g. "What can you help me with?") and follow its instructions from there.
-3. The agent runs interactively in the active chat by default and should never offer or switch to background mode on its own. If you ever see it start a background task anyway, tell it explicitly — e.g. "Run this interactively in the chat, not in the background." (Background mode is available only if you ask for it yourself, after confirming the cluster/database scope.)
+**Interactive (recommended for exploration): use the skill from the regular Chat.** Just describe what you need — e.g. "Run a health check on my Redshift cluster" — in the base DevOps Agent Chat. The skill activates and works step by step in the conversation: it discovers your clusters, **asks you to confirm cluster and database scope before collecting anything**, and shows progress as it goes. This is the only mode where the agent can ask you questions and wait for answers.
 
-If you're not using the custom agent, the base DevOps Agent Chat with this skill uploaded works the same way — just describe what you need directly, without naming an agent.
+**Autonomous (for repeatable, pre-scoped runs): execute the custom agent.** Asking Chat to "run the custom redshift-support-specialist agent" (or clicking **Run Now** on the agent page) always kicks off an **asynchronous invocation** — that's how the platform executes custom agents; it is not a bug and cannot be switched to interactive. Because nobody can answer questions mid-run, **you must provide the full scope in the invocation prompt**, e.g.:
+
+> "Run the custom redshift-support-specialist agent and perform a detailed operational review on cluster `my-cluster`, databases `analytics` and `sales`, with the HTML report."
+
+If you invoke the custom agent without scope (like just "use the custom redshift-support-specialist agent"), it will not guess: it discovers your clusters, ends the run with a "Scope required — run not started" report listing what it found, and asks you to re-run with explicit scope. Track runs on the agent's page under the **History** tab; results appear in the invocation trajectory.
+
+**Discovering what the agent can do:** before kicking off a run, you can ask in Chat:
+
+> "What else can the custom redshift-support-specialist agent do?"
+
+This returns the agent's capability list (query optimization, high-level operational review, detailed operational review, cost optimization) and example prompts without starting an invocation — useful for picking the right capability and scope before you run it.
+
+**If a background run starts when you wanted interactive:** cancel it and switch to the skill in Chat. In the same chat, say:
+
+> "Cancel the running invocation of redshift-support-specialist."
+
+(or open the agent's **History** tab, choose the running invocation, and click **Cancel** at the top of the trajectory view). Then ask for what you need directly in Chat *without* naming the agent — e.g. "Run a detailed operational review on my Redshift cluster" — so the skill activates interactively and asks you the scope questions.
+
+> Reference: [Executing custom agents](https://docs.aws.amazon.com/devopsagent/latest/userguide/custom-agents-executing-custom-agents.html)
 
 ### Chat — sample prompts
 
@@ -328,17 +345,15 @@ The agent will first ask you to confirm scope (which cluster/workgroup and datab
 - "Run a detailed operational review on `my-cluster` and generate the full downloadable HTML report."
 - "All databases, and yes I want the HTML report file." (as a reply to the agent's combined confirmation question)
 
+**Downloading the HTML report from Artifacts:** the generated HTML file is saved as a chat artifact, not embedded in the chat text. To get it:
+
+1. When the review finishes, look for the **Artifacts** panel/icon in the chat (the agent's summary message also links the file by name, e.g. `my-cluster-operational-review.html`).
+2. Open the Artifacts panel, find the `.html` file, and download it.
+3. Open the downloaded file in your browser — it's fully self-contained (styling, tab navigation, and a built-in "Download Report" button all work offline).
+
+If you don't see the file in Artifacts, ask in the same chat: "Provide the HTML report file as a downloadable artifact" — the agent will re-attach it.
+
 Every report — HTML and Markdown — always includes the full section set: executive summary, cluster overview, all findings, WLM configuration, workload analysis, top queries by runtime, table design, Spectrum/external queries, data sharing, and prioritized recommendations. The "Cluster Level Review (Power-2)" section (CloudWatch metrics, SSL/audit config, support cases) is always marked "Not Available via MCP tools" since that data requires AWS CLI/CloudWatch access this skill doesn't have.
-
-#### Disaster Recovery Recommendations (reference guidance; live data needs user-supplied config — AWS CLI access not available via the MCP server)
-
-- "What's our disaster recovery posture for Redshift?"
-- "What RPO/RTO can I expect with my current snapshot schedule?"
-
-#### Incident Detection & Response (reference guidance; live data needs user-supplied config — CloudWatch access not available via the MCP server)
-
-- "What alarms should I have configured for my Redshift Serverless workgroup?"
-- "A query just failed with a disk-full error, what should I check?"
 
 #### Cost Optimization (partially live via MCP server; Reserved Instance/CloudWatch utilization data requires user input)
 
@@ -364,7 +379,7 @@ redshift-support-specialist/
 ├── CHANGELOG.md                   # Required: version history
 ├── LICENSE                        # Apache-2.0
 ├── NOTICE
-├── references/                    # best practices, system tables guide, incident playbooks, etc.
+├── references/                    # best practices, system tables guide, review signals, etc.
 ├── assets/
 │   ├── config/thresholds.yaml     # signal thresholds for automated health checks
 │   ├── queries/                   # ready-to-run diagnostic SQL templates
@@ -379,7 +394,7 @@ Only `SKILL.md`, `references/`, `assets/`, and `evals/` are part of the [Agent S
 
 ## Limitations
 
-- **No AWS CLI or CloudWatch access.** Every Redshift interaction goes through the six MCP server tools only (`list_clusters`, `list_databases`, `list_schemas`, `list_tables`, `list_columns`, `execute_query`). Checks that require CloudWatch metrics/alarms, snapshot inventory, SSL/audit-log/parameter-group configuration, or Reserved Instance coverage are reported as "Not Available" rather than guessed — see Capabilities 4 and 5 in `SKILL.md`.
+- **No AWS CLI or CloudWatch access.** Every Redshift interaction goes through the six MCP server tools only (`list_clusters`, `list_databases`, `list_schemas`, `list_tables`, `list_columns`, `execute_query`). Checks that require CloudWatch metrics, snapshot inventory, SSL/audit-log/parameter-group configuration, or Reserved Instance coverage are reported as "Not Available" rather than guessed.
 - **Read-only.** `execute_query` runs inside a read-only transaction — the skill never runs INSERT/UPDATE/DELETE/ALTER/DROP/CREATE/GRANT/VACUUM/ANALYZE; it only recommends such statements for the user to run themselves.
 - **One query per `execute_query` call.** Diagnostics that need multiple result sets require multiple tool calls; there is no multi-statement/transaction support.
 - **No data retention.** Every session collects data fresh; nothing from a prior report or customer is cached or reused across sessions.

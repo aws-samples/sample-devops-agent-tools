@@ -546,7 +546,6 @@ Monitoring recommendations:
 
 - Use the Redshift console for summary CloudWatch metrics, cluster performance, database performance, and workload concurrency.
 - Use detailed query monitoring to see how long queries spent in plan, wait, read, and write stages.
-- Create CloudWatch alarms for critical metrics (CPU, disk, health status, connections).
 - Use the Query Profiler to introspect queries and review execution plans to discover performance bottlenecks.
 - Use Query Hash to track query performance over time and identify recurring patterns in resource-intensive queries.
 - Subscribe to Amazon SNS for Redshift event notifications (Configuration, Management, Pending, Monitoring, Security events).
@@ -586,39 +585,7 @@ Monitoring recommendations:
 - Redshift does not have redo logs like transactional databases — after restoring from a snapshot, source files that were loaded after the snapshot was taken must be reloaded.
 - RTO is reliant upon database size and node-count throughput.
 
-### 11.6 Disaster Recovery & High Availability
-
-**Cross-AZ Cluster Relocation:**
-
-- Active-passive configuration — workload runs on a single cluster in a single AZ.
-- Enables moving a cluster to another AZ without data loss or application changes.
-- Cluster endpoint remains unchanged after relocation.
-- Supported for RA3 instance types only, using default port (5439).
-- Brief outage occurs while the new cluster is brought online in the new AZ.
-- No additional cost for this feature.
-- Cross-region relocation is not yet supported.
-
-**Multi-AZ Deployments (GA):**
-
-- Active-Active configuration — full operation across two AZs for both read and write operations.
-- 99.99% availability SLA.
-- Auto-failover with zero data loss.
-- Single endpoint for easy management.
-- In the event of an AZ failure, Redshift continues operating using resources in the remaining AZ automatically. Queries running in the failed AZ will be aborted.
-- Additional cost for the secondary cluster applies.
-- No application changes required after failover.
-
-| Feature | Cross-AZ Relocation | Multi-AZ Deployment |
-|---------|--------------------|--------------------|
-| Configuration | Active-Passive | Active-Active |
-| Cost | No additional cost | Additional cost for secondary cluster |
-| Failover behavior | Outage during relocation | Automatic, queries in failed AZ aborted |
-| Data loss | None | None (zero data loss) |
-| SLA | Standard | 99.99% |
-| Endpoint | Unchanged | Unchanged |
-| App changes | None | None |
-
-### 11.7 Resize & Scaling Best Practices
+### 11.6 Resize & Scaling Best Practices
 
 **Provisioned Clusters:**
 
@@ -636,7 +603,7 @@ Monitoring recommendations:
 - AI-driven scaling provides intelligent auto-scaling for dynamic workloads with ML-driven optimizations.
 - Adjust price-performance targets along a spectrum from "Optimizes for cost" to "Balanced" to "Optimizes for performance."
 
-### 11.8 Redshift Advisor Recommendations
+### 11.7 Redshift Advisor Recommendations
 
 Redshift Advisor analyzes performance and usage metrics and provides prioritized recommendations ranked by impact:
 

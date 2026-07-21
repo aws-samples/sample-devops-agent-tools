@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.0] - 2026-07-20
+
+### Removed
+
+- Capability 4 (Disaster Recovery Recommendations) and Capability 5 (Incident Detection & Response) — both were reference-guidance-only since the connected Redshift MCP tools provide no AWS CLI or CloudWatch access. Removed pending a proper live implementation (planned: CloudWatch MCP server integration for alarm/metric analysis). The skill now has four capabilities: Query Optimization, High-Level Operational Review, Detailed Operational Review, and Cost Optimization (renumbered from 6 to 4).
+- `references/incident-response-playbooks.md` and `references/cloudwatch-metrics.md` — orphaned by the capability removal; preserved in the `v1.7.0` tag / `backup/v1` branch for when the capabilities return.
+- All remaining alarm/DR references outside the removed capabilities: Capability 2's alarm-coverage skip item and "Not Available" row, `references/health-checklist.md` alarm checks (4.14, 4.15, 6.6) and `describe-alarms` API references, and `references/best-practices.md` section 11.6 (Disaster Recovery & High Availability, sections renumbered) plus the CloudWatch-alarm monitoring bullet. Query-execution alerts (`STL_ALERT_EVENT_LOG`, used by Query Optimization) and backup/snapshot guidance (§11.5, used by the operational review's snapshot checks) are unrelated and retained.
+
 ## [1.7.0] - 2026-07-20
 
 ### Changed
