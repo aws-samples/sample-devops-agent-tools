@@ -1,0 +1,52 @@
+[
+  {
+    "scenario": "An S3 bucket named 'customer-data-prod' has no server-side encryption configured and the Public Access Block is disabled (all four settings are false). The bucket has objects containing customer records. Evaluate this resource for drift against the baseline.",
+    "assertions": [
+      "identifies encryption at rest violation",
+      "identifies public access block violation",
+      "classifies at least one finding as critical severity",
+      "mentions the specific S3 bucket",
+      "recommends enabling server-side encryption",
+      "recommends enabling public access block"
+    ]
+  },
+  {
+    "scenario": "An RDS PostgreSQL instance 'orders-db' in production has PubliclyAccessible set to true, BackupRetentionPeriod set to 1 day, and StorageEncrypted set to false. Evaluate for drift.",
+    "assertions": [
+      "identifies network isolation violation for PubliclyAccessible",
+      "identifies backup retention as below the 7-day requirement",
+      "identifies missing encryption at rest",
+      "classifies the publicly accessible database as critical or high severity",
+      "provides remediation guidance"
+    ]
+  },
+  {
+    "scenario": "A Lambda function 'payment-processor' is running the nodejs14.x runtime. Another Lambda function 'report-generator' is running python3.9. Check these for lifecycle drift.",
+    "assertions": [
+      "identifies nodejs14.x as deprecated or end-of-life",
+      "classifies the deprecated runtime as high severity or critical",
+      "recommends upgrading to a supported Node.js runtime",
+      "does not flag python3.9 as a lifecycle drift issue or flags it with lower severity than nodejs14.x"
+    ]
+  },
+  {
+    "scenario": "Five EC2 instances are running in production. Three have the required tags (Environment, Owner, CostCenter) but two are missing the 'CostCenter' tag entirely and one is missing all three required tags. Evaluate tagging compliance.",
+    "assertions": [
+      "identifies the instances missing required tags",
+      "reports missing CostCenter tag on two instances",
+      "reports all three missing tags on one instance",
+      "classifies tagging drift as medium severity",
+      "recommends adding the required tags"
+    ]
+  },
+  {
+    "scenario": "A production AWS account has no AWS Config rules deployed. CloudTrail has one trail but GetTrailStatus shows IsLogging is false. Evaluate compliance drift.",
+    "assertions": [
+      "identifies CloudTrail logging is disabled as drift",
+      "identifies no Config rules as a coverage gap",
+      "classifies disabled CloudTrail as critical or high severity",
+      "recommends enabling CloudTrail logging",
+      "recommends deploying Config rules for baseline policy enforcement"
+    ]
+  }
+]
