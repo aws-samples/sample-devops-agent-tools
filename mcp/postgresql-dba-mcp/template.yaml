@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  PostgreSQL DBA MCP Server for AWS DevOps Agent.
+  Provides safe, read-only diagnostic access to RDS/Aurora PostgreSQL
+  instances via predefined health check queries. Uses Lambda Web Adapter
+  for Streamable HTTP transport.
+
+Globals:
+  Function:
+    Timeout: 180
+    Runtime: python3.12
+    MemorySize: 1024
+
+Parameters:
+  StageName:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+
+  SecretArn:
+    Type: String
+    Description: >
+      ARN of the Secrets Manager secret containing PostgreSQL credentials.
+      Secret must contain JSON with 'username' and 'password' keys.
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the RDS/Aurora instances are deployed.
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: >
+      Comma-separated list of private subnet IDs for Lambda to connect
+      to the database. Must have route to RDS instances.
+
+  SecurityGroupId:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: >
+      Security group that allows outbound access to RDS instances on port 5432.
+
+  AllowedInstances:
+    Type: CommaDelimitedList
+    Description: >
+      Comma-separated list of RDS instance identifiers the MCP tools can target.
+      Tool-level allowlist for defense-in-depth on top of IAM.
+      Use '*' only for dev/testing.
+    Default: '*'
+
+  AllowedDatabases:
+    Type: CommaDelimitedList
+    Description: >
+      Comma-separated list of database names the MCP tools can query.
+      Use '*' only for dev/testing.
+    Default: '*'
+
+Resources:
+  # ============================================================
+  # Lambda Function with Lambda Web Adapter
+  # ============================================================
+  PostgreSQLMCPFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub postgresql-dba-mcp-${StageName}
+      Handler: run.sh
+      CodeUri: src/
+      Description: PostgreSQL DBA MCP Server - Streamable HTTP via Lambda Web Adapter
+      Architectures:
+        - x86_64
+      Layers:
+        # Lambda Web Adapter layer
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:24
+        - !Ref DependenciesLayer
+      VpcConfig:
+        SubnetIds: !Ref SubnetIds
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+      Environment:
+        Variables:
+          # Lambda Web Adapter config
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
+          AWS_LWA_PORT: "8000"
+          AWS_LWA_READINESS_CHECK_PATH: /mcp
+          AWS_LWA_READINESS_CHECK_MIN_UNHEALTHY_STATUS: 500
+          AWS_LWA_INVOKE_MODE: response_stream
+          AWS_LWA_READINESS_CHECK_PROTOCOL: http
+          AWS_LWA_ASYNC_INIT: "true"
+          # MCP Server config
+          PYTHONPATH: /opt/python
+          SECRET_ARN: !Ref SecretArn
+          # Tool-level allowlists
+          ALLOWED_INSTANCES: !Join [",", !Ref AllowedInstances]
+          ALLOWED_DATABASES: !Join [",", !Ref AllowedDatabases]
+          STAGE_NAME: !Ref StageName
+      Policies:
+        # Secrets Manager — scoped to the specific secret
+        - Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: !Ref SecretArn
+        # RDS Describe — for list_rds_instances and get_instance_config
+        - Statement:
+            - Effect: Allow
+              Action:
+                - rds:DescribeDBInstances
+                - rds:DescribeDBEngineVersions
+                - rds:DescribeDBParameters
+                - rds:DescribeDBClusters
+              Resource: '*'
+              Condition:
+                StringEquals:
+                  'aws:ResourceAccount': !Ref 'AWS::AccountId'
+        # EC2 Describe — for RAM lookup from instance type
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ec2:DescribeInstanceTypes
+              Resource: '*'
+        # CloudWatch — for get_instance_metrics
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cloudwatch:GetMetricStatistics
+                - cloudwatch:GetMetricData
+              Resource: '*'
+              Condition:
+                StringEquals:
+                  'aws:ResourceAccount': !Ref 'AWS::AccountId'
+        # VPC ENI management (required for VPC Lambda)
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+              Resource: '*'
+      # Function URL with RESPONSE_STREAM for SSE support
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: RESPONSE_STREAM
+
+  # ============================================================
+  # Dependencies Layer (FastMCP + pg8000)
+  # ============================================================
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub postgresql-mcp-deps-${StageName}
+      Description: FastMCP, pg8000, and dependencies for PostgreSQL MCP server
+      ContentUri: layers/dependencies/
+      CompatibleRuntimes:
+        - python3.12
+      CompatibleArchitectures:
+        - x86_64
+    Metadata:
+      BuildMethod: makefile
+
+Outputs:
+  MCPEndpointUrl:
+    Description: >
+      MCP Server endpoint URL. Register this in your DevOps Agent Space
+      as the MCP server endpoint.
+    Value: !GetAtt PostgreSQLMCPFunctionUrl.FunctionUrl
+
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt PostgreSQLMCPFunction.Arn
+
+  FunctionUrl:
+    Description: Lambda Function URL
+    Value: !GetAtt PostgreSQLMCPFunctionUrl.FunctionUrl
