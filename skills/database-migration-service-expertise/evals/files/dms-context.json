@@ -1,0 +1,90 @@
+{
+  "instances": [
+    {
+      "name": "prod-migrator",
+      "region": "us-east-1",
+      "account": "$accountid",
+      "engine_version": "3.5.4",
+      "instance_class": "dms.r5.large",
+      "multi_az": true,
+      "status": "available",
+      "publicly_accessible": false,
+      "kms_encrypted": true,
+      "tasks": [
+        {
+          "id": "oracle-to-aurora-cdc",
+          "status": "running",
+          "migration_type": "full-load-and-cdc",
+          "logging_enabled": true,
+          "source_engine": "oracle",
+          "target_engine": "aurora-postgresql",
+          "cdc_latency_source_seconds": 5,
+          "cdc_latency_target_seconds": 180,
+          "tables_in_error": 0,
+          "batch_apply_enabled": false,
+          "parallel_apply_threads": 0,
+          "lob_mode": "FullLobMode"
+        },
+        {
+          "id": "mysql-to-pg-full-load",
+          "status": "stopped",
+          "migration_type": "full-load",
+          "logging_enabled": false,
+          "source_engine": "mysql",
+          "target_engine": "postgresql",
+          "tables_in_error": 3,
+          "lob_mode": "LimitedLobMode"
+        }
+      ],
+      "endpoints": [
+        {"id": "oracle-source", "type": "source", "engine": "oracle", "ssl_mode": "none"},
+        {"id": "aurora-target", "type": "target", "engine": "aurora-postgresql", "ssl_mode": "require"},
+        {"id": "mysql-source", "type": "source", "engine": "mysql", "ssl_mode": "require"},
+        {"id": "pg-target", "type": "target", "engine": "postgresql", "ssl_mode": "none"}
+      ]
+    },
+    {
+      "name": "staging-replicator",
+      "region": "us-west-2",
+      "account": "$accountid",
+      "engine_version": "3.5.2",
+      "instance_class": "dms.c5.large",
+      "multi_az": false,
+      "status": "available",
+      "publicly_accessible": true,
+      "kms_encrypted": false,
+      "tasks": [
+        {
+          "id": "pg-to-aurora-cdc",
+          "status": "running",
+          "migration_type": "cdc",
+          "logging_enabled": true,
+          "source_engine": "postgresql",
+          "target_engine": "aurora-postgresql",
+          "cdc_latency_source_seconds": 0,
+          "cdc_latency_target_seconds": 0,
+          "tables_in_error": 0,
+          "batch_apply_enabled": true,
+          "parallel_apply_threads": 8
+        }
+      ],
+      "endpoints": [
+        {"id": "pg-source-staging", "type": "source", "engine": "postgresql", "ssl_mode": "require"},
+        {"id": "aurora-target-staging", "type": "target", "engine": "aurora-postgresql", "ssl_mode": "require"}
+      ]
+    },
+    {
+      "name": "legacy-loader",
+      "region": "us-east-1",
+      "account": "$accountid",
+      "engine_version": "3.4.7",
+      "instance_class": "dms.r4.large",
+      "multi_az": false,
+      "status": "available",
+      "publicly_accessible": false,
+      "kms_encrypted": false,
+      "tasks": [],
+      "endpoints": []
+    }
+  ]
+}

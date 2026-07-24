@@ -1,0 +1,125 @@
+[
+  {
+    "id": "dms-review-smoke-test",
+    "prompt": "Read dms-context.json. List the replication instance names, regions, and accounts. No analysis needed.",
+    "expected_output": "Lists every instance from files/dms-context.json with its name, region, and account exactly as defined in the file.",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "matches regex /[a-z]{2}-[a-z]+-\\d/",
+      "matches regex /\\$accountid|\\b\\d{12}\\b/",
+      "contains 'prod-migrator'",
+      "contains 'staging-replicator'",
+      "contains 'legacy-loader'",
+      "contains 'region'",
+      "contains 'account'"
+    ]
+  },
+  {
+    "id": "dms-review-first-instance-identification",
+    "prompt": "Read dms-context.json. Identify the FIRST replication instance listed and state the report artifact filename you would generate for it (use today's date in YYYY-MM-DD form). Do not run the audit.",
+    "expected_output": "Identifies the first instance from files/dms-context.json (prod-migrator in us-east-1) and proposes an artifact name of the form dms-review-prod-migrator-<YYYY-MM-DD>.md.",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "matches regex /dms-review-[a-z0-9-]+-\\d{4}-\\d{2}-\\d{2}\\.md/",
+      "contains 'prod-migrator'",
+      "matches regex /[a-z]{2}-[a-z]+-\\d/"
+    ]
+  },
+  {
+    "id": "dms-review-identify-risks",
+    "prompt": "Read dms-context.json. Based ONLY on the data in the file, identify which instances have potential risks or issues. Explain what makes each one risky. Do not connect to AWS.",
+    "expected_output": "Identifies staging-replicator as running EOL version 3.5.2, legacy-loader as running EOL version 3.4.7 on deprecated instance class dms.r4.large with no running tasks (idle), and notes legacy-loader lacks Multi-AZ.",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "contains 'staging-replicator' or contains 'staging'",
+      "contains 'legacy-loader' or contains 'legacy'",
+      "contains '3.5.2' or contains '3.4.7'",
+      "contains 'EOL' or contains 'end of life' or contains 'deprecated' or contains 'end-of-life'",
+      "contains 'idle' or contains 'no tasks' or contains 'no running tasks' or contains 'empty'"
+    ]
+  },
+  {
+    "id": "dms-review-health-score-file",
+    "prompt": "Read dms-context.json. For the 'prod-migrator' instance, calculate what health score deductions would apply based on the data in the file. List which of the 5 categories would lose points and why.",
+    "expected_output": "Identifies deductions: Endpoint Security loses points (oracle-source has ssl_mode none, pg-target has ssl_mode none), Task Health loses points (mysql-to-pg-full-load has logging disabled, 3 tables in error, FullLobMode on oracle task without batch apply). Performance may lose points for high CDCLatencyTarget on oracle task.",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "contains 'Endpoint' or contains 'endpoint' or contains 'SSL' or contains 'ssl'",
+      "contains 'Task' or contains 'task' or contains 'logging'",
+      "contains 'none' or contains 'disabled' or contains 'error'",
+      "contains '25' or contains '20' or contains '15' or contains 'points' or contains 'deduct'"
+    ]
+  },
+  {
+    "id": "dms-review-security-findings",
+    "prompt": "Read dms-context.json. Identify ALL security issues across all instances. Consider SSL/TLS, public accessibility, encryption, and version status. Assign a severity to each finding.",
+    "expected_output": "Finds: staging-replicator is publicly accessible (HIGH), oracle-source endpoint has ssl_mode none (HIGH), pg-target endpoint has ssl_mode none (HIGH), legacy-loader has no KMS encryption (MEDIUM), staging-replicator has no KMS encryption (MEDIUM), staging-replicator on EOL version (CRITICAL), legacy-loader on EOL version (CRITICAL).",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "contains 'publicly accessible' or contains 'public'",
+      "contains 'SSL' or contains 'ssl' or contains 'none'",
+      "contains 'encrypt' or contains 'KMS' or contains 'kms'",
+      "contains 'CRITICAL' or contains 'critical' or contains 'HIGH' or contains 'high'"
+    ]
+  },
+  {
+    "id": "dms-review-latency-diagnosis",
+    "prompt": "Read dms-context.json. The oracle-to-aurora-cdc task shows CDCLatencySource of 5 seconds but CDCLatencyTarget of 180 seconds. Based on the task configuration in the file and the skill's troubleshooting guidance, diagnose the issue and recommend fixes.",
+    "expected_output": "Diagnosis: target write bottleneck (source latency low, target latency high). Root causes from config: batch_apply_enabled is false, parallel_apply_threads is 0, and FullLobMode adds overhead. Fixes: enable BatchApplyEnabled, set ParallelApplyThreads to 4-16, consider switching to Limited or Inline LOB mode.",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "contains 'target' or contains 'Target'",
+      "contains 'batch' or contains 'BatchApply'",
+      "contains 'parallel' or contains 'ParallelApply' or contains 'thread'",
+      "contains 'LOB' or contains 'lob'"
+    ]
+  },
+  {
+    "id": "dms-review-version-upgrade-file",
+    "prompt": "Read dms-context.json. For each instance, state whether its engine version requires an upgrade and the urgency level. What specific known issues affect these versions?",
+    "expected_output": "prod-migrator (3.5.4): current default, no upgrade needed. staging-replicator (3.5.2): EOL, must upgrade immediately (CRITICAL). legacy-loader (3.4.7): EOL since Oct 2024, must upgrade immediately (CRITICAL). Known issues for 3.5.2/3.4.7 include PostgreSQL test_decoding event loss, Oracle Binary Reader crash.",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "contains 'prod-migrator' or contains 'prod'",
+      "contains 'staging-replicator' or contains 'staging'",
+      "contains 'legacy-loader' or contains 'legacy'",
+      "contains 'EOL' or contains 'end of life' or contains 'CRITICAL' or contains 'must upgrade'",
+      "contains '3.5.4' or contains 'current' or contains 'no upgrade' or contains 'no action'"
+    ]
+  },
+  {
+    "id": "dms-review-cost-optimization-file",
+    "prompt": "Read dms-context.json. Identify cost optimization opportunities across all instances. Consider idle resources, over-provisioning indicators, instance class choices, and Multi-AZ usage.",
+    "expected_output": "Finds: legacy-loader is idle (no tasks, CRITICAL cost waste — delete or stop), legacy-loader uses deprecated dms.r4.large (should migrate to r5/r6i if kept), staging-replicator is non-Multi-AZ (acceptable for staging but flag if production). Also note mysql-to-pg-full-load is stopped — if completed, cleanup opportunity.",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "contains 'legacy-loader' or contains 'legacy' or contains 'idle'",
+      "contains 'no tasks' or contains 'idle' or contains 'delete' or contains 'stop' or contains 'waste'",
+      "contains 'r4' or contains 'deprecated' or contains 'cost'"
+    ]
+  },
+  {
+    "id": "dms-review-lob-mode-recommendation",
+    "prompt": "Read dms-context.json. The oracle-to-aurora-cdc task uses FullLobMode. According to the skill's best practices, is this the right choice? What should be used instead and why?",
+    "expected_output": "Full LOB mode is NOT recommended as default. It is the slowest mode and uses the most memory. Recommended: use Limited LOB mode when max LOB size is known (best performance), Inline LOB mode for mixed small/large LOBs (DMS 3.4.7+). Reserve Full LOB mode only when LOB sizes are truly unknown. Since prod-migrator runs 3.5.4, Inline LOB is available.",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "contains 'not' or contains 'No' or contains 'avoid' or contains 'slowest' or contains 'NOT'",
+      "contains 'Limited' or contains 'limited'",
+      "contains 'Inline' or contains 'inline'",
+      "contains 'performance' or contains 'memory' or contains 'slow'"
+    ]
+  },
+  {
+    "id": "dms-review-troubleshooting-categories",
+    "prompt": "Read dms-context.json. The mysql-to-pg-full-load task has 3 tables in error and logging is disabled. According to the skill, what error category does this fall into, what are the diagnostic steps, and what is the first thing that must be fixed before troubleshooting can proceed?",
+    "expected_output": "Category: Table-Level Failure. First fix: enable logging (logging_enabled is false — troubleshooting is severely limited without logs). Then: use describe-table-statistics to identify which tables are in error, check for DDL changes, constraint violations, or unsupported data types. Use reload-tables to recover.",
+    "files": ["files/dms-context.json"],
+    "assertions": [
+      "contains 'Table' or contains 'table'",
+      "contains 'logging' or contains 'log' or contains 'enable'",
+      "contains 'describe-table-statistics' or contains 'table statistics' or contains 'reload'",
+      "contains 'DDL' or contains 'constraint' or contains 'data type' or contains 'error'"
+    ]
+  }
+]
