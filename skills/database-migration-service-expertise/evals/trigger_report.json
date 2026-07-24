@@ -1,0 +1,94 @@
+{
+  "skill_name": "database-migration-service-expertise",
+  "skill_path": "/Users/tabhiman/Desktop/database-migration-service-expertise",
+  "query_results": [
+    {
+      "query": "Which skill would help me run a DMS operational review? Just name it; do not run it.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 835.0,
+      "mean_total_tokens": 838.0
+    },
+    {
+      "query": "Is there a skill available for troubleshooting DMS CDC latency issues? Answer yes or no with the skill name; do not execute it.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 747.0,
+      "mean_total_tokens": 750.0
+    },
+    {
+      "query": "Name the skill that covers DMS best practices and migration cutover guidance. Do not run any audit.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 381.0,
+      "mean_total_tokens": 384.0
+    },
+    {
+      "query": "Write a Python script that sorts a list of numbers",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 132.0,
+      "mean_total_tokens": 135.0
+    },
+    {
+      "query": "What's the weather forecast for Sydney this weekend?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 155.0,
+      "mean_total_tokens": 158.0
+    },
+    {
+      "query": "Create a CloudFormation template for an S3 bucket",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 368.0,
+      "mean_total_tokens": 371.0
+    }
+  ],
+  "summary": {
+    "total_queries": 6,
+    "passed": 6,
+    "failed": 0,
+    "trigger_precision": 1.0,
+    "no_trigger_precision": 1.0,
+    "mean_total_tokens_per_run": 439.3,
+    "estimated_cost": {
+      "per_run": {
+        "input_cost": 9e-06,
+        "output_cost": 0.006545,
+        "total_cost": 0.006554,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "total_runs": 6,
+      "total_cost": 0.0393,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "passed": true
+}

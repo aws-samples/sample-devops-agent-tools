@@ -1,0 +1,65 @@
+{
+  "skill_name": "database-migration-service-expertise",
+  "skill_path": "/Users/tabhiman/Desktop/database-migration-service-expertise",
+  "timestamp": "2026-07-23T21:51:56Z",
+  "overall_score": 0.9531,
+  "overall_grade": "A",
+  "passed": true,
+  "sections": {
+    "audit": {
+      "score": 100,
+      "grade": "A",
+      "passed": true,
+      "normalized": 1.0,
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "functional": {
+      "overall": 0.8828,
+      "grade": "B",
+      "passed": true,
+      "scores": {
+        "outcome": 1.0,
+        "process": 0.5312,
+        "style": 1.0,
+        "efficiency": 1.0,
+        "overall": 0.8828
+      },
+      "cost_efficiency": {
+        "quality_delta": 0.0783,
+        "cost_delta_pct": -9.2,
+        "classification": "PARETO_BETTER",
+        "emoji": "\ud83d\udfe2",
+        "description": "Skill improves quality while reducing cost"
+      },
+      "estimated_cost": {
+        "with_skill_per_run": {
+          "input_cost": 1.4e-05,
+          "output_cost": 0.016452,
+          "total_cost": 0.016466,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "without_skill_per_run": {
+          "input_cost": 1.9e-05,
+          "output_cost": 0.018098,
+          "total_cost": 0.018117,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "per_eval_pair": 0.034583,
+        "total_runs": 10,
+        "total_cost": 0.3458,
+        "model": "sonnet",
+        "currency": "USD"
+      }
+    },
+    "trigger": {
+      "pass_rate": 1.0,
+      "grade": "A",
+      "passed": true,
+      "total_queries": 6
+    }
+  }
+}
