@@ -1,0 +1,59 @@
+[
+  {
+    "id": "acm-review-smoke-test",
+    "prompt": "Read certificate-context.json. List each certificate's domain name, type (AMAZON_ISSUED or IMPORTED), status, region, and account. No analysis needed.",
+    "expected_output": "Lists every certificate from files/certificate-context.json with its domain name, type, status, region, and account exactly as defined in the file.",
+    "files": ["files/certificate-context.json"],
+    "assertions": [
+      "matches regex /[a-z]{2}-[a-z]+-\\d/",
+      "matches regex /\\b\\d{12}\\b/",
+      "contains 'AMAZON_ISSUED'",
+      "contains 'IMPORTED'",
+      "contains 'account'"
+    ]
+  },
+  {
+    "id": "acm-review-highest-risk-identification",
+    "prompt": "Read certificate-context.json. Identify which certificate is the highest operational risk and briefly explain why. Do not run a full audit.",
+    "expected_output": "Identifies www.example.com (renewal FAILED, in use on a CloudFront distribution, expiring within ~14 days) as the highest risk, referencing its failed renewal and in-use status.",
+    "files": ["files/certificate-context.json"],
+    "assertions": [
+      "contains 'www.example.com'",
+      "contains 'FAILED' or contains 'failed' or contains 'renewal'",
+      "contains 'in use' or contains 'in-use' or contains 'CloudFront'"
+    ]
+  },
+  {
+    "id": "acm-review-data-source-priority",
+    "prompt": "According to the skill, which AWS APIs does the ACM certificate operations review use to collect data? Name at least three specific API calls the skill mentions. No AWS access required.",
+    "expected_output": "States the skill uses ACM, ACM Private CA, and CloudWatch APIs. Names specific calls such as acm:ListCertificates, acm:DescribeCertificate, acm-pca:DescribeCertificateAuthority, or cloudwatch:DescribeAlarmsForMetric.",
+    "files": [],
+    "assertions": [
+      "contains 'acm:ListCertificates' or contains 'ListCertificates'",
+      "contains 'acm:DescribeCertificate' or contains 'DescribeCertificate'",
+      "contains 'DescribeAlarmsForMetric' or contains 'CloudWatch' or contains 'cloudwatch'"
+    ]
+  },
+  {
+    "id": "acm-review-risk-levels",
+    "prompt": "List the risk levels the skill uses to classify certificate findings, in order from most to least urgent. No AWS access required.",
+    "expected_output": "Lists RED, AMBER, GREEN in that order.",
+    "files": [],
+    "assertions": [
+      "contains 'RED'",
+      "contains 'AMBER'",
+      "contains 'GREEN'"
+    ]
+  },
+  {
+    "id": "acm-review-cab-timeline",
+    "prompt": "According to the skill, what is the CA/Browser Forum TLS certificate validity reduction timeline, and what is the final target and date? No AWS access required.",
+    "expected_output": "Describes the progressive reduction (398 to 198 to 100 to 47 days) with the final target of 47 days by March 2029.",
+    "files": [],
+    "assertions": [
+      "contains '47'",
+      "contains '2029'",
+      "contains '398' or contains 'validity'"
+    ]
+  }
+]
