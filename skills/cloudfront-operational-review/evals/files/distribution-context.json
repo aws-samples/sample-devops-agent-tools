@@ -1,0 +1,5 @@
+{
+  "distributions": [
+    { "id": "E1A2B3C4D5E6F7", "domainName": "d111111abcdef8.cloudfront.net", "aliases": ["www.example.com"], "priceClass": "PriceClass_All", "enabled": true, "account": "$accountId" }
+  ]
+}

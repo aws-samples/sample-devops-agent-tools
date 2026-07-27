@@ -1,0 +1,73 @@
+[
+  {
+    "id": "cloudfront-review-smoke-test",
+    "prompt": "Read distribution-context.json. List each distribution's id, domain name, price class, and account. No analysis needed.",
+    "expected_output": "Lists every distribution from files/distribution-context.json with its id, domainName, priceClass, and account exactly as defined in the file.",
+    "files": ["files/distribution-context.json"],
+    "assertions": [
+      "matches regex /E[0-9A-Z]{6,}/",
+      "matches regex /[a-z0-9]+\\.cloudfront\\.net/",
+      "contains 'PriceClass'",
+      "matches regex /\\baccount\\b/"
+    ]
+  },
+  {
+    "id": "cloudfront-review-first-resource-identification",
+    "prompt": "Read distribution-context.json. Identify the FIRST distribution listed and state the report artifact filename you would generate for it (use today's date in YYYY-MM-DD form). Do not run the audit.",
+    "expected_output": "Identifies the first distribution from files/distribution-context.json (its id and domain) and proposes an artifact name of the form cloudfront-review-<distribution-id>-<YYYY-MM-DD>.md.",
+    "files": ["files/distribution-context.json"],
+    "assertions": [
+      "matches regex /cloudfront-review-[A-Za-z0-9]+-\\d{4}-\\d{2}-\\d{2}\\.md/",
+      "matches regex /E[0-9A-Z]{6,}/"
+    ]
+  },
+  {
+    "id": "cloudfront-review-data-source-priority",
+    "prompt": "According to the skill, which AWS APIs does the CloudFront operational review use to collect data? Name at least three specific API calls or namespaces the skill mentions. Confirm whether the skill uses any mutating (write) CloudFront APIs. No AWS access required.",
+    "expected_output": "States the skill uses CloudFront, CloudWatch, CloudWatch Logs, WAFv2, ACM, and Cost Explorer APIs and is strictly read-only (no Create/Update/Delete/CreateInvalidation). Names specific calls such as cloudfront.ListDistributions, cloudfront.GetDistributionConfig, cloudwatch.GetMetricData, or wafv2.GetWebACLForResource.",
+    "files": [],
+    "assertions": [
+      "contains 'CloudFront' or contains 'cloudfront'",
+      "contains 'CloudWatch' or contains 'cloudwatch'",
+      "contains 'ListDistributions' or contains 'GetDistributionConfig' or contains 'GetMetricData' or contains 'GetWebACLForResource'",
+      "contains 'read-only' or contains 'read only' or contains 'not' or contains 'no '"
+    ]
+  },
+  {
+    "id": "cloudfront-review-severity-definitions",
+    "prompt": "List the five severity levels the skill uses for findings, in order from most to least urgent. No AWS access required.",
+    "expected_output": "Lists CRITICAL, HIGH, MEDIUM, LOW, INFO in that order.",
+    "files": [],
+    "assertions": [
+      "contains 'CRITICAL'",
+      "contains 'HIGH'",
+      "contains 'MEDIUM'",
+      "contains 'LOW'",
+      "contains 'INFO'"
+    ]
+  },
+  {
+    "id": "cloudfront-review-pillars",
+    "prompt": "List the Well-Architected pillars the skill evaluates during a CloudFront operational review. No AWS access required.",
+    "expected_output": "Mentions Security, Reliability, Performance, Cost Optimization, and Operational Excellence.",
+    "files": [],
+    "assertions": [
+      "contains 'Security' or contains 'security'",
+      "contains 'Reliability' or contains 'reliability'",
+      "contains 'Performance' or contains 'performance'",
+      "contains 'Cost' or contains 'cost'",
+      "contains 'Operational' or contains 'operational'"
+    ]
+  },
+  {
+    "id": "cloudfront-review-global-service-quirk",
+    "prompt": "According to the skill, CloudFront is a global service. In which AWS region do its CloudWatch metrics live, and does the skill loop per region to list distributions? No AWS access required.",
+    "expected_output": "States that CloudFront metrics live in us-east-1 and that the skill does NOT loop per region to list distributions because CloudFront is global.",
+    "files": [],
+    "assertions": [
+      "contains 'us-east-1'",
+      "contains 'global' or contains 'Global'",
+      "contains 'not' or contains 'no ' or contains \"don't\" or contains 'does not'"
+    ]
+  }
+]

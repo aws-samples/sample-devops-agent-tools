@@ -20,6 +20,7 @@ Metadata:
           - EnableSupportCases
           - EnableRdsOperationReview
           - EnableEksOperationReview
+          - EnableCloudFrontOperationalReview
           - EnableInvestigationCostGuardrail
           - EnableEnrichWithSecurityAgent
           - EnableCrmInvestigationGuidelines
@@ -67,6 +68,12 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableCloudFrontOperationalReview:
+    Type: String
+    Description: CloudFront Operational Review skill.
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
   EnableInvestigationCostGuardrail:
     Type: String
     Description: Investigation Cost Guardrail skill.
@@ -102,6 +109,7 @@ Conditions:
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
   SkillSupportCases: !Equals [!Ref EnableSupportCases, 'true']
   SkillRdsOperationReview: !Equals [!Ref EnableRdsOperationReview, 'true']
+  SkillCloudFrontOperationalReview: !Equals [!Ref EnableCloudFrontOperationalReview, 'true']
   SkillInvestigationCostGuardrail: !Equals [!Ref EnableInvestigationCostGuardrail, 'true']
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
@@ -204,6 +212,50 @@ Resources:
               - logs:GetLogEvents
             Resource: '*'
 
+  # cloudfront-operational-review: read-only CloudFront config + WAF/ACM/CloudWatch/logs
+  # for the review. All actions are read-only; no Create/Update/Delete/Invalidation.
+  PolicyCloudFrontOperationalReview:
+    Type: AWS::IAM::Policy
+    Condition: SkillCloudFrontOperationalReview
+    Properties:
+      PolicyName: DevOpsAgentSkill-CloudFrontOperationalReview
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFrontRead
+            Effect: Allow
+            Action:
+              - cloudfront:ListDistributions
+              - cloudfront:GetDistribution
+              - cloudfront:GetDistributionConfig
+              - cloudfront:ListCachePolicies
+              - cloudfront:ListOriginRequestPolicies
+              - cloudfront:ListResponseHeadersPolicies
+              - cloudfront:ListOriginAccessControls
+              - cloudfront:ListCloudFrontOriginAccessIdentities
+              - cloudfront:ListFieldLevelEncryptionConfigs
+              - cloudfront:ListKeyGroups
+              - cloudfront:ListFunctions
+              - cloudfront:ListVpcOrigins
+              - cloudfront:GetVpcOrigin
+              - cloudfront:GetMonitoringSubscription
+              - cloudfront:ListRealtimeLogConfigs
+              - cloudfront:ListTagsForResource
+            Resource: '*'
+          - Sid: CloudFrontWafAcmRead
+            Effect: Allow
+            Action:
+              - wafv2:GetWebACLForResource
+              - acm:DescribeCertificate
+            Resource: '*'
+          - Sid: CloudFrontCloudWatchLogsGetEvents
+            Effect: Allow
+            Action:
+              - logs:GetLogEvents
+            Resource: '*'
+
   # investigation-cost-guardrail: adds pricing:GetProducts
   PolicyInvestigationCostGuardrail:
     Type: AWS::IAM::Policy
@@ -295,6 +347,7 @@ Outputs:
         - aws-health-events: ${EnableAwsHealthEvents} (health:DescribeEventTypes)
         - support-cases: ${EnableSupportCases} (support:DescribeCommunications)
         - rds-operation-review: ${EnableRdsOperationReview} (rds:DownloadDBLogFilePortion, logs:GetLogEvents)
+        - cloudfront-operational-review: ${EnableCloudFrontOperationalReview} (cloudfront:List*/Get* read, wafv2:GetWebACLForResource, acm:DescribeCertificate, logs:GetLogEvents)
         - investigation-cost-guardrail: ${EnableInvestigationCostGuardrail} (pricing:GetProducts)
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
