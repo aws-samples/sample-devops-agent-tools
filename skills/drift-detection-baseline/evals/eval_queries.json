@@ -1,0 +1,27 @@
+[
+  {
+    "query": "What is the capital of France?",
+    "should_trigger": false,
+    "reason": "General knowledge question unrelated to infrastructure drift"
+  },
+  {
+    "query": "How do I deploy a Lambda function using SAM?",
+    "should_trigger": false,
+    "reason": "Deployment question, not drift detection"
+  },
+  {
+    "query": "What EC2 instance type should I use for my web server?",
+    "should_trigger": false,
+    "reason": "Sizing question, not drift detection"
+  },
+  {
+    "query": "How do I set up a VPC with public and private subnets?",
+    "should_trigger": false,
+    "reason": "Architecture design question, not drift detection"
+  },
+  {
+    "query": "Explain how AWS CloudFormation works",
+    "should_trigger": false,
+    "reason": "General AWS service explanation, not drift detection"
+  }
+]

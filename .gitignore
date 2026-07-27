@@ -30,3 +30,6 @@ docs/custom-agents/*.md
 
 # Holmes
 .holmesignore
+
+# Kiro settings (may contain tokens)
+.kiro/settings/
