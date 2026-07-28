@@ -1,0 +1,129 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  DNS Diagnostic MCP - test infrastructure module 02: Mode A scenarios.
+
+  Stands up the ground-truth cases the dns_probe_* family diagnoses:
+    * baseline instance using the VPC .2 resolver (control).
+    * custom-resolver instance running dnsmasq that forwards *.internal.corp to
+      itself and everything else to the VPC .2 resolver - the custom/hybrid
+      resolver comparison case.
+    * a Secrets Manager interface VPCE with private DNS enabled - the
+      PrivateLink private-DNS resolution case.
+    * a PHZ 'internal.corp' with a test record - the PHZ resolution case.
+
+  Imports the network from module 01.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: dns-diag-test
+  InstanceType:
+    Type: String
+    Default: t3.micro
+  LatestAl2023Ami:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  # ---- PHZ: internal.corp (PHZ resolution case) ----
+  InternalPhz:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: internal.corp.
+      VPCs:
+        - VPCId: !ImportValue
+            'Fn::Sub': '${NamePrefix}-VpcId'
+          VPCRegion: !Ref AWS::Region
+
+  InternalRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref InternalPhz
+      Name: db.internal.corp.
+      Type: A
+      TTL: '60'
+      ResourceRecords: ['10.42.200.10']
+
+  # ---- Secrets Manager interface VPCE with private DNS (PrivateLink case) ----
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !ImportValue
+        'Fn::Sub': '${NamePrefix}-VpcId'
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.secretsmanager
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetAId'}
+        - !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetBId'}
+      SecurityGroupIds:
+        - !ImportValue {'Fn::Sub': '${NamePrefix}-EndpointSgId'}
+
+  # ---- Baseline instance (uses VPC .2 resolver) ----
+  BaselineInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAl2023Ami
+      IamInstanceProfile: !ImportValue {'Fn::Sub': '${NamePrefix}-InstanceProfileName'}
+      SubnetId: !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetAId'}
+      SecurityGroupIds:
+        - !ImportValue {'Fn::Sub': '${NamePrefix}-InstanceSgId'}
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          dnf install -y bind-utils
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-baseline
+
+  # ---- Custom-resolver instance (dnsmasq split forwarding) ----
+  CustomResolverInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAl2023Ami
+      IamInstanceProfile: !ImportValue {'Fn::Sub': '${NamePrefix}-InstanceProfileName'}
+      SubnetId: !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetBId'}
+      SecurityGroupIds:
+        - !ImportValue {'Fn::Sub': '${NamePrefix}-InstanceSgId'}
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -x
+          # S3 gateway endpoint (module 01) makes the AL2023 repos reachable.
+          dnf install -y bind-utils dnsmasq
+          # Split forwarding: internal.corp answered locally with a DISTINCT
+          # address (10.42.200.99) so the probe comparison differs from the PHZ
+          # answer (.10); everything else forwarded to the VPC .2 resolver.
+          cat >/etc/dnsmasq.d/split.conf <<'EOF'
+          no-resolv
+          server=10.42.0.2
+          address=/db.internal.corp/10.42.200.99
+          EOF
+          systemctl enable --now dnsmasq
+          # On AL2023 /etc/resolv.conf is a systemd-resolved-managed symlink that
+          # regenerates. Replace it with a static file pointing at the local
+          # dnsmasq so this instance emulates a custom VPC resolver without
+          # touching the DHCP option set. Stop resolved so it cannot reclaim it.
+          systemctl stop systemd-resolved || true
+          systemctl disable systemd-resolved || true
+          rm -f /etc/resolv.conf
+          printf 'nameserver 127.0.0.1\n' >/etc/resolv.conf
+          chattr +i /etc/resolv.conf || true
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-custom-resolver
+
+Outputs:
+  BaselineInstanceId:
+    Value: !Ref BaselineInstance
+  CustomResolverInstanceId:
+    Value: !Ref CustomResolverInstance
+  SecretsManagerEndpointId:
+    Value: !Ref SecretsManagerEndpoint
+  PhzId:
+    Value: !Ref InternalPhz

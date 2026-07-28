@@ -1,0 +1,226 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  DNS Diagnostic MCP - test infrastructure module 01: base dualstack network.
+
+  A dualstack VPC with two private subnets across two AZs, SSM connectivity via
+  interface VPC endpoints (ssm, ssmmessages, ec2messages), and an instance IAM
+  role with AmazonSSMManagedInstanceCore. Also creates an EC2 Instance Connect
+  Endpoint as a break-glass path for a human to inspect an instance; EICE is NOT
+  a substitute for the SSM endpoints, which Run Command requires.
+  Instance connectivity NEVER relies on the public internet path.
+
+  Exports VPC / subnet / security-group / role IDs for modules 02 and 03.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: dns-diag-test
+  VpcCidr:
+    Type: String
+    Default: 10.42.0.0/16
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-vpc
+
+  # IPv6 for dualstack / IPv6-only probe coverage.
+  Ipv6Cidr:
+    Type: AWS::EC2::VPCCidrBlock
+    Properties:
+      VpcId: !Ref Vpc
+      AmazonProvidedIpv6CidrBlock: true
+
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    DependsOn: Ipv6Cidr
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Select [0, !Cidr [!Ref VpcCidr, 4, 8]]
+      Ipv6CidrBlock: !Select [0, !Cidr [!Select [0, !GetAtt Vpc.Ipv6CidrBlocks], 4, 64]]
+      AssignIpv6AddressOnCreation: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-subnet-a
+
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    DependsOn: Ipv6Cidr
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 4, 8]]
+      Ipv6CidrBlock: !Select [1, !Cidr [!Select [0, !GetAtt Vpc.Ipv6CidrBlocks], 4, 64]]
+      AssignIpv6AddressOnCreation: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-subnet-b
+
+  RouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-rt
+
+  AssocA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetA
+  AssocB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref RouteTable
+      SubnetId: !Ref SubnetB
+
+  # Security group for interface endpoints: allow HTTPS from within the VPC.
+  EndpointSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'DNS diag test - interface endpoint SG (HTTPS from VPC)'
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref VpcCidr
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-endpoint-sg
+
+  # Security group for instances: all outbound (needed for SSM agent to reach
+  # the interface endpoints), no inbound required (SSM/EICE are agent-initiated).
+  InstanceSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'DNS diag test - instance SG (all egress, SSM via endpoints)'
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: '-1'
+          CidrIpv6: ::/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-instance-sg
+
+  # Allow instances to reach the endpoints on 443.
+  EndpointIngressFromInstances:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EndpointSg
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref InstanceSg
+
+  # ---- S3 gateway endpoint (free) so dnf can reach AL2023 regional repos
+  #      (served from same-region S3) without any public/NAT path ----
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.s3
+      VpcEndpointType: Gateway
+      RouteTableIds: [!Ref RouteTable]
+
+  # ---- SSM interface endpoints (no public path) ----
+  SsmEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssm
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref SubnetA, !Ref SubnetB]
+      SecurityGroupIds: [!Ref EndpointSg]
+
+  SsmMessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ssmmessages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref SubnetA, !Ref SubnetB]
+      SecurityGroupIds: [!Ref EndpointSg]
+
+  Ec2MessagesEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref Vpc
+      ServiceName: !Sub com.amazonaws.${AWS::Region}.ec2messages
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds: [!Ref SubnetA, !Ref SubnetB]
+      SecurityGroupIds: [!Ref EndpointSg]
+
+  # ---- EC2 Instance Connect Endpoint (free; additional connectivity path) ----
+  Eice:
+    Type: AWS::EC2::InstanceConnectEndpoint
+    Properties:
+      SubnetId: !Ref SubnetA
+      SecurityGroupIds: [!Ref InstanceSg]
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-eice
+
+  # ---- Instance role with SSM core managed policy ----
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-instance-role
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref InstanceRole]
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export: {Name: !Sub '${NamePrefix}-VpcId'}
+  VpcCidr:
+    Value: !Ref VpcCidr
+    Export: {Name: !Sub '${NamePrefix}-VpcCidr'}
+  SubnetAId:
+    Value: !Ref SubnetA
+    Export: {Name: !Sub '${NamePrefix}-SubnetAId'}
+  SubnetBId:
+    Value: !Ref SubnetB
+    Export: {Name: !Sub '${NamePrefix}-SubnetBId'}
+  InstanceSgId:
+    Value: !Ref InstanceSg
+    Export: {Name: !Sub '${NamePrefix}-InstanceSgId'}
+  EndpointSgId:
+    Value: !Ref EndpointSg
+    Export: {Name: !Sub '${NamePrefix}-EndpointSgId'}
+  InstanceProfileArn:
+    Value: !GetAtt InstanceProfile.Arn
+    Export: {Name: !Sub '${NamePrefix}-InstanceProfileArn'}
+  InstanceProfileName:
+    Value: !Ref InstanceProfile
+    Export: {Name: !Sub '${NamePrefix}-InstanceProfileName'}

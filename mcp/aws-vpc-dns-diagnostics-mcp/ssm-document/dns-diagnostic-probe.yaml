@@ -1,0 +1,66 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+schemaVersion: '2.2'
+description: >
+  DNS diagnostic probe runner for the DNS Diagnostic MCP Server (Mode A).
+  Runs a FIXED, read-only DNS probe set inside the instance for a single
+  (Name, Resolver, Family) triple. This document is the on-instance enforcement
+  boundary: it accepts only three structured, pattern-validated parameters and
+  never a free command string, so nothing beyond the predefined probes can run.
+  The MCP server also validates these inputs before calling; the allowedPattern
+  below is the second, independent layer.
+
+parameters:
+  Name:
+    type: String
+    description: DNS name to resolve. Strict DNS charset only.
+    # Labels of 1-63 chars of [A-Za-z0-9_-], dot-separated, max 253 chars,
+    # optional trailing dot. No shell metacharacters can match.
+    allowedPattern: '^([A-Za-z0-9_-]{1,63}\.)*[A-Za-z0-9_-]{1,63}\.?$'
+    maxChars: 253
+  Resolver:
+    type: String
+    description: Resolver IP (v4/v6) or hostname to query. No shell metacharacters.
+    # Digits, letters, dot, colon (IPv6), hyphen, underscore only.
+    allowedPattern: '^[A-Za-z0-9_.:-]{1,253}$'
+    maxChars: 253
+  Family:
+    type: String
+    description: DNS record family.
+    allowedValues:
+      - A
+      - AAAA
+
+mainSteps:
+  - action: aws:runShellScript
+    name: dnsProbe
+    precondition:
+      StringEquals:
+        - platformType
+        - Linux
+    inputs:
+      timeoutSeconds: '60'
+      runCommand:
+        - '#!/bin/bash'
+        # No `set -e`: we want every probe to run even if one returns non-zero
+        # (NXDOMAIN / SERVFAIL are informative, not fatal).
+        - 'set -u'
+        # Parameters are substituted by SSM as literals AFTER allowedPattern
+        # validation, then quoted here. The pattern guarantees no quotes,
+        # semicolons, backticks, pipes, spaces, or newlines can appear.
+        - 'NAME="{{ Name }}"'
+        - 'RESOLVER="{{ Resolver }}"'
+        - 'FAMILY="{{ Family }}"'
+        - 'echo "=== resolv.conf ==="'
+        - 'cat /etc/resolv.conf 2>/dev/null || echo "(no /etc/resolv.conf)"'
+        - 'echo "=== resolvectl ==="'
+        - 'if command -v resolvectl >/dev/null 2>&1; then resolvectl status 2>/dev/null || true; else echo "(resolvectl not present)"; fi'
+        - 'echo "=== dig answer ==="'
+        - 'dig +short "$NAME" "$FAMILY" @"$RESOLVER" || true'
+        - 'echo "=== dig stats ==="'
+        - 'dig "$NAME" "$FAMILY" @"$RESOLVER" +stats || true'
+        - 'echo "=== resolver identity (hostname.bind) ==="'
+        - 'dig hostname.bind CH TXT @"$RESOLVER" +short || true'
+        - 'echo "=== getent hosts ==="'
+        - 'getent hosts "$NAME" || echo "(getent: no match)"'

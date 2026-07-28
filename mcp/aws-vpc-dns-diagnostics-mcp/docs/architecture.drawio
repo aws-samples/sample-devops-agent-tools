@@ -1,0 +1,262 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/28.0.6 Chrome/138.0.7204.100 Electron/37.2.3 Safari/537.36" version="28.0.6">
+  <diagram name="aws-vpc-dns-diagnostics-mcp" id="dnsmcp-arch">
+    <mxGraphModel dx="1722" dy="1016" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2040" pageHeight="1240" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-8" value="Target account" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_account;strokeColor=#CD2264;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#CD2264;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="150" width="830" height="900" as="geometry" />
+        </mxCell>
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-9" value="Customer-owned target VPC" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_vpc2;strokeColor=#8C4FFF;fillColor=none;verticalAlign=top;align=left;spacingLeft=30;fontColor=#AAB7B8;dashed=0;" vertex="1" parent="Pi81uGyJS5upe_v5bhTQ-8">
+          <mxGeometry x="250" y="490" width="550" height="370" as="geometry" />
+        </mxCell>
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-6" value="&lt;span style=&quot;font-size: 11px;&quot;&gt;Interface Endpoints for SSM&lt;/span&gt;&lt;br style=&quot;font-size: 11px;&quot;&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;(ssm, ssmmessages, &lt;br&gt;ec2messages)&lt;/span&gt;" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.endpoints;" vertex="1" parent="Pi81uGyJS5upe_v5bhTQ-9">
+          <mxGeometry x="420" y="107.5" width="53" height="53" as="geometry" />
+        </mxCell>
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-10" value="Instance role&lt;br&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;AmazonSSMManagedInstanceCore&lt;/span&gt;" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.role;" vertex="1" parent="Pi81uGyJS5upe_v5bhTQ-9">
+          <mxGeometry x="270" y="50" width="35.45" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#DD344C;strokeWidth=2;endArrow=blockThin;endFill=1;dashed=1;" edge="1" parent="Pi81uGyJS5upe_v5bhTQ-9" source="Pi81uGyJS5upe_v5bhTQ-10">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="-50" y="-16" as="sourcePoint" />
+            <mxPoint x="162" y="95" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-15" value="&lt;span style=&quot;font-size: 11px;&quot;&gt;DnsDiagnosticProbeDocument&lt;/span&gt;&lt;br style=&quot;font-size: 11px;&quot;&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;AWS::SSM::Document (schemaVersion 2.2)&lt;/span&gt;&lt;br style=&quot;font-size: 11px;&quot;&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;3 allowedPattern params → &lt;br&gt;&amp;nbsp; &amp;nbsp; &amp;nbsp; fixed read-only probe set&lt;/span&gt;&lt;br style=&quot;font-size: 11px;&quot;&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;(dig, cat resolv.conf, resolvectl, getent)&lt;/span&gt;" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#E7157B;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.documents;" vertex="1" parent="Pi81uGyJS5upe_v5bhTQ-8">
+          <mxGeometry x="100" y="590" width="39.38" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-7" value="Private subnet" style="points=[[0,0],[0.25,0],[0.5,0],[0.75,0],[1,0],[1,0.25],[1,0.5],[1,0.75],[1,1],[0.75,1],[0.5,1],[0.25,1],[0,1],[0,0.75],[0,0.5],[0,0.25]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=12;fontStyle=0;container=1;pointerEvents=0;collapsible=0;recursiveResize=0;shape=mxgraph.aws4.group;grIcon=mxgraph.aws4.group_security_group;grStroke=0;strokeColor=#00A4A6;fillColor=#E6F6F7;verticalAlign=top;align=left;spacingLeft=30;fontColor=#147EBA;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="1417" y="680" width="503" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="title" value="aws-vpc-dns-diagnostics-mcp — deployed resources" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=26;fontStyle=1;fontColor=#232F3E;" parent="1" vertex="1">
+          <mxGeometry x="40" y="24" width="900" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Every resource created by template.yaml (central) and scoped-roles.yaml (per target account). Dashed grey = consumed, not created by these templates." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=13;fontColor=#5A6C7D;" parent="1" vertex="1">
+          <mxGeometry x="40" y="58" width="1300" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="agentGroup" value="AWS DevOps Agent" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;strokeColor=#879196;fillColor=#F7F7F7;verticalAlign=top;fontSize=14;fontStyle=1;fontColor=#5A6C7D;spacingTop=8;" parent="1" vertex="1">
+          <mxGeometry x="40" y="440" width="230" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="agentIcon" value="Agent Space&#xa;(tool allowlist)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#01A88D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.q;" parent="1" vertex="1">
+          <mxGeometry x="116" y="500" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="agentNote" value="Signs every request&#xa;with SigV4" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=11;fontColor=#5A6C7D;" parent="1" vertex="1">
+          <mxGeometry x="60" y="640" width="190" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="centralAcct" value="Central account — template.yaml (AWS SAM)" style="rounded=0;whiteSpace=wrap;html=1;strokeColor=#232F3E;fillColor=none;verticalAlign=top;align=left;fontSize=15;fontStyle=1;fontColor=#232F3E;spacingLeft=14;spacingTop=10;dashed=0;strokeWidth=2;" parent="1" vertex="1">
+          <mxGeometry x="330" y="150" width="700" height="1000" as="geometry" />
+        </mxCell>
+        <mxCell id="urlIcon" value="Lambda Function URL&#xa;AuthType: AWS_IAM&#xa;InvokeMode: RESPONSE_STREAM" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=light-dark(#ee7101, #ededed);strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda_function;" parent="1" vertex="1">
+          <mxGeometry x="420" y="230" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="depsLayer" value="DependenciesLayer&#xa;AWS::Serverless::LayerVersion&#xa;fastmcp + boto3 (manylinux2014_x86_64)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.lambda_layers;" parent="1" vertex="1">
+          <mxGeometry x="420" y="650" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="logGroup" value="CloudWatch Logs log group&#xa;/aws/lambda/…-mcp-&lt;stage&gt;&#xa;(implicit)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#E7157B;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cloudwatch_2;" parent="1" vertex="1">
+          <mxGeometry x="420" y="860" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="allowlistNote" value="Enforced allowlists (env)&#xa;ALLOWED_ACCOUNTS / REGIONS / VPCS / RESOLVERS&#xa;STAGE_NAME=prod refuses wildcards at startup" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#E8A33D;fontSize=11;align=center;verticalAlign=middle;fontColor=#232F3E;" parent="1" vertex="1">
+          <mxGeometry x="740" y="860" width="250" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="toolsNote" value="6 MCP tools&#xa;list_sops · get_sop&#xa;dns_probe_context · dns_probe_compare&#xa;dns_simulate_effective_config · dns_simulate_change&#xa;16 SOP runbooks bundled in the package" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EFF6FB;strokeColor=#4D9FD6;fontSize=11;align=center;verticalAlign=middle;fontColor=#232F3E;" parent="1" vertex="1">
+          <mxGeometry x="380" y="1000" width="600" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="roRole" value="DnsDiagnosticReadOnlyRole&#xa;AWS::IAM::Role — Mode B&#xa;Describe/Get/List only. No ssm:SendCommand." style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.role;" parent="1" vertex="1">
+          <mxGeometry x="1210" y="230" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="probeRole" value="DnsDiagnosticProbeRole&lt;br&gt;AWS::IAM::Role — Mode A&lt;br&gt;Sole privileged grant: ssm:SendCommand&lt;br&gt;Scope: DnsDiagnosticProbeDocument" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.role;" parent="1" vertex="1">
+          <mxGeometry x="1210" y="470" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="apiGroup" value="Control-plane APIs read (Mode B)" style="rounded=1;whiteSpace=wrap;html=1;dashed=1;dashPattern=8 8;strokeColor=#879196;fillColor=#F7F7F7;verticalAlign=top;align=center;fontSize=12;fontStyle=1;fontColor=#5A6C7D;spacingTop=8;" parent="1" vertex="1">
+          <mxGeometry x="1500" y="215" width="420" height="330" as="geometry" />
+        </mxCell>
+        <mxCell id="r53Icon" value="Route 53&#xa;hosted zones, records" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.route_53;" parent="1" vertex="1">
+          <mxGeometry x="1543" y="265" width="62" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="resolverIcon" value="Route 53 Resolver&#xa;rules, DNS Firewall, Profiles" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#8C4FFF;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.route_53_resolver;" parent="1" vertex="1">
+          <mxGeometry x="1826" y="265" width="62" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="ec2ApiIcon" value="Amazon EC2&#xa;VPC attrs, DHCP options,&#xa;endpoints, subnets, ENIs" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;" parent="1" vertex="1">
+          <mxGeometry x="1543" y="410" width="62" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="latticeIcon" value="VPC Lattice&#xa;2 named APIs only&#xa;(no List*/Get* wildcard)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#C925D1;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.vpc_lattice;" parent="1" vertex="1">
+          <mxGeometry x="1826" y="410" width="62" height="62" as="geometry" />
+        </mxCell>
+        <mxCell id="ec2Target" value="Target EC2 instance&lt;br&gt;Requires SSM Agent&lt;br&gt;(Probe runs here)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ec2;" parent="1" vertex="1">
+          <mxGeometry x="1500" y="735" width="78" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="resolverAddr" value="VPC resolver&#xa;169.254.169.253 / fd00:ec2::253&#xa;+ any custom / on-prem resolver compared" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E8FF;strokeColor=#8C4FFF;fontSize=11;align=center;verticalAlign=middle;fontColor=#232F3E;" parent="1" vertex="1">
+          <mxGeometry x="1455" y="930" width="415" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#01A88D;strokeWidth=3;endArrow=blockThin;endFill=1;fontSize=11;fontColor=#232F3E;labelBackgroundColor=#FFFFFF;" parent="1" source="agentIcon" target="urlIcon" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="539" />
+              <mxPoint x="300" y="269" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e1lbl" value="MCP over Streamable HTTP&#xa;SigV4-signed" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=11;labelBackgroundColor=#FFFFFF;fontColor=#232F3E;" parent="e1" vertex="1" connectable="0">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#ED7100;strokeWidth=2;endArrow=blockThin;endFill=1;dashed=0;" parent="1" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="459" y="360" as="sourcePoint" />
+            <mxPoint x="459" y="440" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e2lbl" value="Lambda Web Adapter → :8000 /mcp" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=11;labelBackgroundColor=#FFFFFF;fontColor=#232F3E;" parent="e2" vertex="1" connectable="0">
+          <mxGeometry x="0.1" relative="1" as="geometry">
+            <mxPoint y="-13" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=none;html=1;strokeColor=#DD344C;strokeWidth=2;endArrow=none;dashed=1;dashPattern=4 4;" parent="1" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="498" y="479" as="sourcePoint" />
+            <mxPoint x="790" y="479" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=none;html=1;strokeColor=#ED7100;strokeWidth=2;endArrow=none;dashed=1;dashPattern=4 4;" parent="1" target="depsLayer" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="459" y="570" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E7157B;strokeWidth=2;endArrow=blockThin;endFill=1;dashed=1;dashPattern=4 4;" parent="1" target="logGroup" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="459" y="780" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" style="edgeStyle=none;html=1;strokeColor=#DD344C;strokeWidth=2;endArrow=none;dashed=1;dashPattern=4 4;" parent="1" source="urlIcon" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="790" y="269" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7lbl" value="lambda:InvokeFunctionUrl" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;labelBackgroundColor=#FFFFFF;fontColor=#5A6C7D;" parent="e7" vertex="1" connectable="0">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#DD344C;strokeWidth=3;endArrow=blockThin;endFill=1;" parent="1" target="roRole" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1075" y="479" />
+              <mxPoint x="1075" y="269" />
+            </Array>
+            <mxPoint x="868" y="479.0588235294117" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8lbl" value="sts:AssumeRole&#xa;(Mode B call)" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=11;labelBackgroundColor=#FFFFFF;fontColor=#232F3E;" parent="e8" vertex="1" connectable="0">
+          <mxGeometry x="-0.2" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#DD344C;strokeWidth=3;endArrow=blockThin;endFill=1;" parent="1" target="probeRole" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1075" y="479" />
+              <mxPoint x="1075" y="509" />
+            </Array>
+            <mxPoint x="868" y="479.0588235294117" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9lbl" value="sts:AssumeRole&#xa;(Mode A call)" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=11;labelBackgroundColor=#FFFFFF;fontColor=#232F3E;" parent="e9" vertex="1" connectable="0">
+          <mxGeometry x="0.3" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#8C4FFF;strokeWidth=2;endArrow=blockThin;endFill=1;" parent="1" source="roRole" target="apiGroup" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10lbl" value="read-only" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;labelBackgroundColor=#FFFFFF;fontColor=#5A6C7D;" parent="e10" vertex="1" connectable="0">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E7157B;strokeWidth=3;endArrow=blockThin;endFill=1;" parent="1" target="Pi81uGyJS5upe_v5bhTQ-15" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1250" y="620" as="sourcePoint" />
+            <mxPoint x="1219" y="700" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e11lbl" value="ssm:SendCommand&lt;br&gt;(structured params only)" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=11;labelBackgroundColor=#FFFFFF;fontColor=#232F3E;" parent="e11" vertex="1" connectable="0">
+          <mxGeometry x="0.15" relative="1" as="geometry">
+            <mxPoint y="-15" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#E7157B;strokeWidth=3;endArrow=blockThin;endFill=1;" parent="1" target="ec2Target" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1340" y="749" />
+            </Array>
+            <mxPoint x="1258" y="749" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12lbl" value="fixed read-only probe set" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=11;labelBackgroundColor=#FFFFFF;fontColor=#232F3E;" parent="e12" vertex="1" connectable="0">
+          <mxGeometry x="-0.1" relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#00A4A6;strokeWidth=2;endArrow=blockThin;endFill=1;startArrow=blockThin;startFill=1;" parent="1" source="ec2Target" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1800" y="774" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13lbl" value="SSM control channel&#xa;(private path only)" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;labelBackgroundColor=#FFFFFF;fontColor=#5A6C7D;" parent="e13" vertex="1" connectable="0">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#8C4FFF;strokeWidth=2;endArrow=blockThin;endFill=1;dashed=1;dashPattern=4 4;" parent="1" target="resolverAddr" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1539" y="860" as="sourcePoint" />
+            <Array as="points">
+              <mxPoint x="1540" y="860" />
+              <mxPoint x="1540" y="870" />
+              <mxPoint x="1663" y="870" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14lbl" value="DNS queries&#xa;per resolver, per family" style="edgeLabel;html=1;align=center;verticalAlign=middle;fontSize=10;labelBackgroundColor=#FFFFFF;fontColor=#5A6C7D;" parent="e14" vertex="1" connectable="0">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="37" y="20" as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="legend" value="Legend" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#232F3E;verticalAlign=top;align=left;fontSize=13;fontStyle=1;fontColor=#232F3E;spacingLeft=12;spacingTop=8;" parent="1" vertex="1">
+          <mxGeometry x="40" y="790" width="230" height="310" as="geometry" />
+        </mxCell>
+        <mxCell id="lg1" value="Solid outline = created by&#xa;these templates" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#232F3E;" parent="1" vertex="1">
+          <mxGeometry x="56" y="822" width="200" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="lg2" value="Dashed grey = consumed,&#xa;not created" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#5A6C7D;" parent="1" vertex="1">
+          <mxGeometry x="56" y="862" width="200" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="lg3" value="—— teal: MCP transport" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#01A88D;" parent="1" vertex="1">
+          <mxGeometry x="56" y="902" width="200" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lg4" value="—— red: IAM / role assumption" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#DD344C;" parent="1" vertex="1">
+          <mxGeometry x="56" y="926" width="210" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lg5" value="—— magenta: SSM probe path" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#E7157B;" parent="1" vertex="1">
+          <mxGeometry x="56" y="950" width="210" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lg6" value="—— purple: DNS / networking" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=11;fontColor=#8C4FFF;" parent="1" vertex="1">
+          <mxGeometry x="56" y="974" width="210" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="lg8" value="Deploy order: central stack first,&#xa;then scoped roles per target account." style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=10;fontColor=#5A6C7D;fontStyle=2;" parent="1" vertex="1">
+          <mxGeometry x="56" y="1058" width="205" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-2" value="DnsDiagnosticMCPFunction&lt;br&gt;AWS::Serverless::Function&lt;br&gt;python3.12 / x86_64 / 1024 MB / 180 s" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#ED7100;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.lambda_function;" vertex="1" parent="1">
+          <mxGeometry x="435" y="455" width="48" height="48" as="geometry" />
+        </mxCell>
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-3" value="&lt;span style=&quot;font-size: 11px;&quot;&gt;SigV4 invoke role&lt;/span&gt;&lt;br style=&quot;font-size: 11px;&quot;&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;trusts aidevops.amazonaws.com&lt;/span&gt;&lt;br style=&quot;font-size: 11px;&quot;&gt;&lt;span style=&quot;font-size: 11px;&quot;&gt;(created by operator, not the template)&lt;/span&gt;" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.role;" vertex="1" parent="1">
+          <mxGeometry x="790" y="240" width="78" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="Pi81uGyJS5upe_v5bhTQ-5" value="Function execution role&lt;br&gt;sts:AssumeRole ONLY&lt;br&gt;(SAM-generated)" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#DD344C;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.role;" vertex="1" parent="1">
+          <mxGeometry x="790" y="455" width="78" height="44" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

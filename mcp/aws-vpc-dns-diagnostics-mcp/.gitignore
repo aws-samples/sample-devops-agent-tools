@@ -1,0 +1,20 @@
+# AWS SAM build artifacts
+.aws-sam/
+samconfig.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Draw.io autosave/backup artifacts
+.$*.drawio.bkp
+*.drawio.bkp
+*.drawio.dtmp
