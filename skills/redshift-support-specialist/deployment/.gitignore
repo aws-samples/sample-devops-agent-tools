@@ -1,0 +1,6 @@
+redshift-mcp-proxy-lambda.zip
+build/
+sam-app/.aws-sam/
+sam-app/samconfig.toml
+__pycache__/
+*.pyc

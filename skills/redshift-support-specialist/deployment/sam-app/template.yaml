@@ -1,0 +1,382 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Redshift MCP Server (Model Context Protocol) deployed on AWS Lambda.
+  Runs the standard, unmodified `awslabs.redshift-mcp-server` PyPI package
+  behind a generic stdio<->streamable-HTTP bridge (mcp-proxy). Fronted by
+  an API Gateway REST API (AWS_IAM/SigV4 authorized) -- this is the
+  endpoint that should be registered with AWS DevOps Agent's SigV4
+  MCP-connection feature, which is documented and tested against the API
+  Gateway ("execute-api") signing service. No container image, no ECR
+  repository -- packaged as a plain Lambda .zip deployment.
+
+Parameters:
+  FastMcpLogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR]
+    Description: Log level passed to the underlying awslabs.redshift-mcp-server process.
+  LambdaWebAdapterLayerVersion:
+    Type: String
+    Default: '28'
+    Description: >
+      Version number of the public awsguru LambdaAdapterLayerArm64 layer.
+      Check https://github.com/aws/aws-lambda-web-adapter/releases for the
+      latest published version.
+  CallerRoleArn:
+    Type: String
+    Default: ''
+    Description: >
+      (Optional) ARN of an EXISTING IAM role that should be granted
+      permission to invoke the API Gateway endpoint -- for example, a role
+      you already created for an AWS DevOps Agent Agent Space. Leave empty
+      to skip; grant access later with the manual policy steps in the
+      README's "Grant invoke access to a caller" section. Mutually
+      independent from CreateDevOpsAgentRole below -- use this when the
+      role already exists, use that when you want this stack to create it.
+  CreateDevOpsAgentRole:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >
+      If 'true', this stack creates a NEW IAM role for AWS DevOps Agent to
+      assume (trust policy for the aidevops.amazonaws.com service
+      principal, scoped to this account/region), and grants it permission
+      to invoke the API Gateway endpoint plus the Redshift Data API read
+      permissions the agent needs. Use this instead of manually running
+      the "Step 1-4" console/CLI role-creation steps from the DevOps Agent
+      MCP-connection docs. Leave 'false' if you already have a role (use
+      CallerRoleArn instead) or will create one yourself.
+  DevOpsAgentRoleName:
+    Type: String
+    Default: DevOpsAgentRole-Redshift-support-specialist
+    Description: >
+      Name for the IAM role created when CreateDevOpsAgentRole is 'true'.
+      Ignored otherwise.
+
+Conditions:
+  HasCallerRole: !Not [!Equals [!Ref CallerRoleArn, '']]
+  ShouldCreateDevOpsAgentRole: !Equals [!Ref CreateDevOpsAgentRole, 'true']
+
+Resources:
+  # Explicitly named so it has a stable identity to reference outside this
+  # stack -- notably, this is the IAM identity Amazon Redshift maps to a
+  # database user for via GetClusterCredentialsWithIAM (database username
+  # becomes "IAM:redshift-mcp-lambda-execution-role"). Without an explicit
+  # name, SAM would auto-generate one with a random suffix on every
+  # deploy, making that mapping unstable.
+  RedshiftMcpFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: redshift-mcp-lambda-execution-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: RedshiftMcpAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - redshift:DescribeClusters
+                  - redshift:GetClusterCredentialsWithIAM
+                  - redshift:GetClusterCredentials
+                  - redshift-serverless:ListWorkgroups
+                  - redshift-serverless:GetWorkgroup
+                  - redshift-serverless:GetCredentials
+                  - redshift-data:ExecuteStatement
+                  - redshift-data:DescribeStatement
+                  - redshift-data:GetStatementResult
+                Resource: '*'
+      Tags:
+        - Key: Project
+          Value: redshift-mcp
+
+  RedshiftMcpFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      # Builds with a plain `pip install --platform manylinux2014_aarch64
+      # --only-binary=:all:` (see src/Makefile) instead of a container --
+      # every dependency (uv, mcp-proxy, and their transitive deps) ships
+      # prebuilt manylinux wheels, so no compiler and no Docker/Finch are
+      # needed to produce a Lambda-compatible package.
+      BuildMethod: makefile
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-redshift-mcp'
+      CodeUri: src/
+      Handler: run.sh
+      Runtime: python3.13
+      Architectures: [arm64]
+      MemorySize: 512
+      Timeout: 60
+      Role: !GetAtt RedshiftMcpFunctionRole.Arn
+      Layers:
+        - !Sub 'arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerArm64:${LambdaWebAdapterLayerVersion}'
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
+          AWS_LWA_PORT: '8000'
+          AWS_LWA_READINESS_CHECK_PATH: /mcp
+          FASTMCP_LOG_LEVEL: !Ref FastMcpLogLevel
+      Events:
+        McpApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RedshiftMcpApi
+            Path: /mcp
+            Method: POST
+      Tags:
+        Project: redshift-mcp
+
+  # API Gateway REST API (execute-api) fronting the same Lambda function,
+  # with IAM/SigV4 authorization on the /mcp method. This is the endpoint
+  # to register with AWS DevOps Agent's SigV4 MCP-server capability
+  # provider -- its docs and console "Service Name" field are documented
+  # against "execute-api" (API Gateway), not Lambda Function URLs.
+  #
+  # No resource policy here: API Gateway rejects the combination of
+  # method-level AWS_IAM authorization with a custom resource policy
+  # ("Caller provided credentials not allowed when resource policy is
+  # set"). With AWS_IAM auth, access control is entirely identity-based --
+  # each caller role needs execute-api:Invoke granted on ITS OWN IAM
+  # identity (see DevOpsAgentRole's InvokeRedshiftMcpApi policy below, and
+  # CallerApiInvokePolicy for an externally-owned CallerRoleArn).
+  RedshiftMcpApi:
+    Type: AWS::Serverless::Api
+    DependsOn: ApiGatewayAccount
+    Properties:
+      Name: !Sub '${AWS::StackName}-redshift-mcp-api'
+      StageName: Prod
+      Auth:
+        DefaultAuthorizer: AWS_IAM
+      # Execution logging (full request/response/integration detail) --
+      # invaluable for diagnosing 5xx errors that occur at the API Gateway
+      # layer before/without ever reaching the Lambda function (e.g. cold
+      # start exceeding the fixed 29s REST API integration timeout).
+      MethodSettings:
+        - ResourcePath: /*
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+      AccessLogSetting:
+        DestinationArn: !GetAtt RedshiftMcpApiAccessLogs.Arn
+        Format: >-
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp","caller":"$context.identity.caller","user":"$context.identity.user","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","resourcePath":"$context.resourcePath","status":"$context.status","protocol":"$context.protocol","responseLength":"$context.responseLength","integrationStatus":"$context.integration.status","integrationErrorMessage":"$context.integration.error","integrationLatency":"$context.integration.latency","authorizeError":"$context.authorize.error","errorMessage":"$context.error.message"}
+      Tags:
+        Project: redshift-mcp
+
+  # Log group for API Gateway access logs (see AccessLogSetting above) --
+  # captures per-request integration status/error/latency even when the
+  # request never reaches the Lambda function.
+  RedshiftMcpApiAccessLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/${AWS::StackName}-redshift-mcp-api'
+      RetentionInDays: 14
+
+  # API Gateway execution/access logging requires a CloudWatch Logs role
+  # set at the ACCOUNT level (aws apigateway get-account /
+  # AWS::ApiGateway::Account) -- this is a one-time, account-wide setting,
+  # not per-API. If your account already has this configured (e.g. from
+  # another API Gateway deployment), CloudFormation will just confirm the
+  # existing setting; it won't create a duplicate or conflict.
+  ApiGatewayCloudWatchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs
+      Tags:
+        - Key: Project
+          Value: redshift-mcp
+
+  ApiGatewayAccount:
+    Type: AWS::ApiGateway::Account
+    Properties:
+      CloudWatchRoleArn: !GetAtt ApiGatewayCloudWatchRole.Arn
+
+  # Grants the CallerRoleArn role execute-api:Invoke on the /mcp method,
+  # via an inline policy attached directly to that (externally-owned) role.
+  # Only created when CallerRoleArn is provided. Extracts the role name
+  # from the ARN since AWS::IAM::RolePolicy's RoleName property takes a
+  # name, not an ARN.
+  #
+  # ALSO grants lambda:InvokeFunction directly on the Lambda function.
+  # SAM's AWS_IAM-authorized Api integration sets the integration's
+  # "credentials" to a caller-passthrough wildcard (arn:aws:iam::*:user/*),
+  # meaning API Gateway invokes the Lambda backend AS THE CALLER'S IAM
+  # IDENTITY rather than via its own apigateway.amazonaws.com service-linked
+  # permission. Without this, calls fail at the integration layer with
+  # "Execution failed due to configuration error: Invalid permissions on
+  # Lambda function" even though the caller's execute-api:Invoke check
+  # passes cleanly.
+  CallerApiInvokePolicy:
+    Type: AWS::IAM::RolePolicy
+    Condition: HasCallerRole
+    Properties:
+      PolicyName: InvokeRedshiftMcpApi
+      RoleName: !Select [1, !Split ['role/', !Ref CallerRoleArn]]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: execute-api:Invoke
+            Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RedshiftMcpApi}/*/POST/mcp'
+          - Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource: !GetAtt RedshiftMcpFunction.Arn
+
+  # Optional: creates the IAM role AWS DevOps Agent assumes to connect to
+  # this MCP server, replacing the manual "create role -> attach trust
+  # policy -> attach permissions" steps from the DevOps Agent MCP-connection
+  # docs. Only created when CreateDevOpsAgentRole is 'true'.
+  DevOpsAgentRole:
+    Type: AWS::IAM::Role
+    Condition: ShouldCreateDevOpsAgentRole
+    Properties:
+      RoleName: !Ref DevOpsAgentRoleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: aidevops.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              # Both ARN patterns are needed: the DevOps Agent docs show
+              # "service/*", but the AssumeRole calls the service actually
+              # makes (session "sigv4McpServerSession") use "agentspace/*"
+              # -- with only "service/*" the MCP registration fails with
+              # "Invalid STS role configuration ... Verify the role's
+              # trust policy."
+              ArnLike:
+                aws:SourceArn:
+                  - !Sub 'arn:aws:aidevops:${AWS::Region}:${AWS::AccountId}:service/*'
+                  - !Sub 'arn:aws:aidevops:${AWS::Region}:${AWS::AccountId}:agentspace/*'
+      Policies:
+        # Permission to invoke the API Gateway endpoint's /mcp method --
+        # this is what AWS DevOps Agent's SigV4 auth actually needs
+        # (Service Name = execute-api). The API's resource policy (see
+        # RedshiftMcpApi above) also allows this role, so both sides agree.
+        # ALSO includes lambda:InvokeFunction directly on the function --
+        # required because the AWS_IAM-authorized Api integration invokes
+        # the Lambda backend using the CALLER's own IAM identity (SAM sets
+        # the integration's credentials to a caller-passthrough wildcard),
+        # not via API Gateway's own service principal. Without this,
+        # requests fail at the integration layer with "Invalid permissions
+        # on Lambda function" even though execute-api:Invoke succeeds.
+        - PolicyName: InvokeRedshiftMcpApi
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: execute-api:Invoke
+                Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RedshiftMcpApi}/*/POST/mcp'
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt RedshiftMcpFunction.Arn
+        # Redshift Data API + discovery permissions the MCP server's six
+        # tools need on the caller side (mirrors the Lambda's own execution
+        # role policy -- see redshift-access-policy.json). The agent's
+        # AssumeRole'd credentials are what the MCP server's boto3 calls
+        # ultimately run under when it uses the caller's identity rather
+        # than its own execution role, and Redshift Data API/serverless
+        # actions require the calling principal to have these permissions
+        # regardless of which side holds them.
+        - PolicyName: RedshiftDataApiAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - redshift:DescribeClusters
+                  - redshift:GetClusterCredentialsWithIAM
+                  - redshift:GetClusterCredentials
+                  - redshift-serverless:ListWorkgroups
+                  - redshift-serverless:GetWorkgroup
+                  - redshift-serverless:GetCredentials
+                  - redshift-data:ExecuteStatement
+                  - redshift-data:DescribeStatement
+                  - redshift-data:GetStatementResult
+                Resource: '*'
+      Tags:
+        - Key: Project
+          Value: redshift-mcp
+
+Outputs:
+  RedshiftMcpFunctionArn:
+    Description: ARN of the Redshift MCP Lambda function.
+    Value: !GetAtt RedshiftMcpFunction.Arn
+  RedshiftMcpApiUrl:
+    Description: >
+      The endpoint to register with AWS DevOps Agent's SigV4 MCP-server
+      capability provider (Service Name = execute-api). Backed by API
+      Gateway, IAM/SigV4 authorized.
+    Value: !Sub 'https://${RedshiftMcpApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/mcp'
+  GrantInvokeCommand:
+    Description: >
+      If CallerRoleArn was provided, that role already has invoke access
+      (see CallerRoleGranted below). Use this command to grant
+      execute-api:Invoke access to any additional caller role. Replace
+      <ACCOUNT_ID> and <ROLE_NAME>.
+    Value: !Sub >-
+      aws iam put-role-policy --role-name <ROLE_NAME>
+      --policy-name InvokeRedshiftMcpApi --policy-document
+      '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"execute-api:Invoke","Resource":"arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RedshiftMcpApi}/*/POST/mcp"},{"Effect":"Allow","Action":"lambda:InvokeFunction","Resource":"${RedshiftMcpFunction.Arn}"}]}'
+  CallerRoleGranted:
+    Description: >
+      The role (if any) granted execute-api:Invoke via the CallerRoleArn
+      parameter at deploy time. Empty if CallerRoleArn was not provided.
+    Value: !Ref CallerRoleArn
+  DevOpsAgentRoleArn:
+    Description: >
+      ARN of the IAM role created for AWS DevOps Agent (only present when
+      CreateDevOpsAgentRole was 'true'). Use this ARN when connecting the
+      MCP server to your Agent Space capability provider.
+    Condition: ShouldCreateDevOpsAgentRole
+    Value: !GetAtt DevOpsAgentRole.Arn
+  RedshiftMcpFunctionRoleName:
+    Description: >
+      Name of the Lambda's execution role. Amazon Redshift maps this IAM
+      role to the database user IAMR:<this value> via
+      GetClusterCredentialsWithIAM (IAM roles use the IAMR: prefix, IAM
+      users use IAM: -- see
+      https://docs.aws.amazon.com/redshift-data/latest/APIReference/API_ListDatabases.html).
+      Use this value (or the ready-made GrantSysMonitorCommand /
+      GrantTableInfoCommand outputs below) to run the required database
+      grants on each cluster/workgroup this skill will query.
+    Value: !Ref RedshiftMcpFunctionRole
+  GrantSysMonitorCommand:
+    Description: >
+      Run this SQL (as a database superuser, via the Redshift query editor
+      or psql) on each cluster/workgroup this skill will query. Grants the
+      MCP server's database user visibility into ALL users' queries in
+      monitoring views (SYS_QUERY_HISTORY, SVL_QLOG, etc.), not just its
+      own. Does not grant sys:operator (canceling queries, VACUUM) -- this
+      skill never needs that since execute_query is read-only.
+    Value: !Sub 'GRANT ROLE sys:monitor TO "IAMR:${RedshiftMcpFunctionRole}";'
+  GrantTableInfoCommand:
+    Description: >
+      Run this SQL (as a database superuser) on each cluster/workgroup
+      this skill will query. SVV_TABLE_INFO (used for table-health checks)
+      is superuser-visible by default and is not covered by sys:monitor,
+      so it needs this separate grant. Without it, queries against
+      SVV_TABLE_INFO fail with "permission denied for relation
+      svv_table_info".
+    Value: !Sub 'GRANT SELECT ON SVV_TABLE_INFO TO "IAMR:${RedshiftMcpFunctionRole}";'

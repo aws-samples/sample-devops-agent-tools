@@ -1,0 +1,176 @@
+# Signal Thresholds for Redshift Operational Review
+# Used by Capability 3 (Detailed Operational Review) to evaluate CSV data
+
+signals:
+  # Storage & Infrastructure
+  storage_utilization_pct:
+    threshold: "> 70%"
+    severity: WARN
+    section: NodeDetails
+    description: "Storage utilization exceeds 70% capacity"
+    recommendation: "Archive cold data, run VACUUM DELETE, or resize cluster"
+
+  # Table Health
+  skew_rows:
+    threshold: ">= 4"
+    severity: FAIL
+    section: TableInfo
+    description: "Row distribution skew is extreme (>= 4x)"
+    recommendation: "Change distribution key to achieve balanced data distribution"
+
+  vacuum_sort_benefit:
+    threshold: ">= 10"
+    severity: WARN
+    section: TableInfo
+    description: "Tables with significant unsorted data (sort benefit >= 10)"
+    recommendation: "Run VACUUM SORT on affected tables"
+
+  stats_off:
+    threshold: "> 10"
+    severity: WARN
+    section: TableInfo
+    description: "Table statistics are stale (> 10% deviation)"
+    recommendation: "Run ANALYZE on affected tables"
+
+  pct_rows_marked_for_deletion:
+    threshold: "> 10%"
+    severity: WARN
+    section: TableInfo
+    description: "More than 10% of rows are marked for deletion (bloat)"
+    recommendation: "Run VACUUM DELETE on affected tables"
+
+  max_varchar:
+    threshold: "> 1000"
+    severity: WARN
+    section: TableInfo
+    description: "Wide VARCHAR columns (> 1000 chars) waste memory during queries"
+    recommendation: "Reduce VARCHAR width to actual max data length + buffer"
+
+  encoded_column_pct:
+    threshold: "< 80%"
+    severity: WARN
+    section: TableInfo
+    description: "Less than 80% of columns use compression encoding"
+    recommendation: "Apply compression via ANALYZE COMPRESSION and deep copy or ALTER TABLE"
+
+  # Workload & Performance
+  pct_wlm_queue_time:
+    threshold: "> 5%"
+    severity: WARN
+    section: UsagePattern
+    description: "WLM queue time exceeds 5% of total elapsed time"
+    recommendation: "Enable Concurrency Scaling, tune WLM queues, or optimize long-running queries"
+
+  total_disk_spill_count:
+    threshold: "> 10"
+    severity: WARN
+    section: UsagePattern
+    description: "More than 10 queries spilled to disk in the analysis period"
+    recommendation: "Reduce VARCHAR widths, increase compute, or optimize spilling queries"
+
+  compiled_queries:
+    threshold: "> 100"
+    severity: WARN
+    section: UsagePattern
+    description: "High number of compiled queries (cache misses)"
+    recommendation: "Use parameterized queries or prepared statements to improve cache hit rate"
+
+  small_insert_count:
+    threshold: "> 100"
+    severity: WARN
+    section: UsagePattern
+    description: "High count of single-row INSERT statements"
+    recommendation: "Batch inserts using COPY command for 10x+ throughput improvement"
+
+  # Data Loading
+  avg_files_per_copy:
+    threshold: "< 4"
+    severity: WARN
+    section: CopyPerformance
+    description: "COPY commands loading fewer than 4 files (low parallelism)"
+    recommendation: "Split source files to match or exceed the number of slices"
+
+  avg_file_size_mb:
+    threshold: "< 10"
+    severity: WARN
+    section: CopyPerformance
+    description: "COPY source files are too small (< 10 MB)"
+    recommendation: "Consolidate small files into 128MB-1GB compressed files"
+
+  # Spectrum / External Queries
+  partition_pruning_pct:
+    threshold: "< 95%"
+    severity: WARN
+    section: ExtQueryPerformance
+    description: "Partition pruning effectiveness below 95%"
+    recommendation: "Add partition predicates to WHERE clause or reorganize partition layout"
+
+  # Per-Query Signals
+  total_disk_spill_mb_per_query:
+    threshold: "> 100 MB"
+    severity: WARN
+    section: Top50QueriesByRunTime
+    description: "Individual query spilling more than 100 MB to disk"
+    recommendation: "Reduce VARCHAR widths on joined tables, add sort keys, or increase compute"
+
+  # Data Sharing
+  avg_request_duration_secs:
+    threshold: "> 60s"
+    severity: WARN
+    section: DataShareConsumerUsage
+    description: "Consumer datashare requests averaging over 60 seconds"
+    recommendation: "Check network latency, consumer RPU capacity, or producer MV refresh status"
+
+# CloudWatch Metric Thresholds (for Capability 2 and 5)
+cloudwatch:
+  provisioned:
+    CPUUtilization:
+      warn: "> 80%"
+      period: 300
+      statistic: Average
+    PercentageDiskSpaceUsed:
+      warn: "> 75%"
+      period: 300
+      statistic: Average
+    DatabaseConnections:
+      warn: "> 400"
+      period: 300
+      statistic: Maximum
+    WLMQueueWaitTime:
+      warn: "> 30s"
+      period: 300
+      statistic: Average
+    HealthStatus:
+      fail: "< 1"
+      period: 300
+      statistic: Minimum
+    ReadLatency:
+      warn: "> 10ms"
+      period: 300
+      statistic: Average
+    WriteLatency:
+      warn: "> 10ms"
+      period: 300
+      statistic: Average
+    QueryDuration:
+      warn: "> 60s"
+      period: 300
+      statistic: p90
+
+  serverless:
+    ComputeCapacity:
+      warn: "> 80% of max RPU"
+      period: 300
+      statistic: Maximum
+    DatabaseConnections:
+      warn: "> 80% of limit"
+      period: 300
+      statistic: Maximum
+    ComputeSeconds:
+      warn: "> 1.5x budget"
+      period: 86400
+      statistic: Sum
+    QueryDuration:
+      warn: "> 60s"
+      period: 300
+      statistic: p90

@@ -1,0 +1,68 @@
+[
+  {
+    "id": "redshift-support-mcp-tools",
+    "prompt": "According to the skill, what are the six MCP tools it relies on to talk to Amazon Redshift, and what does it say about AWS CLI or CloudWatch access? No cluster access required.",
+    "expected_output": "Lists list_clusters, list_databases, list_schemas, list_tables, list_columns, and execute_query, and states the skill has no AWS CLI or CloudWatch access -- all Redshift interaction must go through those six MCP tools.",
+    "files": [],
+    "assertions": [
+      "contains 'list_clusters'",
+      "contains 'list_databases'",
+      "contains 'execute_query'",
+      "contains 'AWS CLI' or contains 'CloudWatch'"
+    ]
+  },
+  {
+    "id": "redshift-support-no-csv-rule",
+    "prompt": "According to the skill, is the agent allowed to ask a user to run an extraction script or upload a CSV file to collect Redshift diagnostics? Explain what it should do instead. No cluster access required.",
+    "expected_output": "States the agent must never ask the user to run an extraction script or upload a CSV file, and must instead collect diagnostics live via the execute_query MCP tool.",
+    "files": [],
+    "assertions": [
+      "contains 'CSV'",
+      "contains 'execute_query'",
+      "contains 'never' or contains 'not' or contains 'don't' or contains 'do not'"
+    ]
+  },
+  {
+    "id": "redshift-support-detailed-review-outputs",
+    "prompt": "According to the skill, what two output artifacts must the Detailed Operational Review capability produce, and why does it need both? No cluster access required.",
+    "expected_output": "States the review must produce both an HTML report (a downloadable file with a self-download button) and a Markdown report (rendered directly in chat), because raw HTML pasted into chat renders as inert code rather than an interactive page.",
+    "files": [],
+    "assertions": [
+      "contains 'HTML'",
+      "contains 'Markdown' or contains 'markdown'",
+      "contains 'chat'"
+    ]
+  },
+  {
+    "id": "redshift-support-database-scope-question",
+    "prompt": "According to the skill, before running the Detailed Operational Review's data collection, what must the agent ask the user? No cluster access required.",
+    "expected_output": "States the agent must ask which database(s) to scope the review to -- all databases returned by list_databases, or a specific subset -- and must never assume a single default database.",
+    "files": [],
+    "assertions": [
+      "contains 'database'",
+      "contains 'list_databases'",
+      "contains 'all' or contains 'subset'"
+    ]
+  },
+  {
+    "id": "redshift-support-read-only-rule",
+    "prompt": "According to the skill, what SQL statement types is the agent never allowed to run through execute_query, and why? No cluster access required.",
+    "expected_output": "Lists write/DDL statement types such as INSERT, UPDATE, DELETE, ALTER, DROP, CREATE, GRANT, VACUUM, and ANALYZE, and explains execute_query runs in a read-only transaction that would reject them anyway.",
+    "files": [],
+    "assertions": [
+      "contains 'INSERT' or contains 'UPDATE' or contains 'DELETE'",
+      "contains 'read-only' or contains 'read only'"
+    ]
+  },
+  {
+    "id": "redshift-support-error-transparency",
+    "prompt": "According to the skill, if a diagnostic query fails during a review (for example a view doesn't exist on the target cluster), what must the agent do -- just say it failed, or something more specific? No cluster access required.",
+    "expected_output": "States the agent must quote the actual tool error text back to the user rather than reporting a generic 'failed' status, mark that specific section as not available, and continue with the remaining sections instead of stopping the whole review.",
+    "files": [],
+    "assertions": [
+      "contains 'error'",
+      "contains 'not available' or contains 'quote'",
+      "contains 'continue'"
+    ]
+  }
+]

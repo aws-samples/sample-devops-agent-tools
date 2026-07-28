@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "redshift:DescribeClusters",
+        "redshift-serverless:ListWorkgroups",
+        "redshift-serverless:GetWorkgroup",
+        "redshift-data:ExecuteStatement",
+        "redshift-data:DescribeStatement",
+        "redshift-data:GetStatementResult",
+        "redshift-serverless:GetCredentials",
+        "redshift:GetClusterCredentialsWithIAM",
+        "redshift:GetClusterCredentials"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
