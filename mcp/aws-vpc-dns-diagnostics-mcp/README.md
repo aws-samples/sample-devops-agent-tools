@@ -114,13 +114,18 @@ Note the `FunctionRoleArn` output. The scoped roles must trust it.
 | Parameter | Purpose | Default |
 | --- | --- | --- |
 | `StageName` | `dev`, `staging`, or `prod`. Wildcard allowlists are refused when `prod`. | `prod` |
-| `AllowedAccounts` | Account IDs the tools may inspect | `*` (dev only) |
+| `AllowedAccounts` | Account IDs the tools may inspect | **required, no default** |
 | `AllowedRegions` | Regions the tools may operate in | `*` (dev only) |
 | `AllowedVpcs` | VPC IDs the tools may target | `*` (dev only) |
 | `AllowedResolvers` | Extra resolver IPs/hostnames the probes may query | `*` (dev only) |
 | `DiagnosticDocumentName` | The single SSM document the probe role may send | `dns-diagnostic-probe` |
 | `ProbeRoleArnPattern` | Per-account Mode A role ARN pattern | `arn:aws:iam::*:role/DnsDiagnosticProbeRole` |
 | `ReadOnlyRoleArnPattern` | Per-account Mode B role ARN pattern | `arn:aws:iam::*:role/DnsDiagnosticReadOnlyRole` |
+
+`AllowedAccounts` has no default and does not accept `*`. It is the boundary that
+stops the server assuming a role into an arbitrary account, so it must be stated
+explicitly and the server refuses to start without it in **every** stage, not
+only `prod`. Unset, empty, and `*` are all rejected at import.
 
 Set every `Allowed*` parameter explicitly for anything beyond local testing. With
 `StageName=prod`, the server refuses to start if any allowlist is `*`.
@@ -348,6 +353,7 @@ anything.
 - ❌ No mutating API of any kind: no create, modify, associate, or delete
 - ❌ Mode B holds no `ssm:SendCommand` grant at all
 - ❌ No account, region, VPC, or resolver outside the configured allowlists
+- ❌ No startup at all without an explicit `ALLOWED_ACCOUNTS` list, in any stage
 - ❌ No startup at all when `StageName=prod` and any allowlist is a wildcard
 
 **Inputs are constrained before they reach anything:**
@@ -400,7 +406,8 @@ probe output as untrusted input rather than as trustworthy diagnostic narration.
 | Credential scoping | Per tool family; Mode B's role never holds `ssm:SendCommand` |
 | Probe execution surface | One SSM document, fixed read-only probe set |
 | `ssm:SendCommand` scope | Resource-scoped to that one document ARN |
-| Account / region / VPC allowlists | Enforced in one place, before any AWS call |
+| Account allowlist | Required in every stage; unset, empty, and `*` all refuse startup |
+| Region / VPC allowlists | Enforced in one place, before any AWS call |
 | Resolver allowlist | Fail-closed: literal IPs only unless a hostname is listed |
 | Production enforcement | Wildcard allowlists refused at startup when `StageName=prod` |
 | SSM path | `ssm` + `ssmmessages` + `ec2messages` interface endpoints required; no public-path fallback |

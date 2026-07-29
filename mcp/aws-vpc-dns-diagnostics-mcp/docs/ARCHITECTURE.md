@@ -243,6 +243,7 @@ prefixes is not picked up implicitly.
 
 | Guard | Behavior |
 | --- | --- |
+| `ALLOWED_ACCOUNTS` unset, empty, or `*` | Refused at startup in EVERY stage |
 | Wildcard allowlists under `STAGE_NAME=prod` | Refused at startup |
 | Resolver hostnames with an empty `ALLOWED_RESOLVERS` | All hostnames rejected; literal IPs only |
 | Account / region / VPC outside the allowlist | Rejected before any AWS call |

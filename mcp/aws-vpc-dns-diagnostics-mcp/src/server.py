@@ -70,7 +70,13 @@ VPC_RESOLVER_IPV6 = "fd00:ec2::253"
 # ============================================================
 
 def _load_allowlist(env_var: str) -> set[str]:
-    """Load a comma-separated allowlist from an env var. '*' means allow-all."""
+    """Load a comma-separated allowlist from an env var. '*' means allow-all.
+
+    An absent env var is treated as '*' for regions, VPCs, and resolvers.
+    ALLOWED_ACCOUNTS is exempt: _enforce_account_allowlist() runs before this and
+    refuses to start the server when it is unset, empty, or '*', so accounts can
+    never load as an allow-all empty set.
+    """
     raw = os.environ.get(env_var, "*").strip()
     if raw == "*":
         return set()  # Empty set == allow all
@@ -122,7 +128,41 @@ def _warn_wildcard_resolvers():
     )
 
 
+def _enforce_account_allowlist():
+    """Fail-closed on ALLOWED_ACCOUNTS in EVERY stage, not just prod.
+
+    The account allowlist is the boundary that stops the server assuming a role
+    into an arbitrary account, so it is the one list that must never default to
+    allow-all. _enforce_prod_allowlists() only guards STAGE_NAME=prod; a dev or
+    staging deployment attached to a real Agent Space would otherwise accept any
+    account_id a caller supplied.
+
+    Refuses three ways to reach allow-all: unset, empty, and '*'.
+    """
+    raw = os.environ.get("ALLOWED_ACCOUNTS", "").strip()
+    entries = [v.strip() for v in raw.split(",") if v.strip()]
+    if not entries:
+        raise RuntimeError(
+            "SECURITY: ALLOWED_ACCOUNTS is required and must list at least one "
+            "12-digit AWS account ID. It is unset or empty. This server will not "
+            "start with an implicit allow-all account scope, in any stage."
+        )
+    if any(e == "*" for e in entries):
+        raise RuntimeError(
+            "SECURITY: ALLOWED_ACCOUNTS does not accept '*'. Set it to a "
+            "comma-separated list of the specific account IDs the tools may "
+            "inspect."
+        )
+    malformed = [e for e in entries if not re.fullmatch(r"[0-9]{12}", e)]
+    if malformed:
+        raise RuntimeError(
+            "SECURITY: ALLOWED_ACCOUNTS entries must be 12-digit AWS account "
+            f"IDs. Rejected: {', '.join(malformed)}."
+        )
+
+
 _enforce_prod_allowlists()
+_enforce_account_allowlist()
 _warn_wildcard_resolvers()
 
 ALLOWED_ACCOUNTS = _load_allowlist("ALLOWED_ACCOUNTS")
@@ -136,7 +176,12 @@ DIAGNOSTIC_DOCUMENT_NAME = os.environ.get("DIAGNOSTIC_DOCUMENT_NAME", "dns-diagn
 
 
 def _validate(value: str, allowlist: set[str], label: str) -> tuple[bool, str]:
-    """Generic allowlist check. Empty allowlist == allow all."""
+    """Generic allowlist check. Empty allowlist == allow all.
+
+    NOTE: ALLOWED_ACCOUNTS can never reach this function empty --
+    _enforce_account_allowlist() refuses to start the server in that state. The
+    allow-all-on-empty behaviour here applies to regions and VPCs only.
+    """
     if not allowlist:
         return True, ""
     if value.lower() not in allowlist:

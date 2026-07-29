@@ -35,9 +35,15 @@ Parameters:
   AllowedAccounts:
     Type: CommaDelimitedList
     Description: >
-      Account IDs the tools may inspect (via AssumeRole into the scoped roles
-      deployed in each target account). Use '*' only for dev/testing.
-    Default: '*'
+      REQUIRED. Comma-separated account IDs the tools may inspect (via AssumeRole
+      into the scoped roles deployed in each target account). There is no
+      default and '*' is refused: an account allowlist is the boundary that stops
+      the server assuming a role into an arbitrary account, so it must be stated
+      explicitly. Supply at least one 12-digit account ID.
+    AllowedPattern: '^[0-9]{12}$'
+    ConstraintDescription: >
+      AllowedAccounts must be one or more 12-digit AWS account IDs. A wildcard is
+      not accepted.
 
   AllowedRegions:
     Type: CommaDelimitedList

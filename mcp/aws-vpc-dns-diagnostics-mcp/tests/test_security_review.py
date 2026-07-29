@@ -153,6 +153,93 @@ class TestProbeRoleStaysMinimal:
         )
 
 
+class TestAccountAllowlistRequired:
+    """Security-review follow-up: ALLOWED_ACCOUNTS must never default to
+    allow-all. The account allowlist is the boundary that stops the server
+    assuming a role into an arbitrary account, so it is required in EVERY stage,
+    not only when STAGE_NAME=prod. Three routes to allow-all must all be refused:
+    unset, empty, and '*'."""
+
+    def _import_server(self, env_extra, drop=()):
+        """Import server.py in a subprocess with a controlled environment."""
+        env = dict(os.environ)
+        env.update(
+            {
+                "ALLOWED_ACCOUNTS": "111122223333",
+                "ALLOWED_REGIONS": "us-east-1",
+                "STAGE_NAME": "dev",
+            }
+        )
+        env.update(env_extra)
+        for k in drop:
+            env.pop(k, None)
+        return subprocess.run(
+            [sys.executable, "-c", "import server; print('STARTED')"],
+            cwd=os.path.join(os.path.dirname(__file__), "..", "src"),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+
+    def _refused(self, r):
+        combined = r.stdout + r.stderr
+        return r.returncode != 0 and "ALLOWED_ACCOUNTS" in combined
+
+    def test_unset_is_refused(self):
+        r = self._import_server({}, drop=("ALLOWED_ACCOUNTS",))
+        assert self._refused(r), f"unset ALLOWED_ACCOUNTS started: {r.stdout[:200]}"
+
+    def test_empty_is_refused(self):
+        r = self._import_server({"ALLOWED_ACCOUNTS": ""})
+        assert self._refused(r), f"empty ALLOWED_ACCOUNTS started: {r.stdout[:200]}"
+
+    def test_whitespace_only_is_refused(self):
+        r = self._import_server({"ALLOWED_ACCOUNTS": "   "})
+        assert self._refused(r)
+
+    def test_wildcard_is_refused(self):
+        r = self._import_server({"ALLOWED_ACCOUNTS": "*"})
+        assert self._refused(r), f"wildcard ALLOWED_ACCOUNTS started: {r.stdout[:200]}"
+
+    def test_wildcard_mixed_with_real_account_is_refused(self):
+        """A wildcard anywhere in the list defeats the whole list."""
+        r = self._import_server({"ALLOWED_ACCOUNTS": "111122223333,*"})
+        assert self._refused(r)
+
+    def test_malformed_account_id_is_refused(self):
+        r = self._import_server({"ALLOWED_ACCOUNTS": "12345"})
+        assert self._refused(r)
+
+    def test_refused_in_prod_stage_too(self):
+        """Belt and braces: the prod gate also covers this, and must still fire."""
+        r = self._import_server({"ALLOWED_ACCOUNTS": "*", "STAGE_NAME": "prod"})
+        assert r.returncode != 0
+
+    def test_single_valid_account_starts(self):
+        r = self._import_server({"ALLOWED_ACCOUNTS": "111122223333"})
+        assert "STARTED" in r.stdout, f"valid config failed to start: {r.stderr[:300]}"
+
+    def test_multiple_valid_accounts_start(self):
+        r = self._import_server({"ALLOWED_ACCOUNTS": "111122223333,444455556666"})
+        assert "STARTED" in r.stdout, f"valid config failed to start: {r.stderr[:300]}"
+
+    def test_whitespace_around_valid_accounts_is_tolerated(self):
+        r = self._import_server({"ALLOWED_ACCOUNTS": " 111122223333 , 444455556666 "})
+        assert "STARTED" in r.stdout, f"valid config failed to start: {r.stderr[:300]}"
+
+    def test_template_has_no_allowed_accounts_default(self):
+        """The SAM parameter must not carry a Default, or a plain `sam deploy`
+        would reintroduce an implicit scope."""
+        tpl = os.path.join(os.path.dirname(__file__), "..", "template.yaml")
+        with open(tpl, encoding="utf-8") as fh:
+            body = fh.read()
+        block = body.split("AllowedAccounts:", 1)[1].split("AllowedRegions:", 1)[0]
+        assert "Default:" not in block, (
+            "AllowedAccounts must have no Default in template.yaml"
+        )
+
+
 class TestF1ResolverFailClosed:
     """F-1: an empty resolver allowlist must permit literal IPs only and refuse
     every hostname, and the wildcard case must warn at startup."""
