@@ -1,0 +1,65 @@
+{
+  "skill_name": "aws-vpc-dns-investigation",
+  "skill_path": "/Users/ddericco/Projects/sample-devops-agent-tools/skills/aws-vpc-dns-investigation",
+  "timestamp": "2026-07-30T21:24:18Z",
+  "overall_score": 0.96,
+  "overall_grade": "A",
+  "passed": true,
+  "sections": {
+    "audit": {
+      "score": 100,
+      "grade": "A",
+      "passed": true,
+      "normalized": 1.0,
+      "critical": 0,
+      "warning": 0,
+      "info": 0
+    },
+    "functional": {
+      "overall": 0.9,
+      "grade": "A",
+      "passed": true,
+      "scores": {
+        "outcome": 0.8,
+        "process": 1.0,
+        "style": 0.8,
+        "efficiency": 1.0,
+        "overall": 0.9
+      },
+      "cost_efficiency": {
+        "quality_delta": 0.2333,
+        "cost_delta_pct": -41.0,
+        "classification": "PARETO_BETTER",
+        "emoji": "\ud83d\udfe2",
+        "description": "Skill improves quality while reducing cost"
+      },
+      "estimated_cost": {
+        "with_skill_per_run": {
+          "input_cost": 7.1e-05,
+          "output_cost": 0.071755,
+          "total_cost": 0.071826,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "without_skill_per_run": {
+          "input_cost": 4.5e-05,
+          "output_cost": 0.122097,
+          "total_cost": 0.122142,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "per_eval_pair": 0.193968,
+        "total_runs": 6,
+        "total_cost": 1.1638,
+        "model": "sonnet",
+        "currency": "USD"
+      }
+    },
+    "trigger": {
+      "pass_rate": 1.0,
+      "grade": "A",
+      "passed": true,
+      "total_queries": 8
+    }
+  }
+}

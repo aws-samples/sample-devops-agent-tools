@@ -1,0 +1,74 @@
+[
+  {
+    "id": "preconditions-before-interpretation",
+    "prompt": "An application on EC2 instance i-0abc123def456789 in us-east-1 account 111122223333 is getting NXDOMAIN for secretsmanager.us-east-1.amazonaws.com. Figure out why.",
+    "expected_output": "Establishes the VPC-attribute precondition with dns_probe_context before interpreting any resolution result, then observes live resolution with dns_probe_compare, and loads the triage runbook rather than guessing.",
+    "files": [],
+    "assertions": [
+      "contains 'dns_probe_context'",
+      "contains 'enableDnsSupport'",
+      "contains 'dns_probe_compare'",
+      "The output checks the VPC DNS attributes before concluding a cause from the resolution failure",
+      "The output does not recommend creating, modifying, or deleting any DNS resource"
+    ]
+  },
+  {
+    "id": "custom-resolver-divergence",
+    "prompt": "In account 111122223333 us-east-1, a hostname resolves to a public IP from instance i-0abc123def456789 but we expected the private endpoint address. Other instances resolve it correctly.",
+    "expected_output": "Compares the instance's actual resolver configuration against the VPC DHCP option set, uses dns_probe_compare to identify which resolver answered, and judges the answer by name category rather than by whether resolvers agree.",
+    "files": [],
+    "assertions": [
+      "contains 'dns_probe_compare'",
+      "matches regex /resolv\\.conf|DHCP/",
+      "The output identifies which resolver returned the answer rather than assuming the VPC resolver answered",
+      "The output does not conclude the configuration is correct merely because multiple resolvers returned the same answer"
+    ]
+  },
+  {
+    "id": "simulate-before-change",
+    "prompt": "We want to enable private DNS on the Secrets Manager interface endpoint in vpc-0abc123def456789, account 111122223333, us-east-1. Is that safe?",
+    "expected_output": "Reads the effective configuration with dns_simulate_effective_config and predicts impact with dns_simulate_change before giving an answer, and does not recommend applying the change without simulating it.",
+    "files": [],
+    "assertions": [
+      "contains 'dns_simulate_effective_config'",
+      "contains 'dns_simulate_change'",
+      "The output simulates the proposed change before assessing whether it is safe",
+      "The output reports which names would be affected rather than only describing the change generically"
+    ]
+  },
+  {
+    "id": "broad-forward-rule-impact",
+    "prompt": "Account 111122223333, us-east-1, vpc-0abc123def456789. We plan to add a Resolver FORWARD rule for '.' pointing at our on-premises resolvers. What breaks?",
+    "expected_output": "Simulates the change, identifies that a root FORWARD rule sweeps names that currently resolve through AWS constructs, and loads the broad FORWARD sweep runbook.",
+    "files": [],
+    "assertions": [
+      "contains 'dns_simulate_change'",
+      "matches regex /FORWARD/",
+      "The output identifies that a '.' FORWARD rule affects names beyond the intended on-premises zones",
+      "The output retrieves the relevant runbook using get_sop or list_sops instead of reasoning only from general knowledge"
+    ]
+  },
+  {
+    "id": "cross-account-opacity-honesty",
+    "prompt": "Account 111122223333 us-east-1 vpc-0abc123def456789 has a Route 53 Profile and a shared resolver rule from another account. Give me the effective DNS configuration.",
+    "expected_output": "Reports the effective configuration including Profile-inherited resources with their source, and reports cross-account constructs whose contents are not readable as opaque or unknown rather than as absent.",
+    "files": [],
+    "assertions": [
+      "contains 'dns_simulate_effective_config'",
+      "matches regex /opaque|unknown|not readable|cross-account/",
+      "The output does not claim a cross-account construct is empty or absent when its contents cannot be read",
+      "The output distinguishes directly attached resources from Profile-inherited resources"
+    ]
+  },
+  {
+    "id": "ssm-blocker-reported",
+    "prompt": "Resolution is failing on instance i-0abc123def456789 in account 111122223333 us-east-1, but that instance is not managed by SSM. Diagnose the DNS problem.",
+    "expected_output": "Reports the missing SSM path as the blocker for live probing, and does not fabricate probe output for an instance it cannot reach.",
+    "files": [],
+    "assertions": [
+      "matches regex /SSM|Systems Manager/",
+      "The output reports that live in-instance probing is blocked rather than inventing resolution results",
+      "The output does not present fabricated resolver answers as observed data"
+    ]
+  }
+]

@@ -1,0 +1,34 @@
+[
+  {
+    "query": "Which skill would help me investigate why a name is not resolving from an EC2 instance in my VPC? Just name it; do not run it.",
+    "should_trigger": true
+  },
+  {
+    "query": "Which skill would help me check whether enabling private DNS on an interface endpoint would break resolution? Just name it; do not run it.",
+    "should_trigger": true
+  },
+  {
+    "query": "How do I set up an S3 bucket lifecycle policy?",
+    "should_trigger": false
+  },
+  {
+    "query": "What are the best practices for DynamoDB table design?",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a Terraform module for an Application Load Balancer.",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I register a public domain name and create a public hosted zone in Route 53?",
+    "should_trigger": false
+  },
+  {
+    "query": "My RDS instance is running out of storage. How do I scale it?",
+    "should_trigger": false
+  },
+  {
+    "query": "Explain the difference between an IAM role and an IAM user.",
+    "should_trigger": false
+  }
+]

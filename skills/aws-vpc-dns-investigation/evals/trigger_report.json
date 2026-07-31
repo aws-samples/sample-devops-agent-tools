@@ -1,0 +1,116 @@
+{
+  "skill_name": "aws-vpc-dns-investigation",
+  "skill_path": "/Users/ddericco/Projects/sample-devops-agent-tools/skills/aws-vpc-dns-investigation",
+  "query_results": [
+    {
+      "query": "Which skill would help me investigate why a name is not resolving from an EC2 instance in my VPC? Just name it; do not run it.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 2.0,
+      "mean_output_tokens": 105.0,
+      "mean_total_tokens": 107.0
+    },
+    {
+      "query": "Which skill would help me check whether enabling private DNS on an interface endpoint would break resolution? Just name it; do not run it.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 2.0,
+      "mean_output_tokens": 21.0,
+      "mean_total_tokens": 23.0
+    },
+    {
+      "query": "How do I set up an S3 bucket lifecycle policy?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 6.0,
+      "mean_output_tokens": 3545.0,
+      "mean_total_tokens": 3551.0
+    },
+    {
+      "query": "What are the best practices for DynamoDB table design?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 2457.0,
+      "mean_total_tokens": 2461.0
+    },
+    {
+      "query": "Write a Terraform module for an Application Load Balancer.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 23.0,
+      "mean_output_tokens": 24870.0,
+      "mean_total_tokens": 24893.0
+    },
+    {
+      "query": "How do I register a public domain name and create a public hosted zone in Route 53?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 3365.0,
+      "mean_total_tokens": 3369.0
+    },
+    {
+      "query": "My RDS instance is running out of storage. How do I scale it?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 2.0,
+      "mean_output_tokens": 809.0,
+      "mean_total_tokens": 811.0
+    },
+    {
+      "query": "Explain the difference between an IAM role and an IAM user.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 1703.0,
+      "mean_total_tokens": 1707.0
+    }
+  ],
+  "summary": {
+    "total_queries": 8,
+    "passed": 8,
+    "failed": 0,
+    "trigger_precision": 1.0,
+    "no_trigger_precision": 1.0,
+    "mean_total_tokens_per_run": 4615.2,
+    "estimated_cost": {
+      "per_run": {
+        "input_cost": 1.8e-05,
+        "output_cost": 0.069141,
+        "total_cost": 0.069158,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "total_runs": 8,
+      "total_cost": 0.5533,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "passed": true
+}
