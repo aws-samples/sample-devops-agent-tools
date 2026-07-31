@@ -307,7 +307,9 @@ def apply_change(model: EffectiveModel, change: dict) -> EffectiveModel:
     src = f"profile:{change['profile_id']}" if ctype == "associate_profile" and change.get("profile_id") else "direct"
 
     if ctype == "enable_vpce_private_dns":
-        apex = change["service_apex"]
+        apex = change.get("service_apex")
+        if not apex:
+            raise ValueError("enable_vpce_private_dns requires 'service_apex'")
         served = tuple(change.get("served_names", ()))
         # Flip an existing endpoint for this apex if present; else append.
         existing = [v for v in model.vpces if v.service_apex.rstrip(".").lower() == apex.rstrip(".").lower()]
@@ -317,13 +319,19 @@ def apply_change(model: EffectiveModel, change: dict) -> EffectiveModel:
         return replace(model, vpces=model.vpces + (Vpce(apex, True, "direct", served),))
 
     if ctype == "associate_phz":
-        return replace(model, phzs=model.phzs + (Phz(change["zone"], "direct"),))
+        zone = change.get("zone")
+        if not zone:
+            raise ValueError("associate_phz requires 'zone'")
+        return replace(model, phzs=model.phzs + (Phz(zone, "direct"),))
 
     if ctype == "add_resolver_rule":
         # Accept either "target" (a rendered label) or "target_ips" (the shape
         # the Route 53 Resolver API and this server's docs use). Without the
         # latter, a caller passing target_ips produced a rule whose target
         # rendered as an empty string in the impact report.
+        domain = change.get("domain")
+        if not domain:
+            raise ValueError("add_resolver_rule requires 'domain'")
         target = change.get("target") or ""
         if not target:
             ips = change.get("target_ips") or ()
@@ -331,7 +339,7 @@ def apply_change(model: EffectiveModel, change: dict) -> EffectiveModel:
                 ips = (ips,)
             target = ", ".join(str(i) for i in ips)
         rule = ResolverRule(
-            domain=change["domain"],
+            domain=domain,
             rule_type=change.get("rule_type", "FORWARD"),
             target=target,
             source="direct",
@@ -367,7 +375,10 @@ def apply_change(model: EffectiveModel, change: dict) -> EffectiveModel:
         )
 
     if ctype == "set_snva_preference":
-        return replace(model, snva_preference=change["preference"])
+        pref = change.get("preference")
+        if not pref:
+            raise ValueError("set_snva_preference requires 'preference'")
+        return replace(model, snva_preference=pref)
 
     if ctype == "set_dhcp_dns":
         # Modeled as toggling the VPC resolver on/off for this simulation scope.

@@ -276,14 +276,50 @@ class TestF1ResolverFailClosed:
             f"expected a wildcard-resolver warning, got: {combined[:400]}"
         )
 
-    def test_wildcard_still_refuses_hostnames(self):
+    def test_wildcard_allows_all_with_warning(self):
         r = self._fresh_server({"ALLOWED_RESOLVERS": "*"})
         assert "OK_IP True" in r.stdout, r.stdout + r.stderr
-        assert "OK_HOST False" in r.stdout, (
-            "a wildcard resolver allowlist must STILL refuse hostnames "
-            f"(fail-closed): {r.stdout}"
+        # With a wildcard allowlist, all resolvers (IPs and hostnames) pass the
+        # allowlist gate. Security is enforced by _enforce_prod_allowlists
+        # refusing to start in STAGE_NAME=prod on a wildcard.
+        assert "OK_HOST True" in r.stdout, (
+            "a wildcard resolver allowlist should accept both IPs and hostnames "
+            f"(enforcement is at the prod gate): {r.stdout}"
         )
 
     def test_explicit_allowlist_emits_no_warning(self):
         r = self._fresh_server({"ALLOWED_RESOLVERS": "10.0.0.2"})
         assert "WARNING" not in (r.stdout + r.stderr)
+
+    def test_explicit_allowlist_blocks_unlisted_ip(self):
+        """When ALLOWED_RESOLVERS is set, caller IPs not in the list are refused."""
+        env_extra = {"ALLOWED_RESOLVERS": "10.0.0.53"}
+        env = dict(
+            {
+                "ALLOWED_ACCOUNTS": "111122223333",
+                "ALLOWED_REGIONS": "us-east-1",
+                "STAGE_NAME": "dev",
+            }
+        )
+        env.update(env_extra)
+        code = (
+            "import server;"
+            "print('LISTED', server._resolver_allowed('10.0.0.53'));"
+            "print('UNLISTED_IP', server._resolver_allowed('8.8.8.8'));"
+            "print('UNLISTED_HOST', server._resolver_allowed('evil.example.com'))"
+        )
+        r = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=os.path.join(os.path.dirname(__file__), "..", "src"),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        assert "LISTED True" in r.stdout, r.stdout + r.stderr
+        assert "UNLISTED_IP False" in r.stdout, (
+            f"an explicit allowlist must block unlisted IPs: {r.stdout}"
+        )
+        assert "UNLISTED_HOST False" in r.stdout, (
+            f"an explicit allowlist must block unlisted hostnames: {r.stdout}"
+        )

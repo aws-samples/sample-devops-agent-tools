@@ -313,9 +313,9 @@ endpoint. This server talks only to AWS control-plane APIs (SSM, EC2, Route 53,
 Route 53 Resolver, Route 53 Profiles, VPC Lattice) and never opens a connection to
 a customer data resource. The private-path requirement applies to the **target
 instances**, not the Lambda: Mode A reaches them through SSM, which requires
-`ssm`, `ssmmessages`, and `ec2messages` interface endpoints or an EC2 Instance
-Connect Endpoint in the target VPC, and the server reports unreachable SSM as a
-blocker rather than falling back to a public path.
+`ssm`, `ssmmessages`, and `ec2messages` interface endpoints in the target VPC,
+and the server reports unreachable SSM as a blocker rather than falling back to a
+public path.
 
 Putting the Lambda in a VPC would add NAT or interface endpoints purely so it
 could keep reaching the same public AWS API endpoints, with no reduction in what

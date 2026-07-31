@@ -67,10 +67,11 @@ class TestResolverValidation:
         assert _valid_resolver("resolver.corp.example")
 
     def test_rejects_non_allowlisted_hostname(self):
-        from server import _valid_resolver
-        # Well-formed hostname but NOT in ALLOWED_RESOLVERS -> rejected, so the
-        # comparison feature cannot become an arbitrary-egress primitive.
-        assert not _valid_resolver("attacker.example.net")
+        from server import _resolver_allowed
+        # Well-formed hostname but NOT in ALLOWED_RESOLVERS -> rejected by the
+        # allowlist gate, so the comparison feature cannot become an
+        # arbitrary-egress primitive. (Syntax is fine, allowlist blocks it.)
+        assert not _resolver_allowed("attacker.example.net")
 
     def test_rejects_injection(self):
         from server import _valid_resolver

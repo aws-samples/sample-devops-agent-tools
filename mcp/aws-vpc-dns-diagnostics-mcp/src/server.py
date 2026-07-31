@@ -119,11 +119,11 @@ def _warn_wildcard_resolvers():
     stage = os.environ.get("STAGE_NAME", "(unset)")
     print(
         "WARNING: ALLOWED_RESOLVERS is '*' (wildcard) with STAGE_NAME="
-        f"{stage}. dns_probe_compare will accept ANY literal resolver IP and "
-        "query it from the target instance. Hostnames are still refused "
-        "(fail-closed). Do NOT use a wildcard resolver allowlist in any "
-        "deployment reachable by AWS DevOps Agent -- set ALLOWED_RESOLVERS to a "
-        "comma-separated list of permitted resolver addresses.",
+        f"{stage}. dns_probe_compare will accept ANY caller-supplied resolver "
+        "IP or hostname and query it from the target instance. Do NOT use a "
+        "wildcard resolver allowlist in any deployment reachable by AWS DevOps "
+        "Agent -- set ALLOWED_RESOLVERS to a comma-separated list of permitted "
+        "resolver addresses.",
         flush=True,
     )
 
@@ -250,7 +250,7 @@ def _valid_name(name: str) -> bool:
 
 
 def _valid_resolver(resolver: str) -> bool:
-    """A resolver must be a literal IP OR an operator-allowlisted hostname."""
+    """Syntax check: resolver must be a literal IP or a well-formed hostname."""
     if _SHELL_META_RE.search(resolver):
         return False
     try:
@@ -258,16 +258,26 @@ def _valid_resolver(resolver: str) -> bool:
         return True
     except ValueError:
         pass
-    # Not an IP - must be explicitly allowlisted and a well-formed hostname.
-    # NOTE (L2): the general _validate() treats an empty allowlist as allow-all,
-    # but resolvers are DELIBERATELY the opposite - an empty ALLOWED_RESOLVERS
-    # allows only literal IPs and rejects ALL hostnames (fail-closed). This
-    # prevents the comparison feature from becoming an arbitrary-egress primitive
-    # via an unvetted hostname. A hostname is permitted only when explicitly
-    # listed in ALLOWED_RESOLVERS.
-    if ALLOWED_RESOLVERS and resolver.lower() in ALLOWED_RESOLVERS:
-        return bool(_NAME_RE.match(resolver))
-    return False
+    # Not an IP - must be a well-formed hostname (no shell metacharacters, DNS
+    # charset). Allowlist enforcement happens separately in _resolver_allowed().
+    return bool(_NAME_RE.match(resolver))
+
+
+def _resolver_allowed(resolver: str) -> bool:
+    """Allowlist gate: is this resolver permitted by ALLOWED_RESOLVERS?
+
+    When ALLOWED_RESOLVERS is non-empty, BOTH IPs and hostnames must appear in
+    it. When empty (wildcard), all syntactically valid resolvers pass (gated at
+    import time by _enforce_prod_allowlists / _warn_wildcard_resolvers).
+
+    DHCP-discovered resolvers bypass this check because they originate from
+    VPC infrastructure (operator-configured DHCP option set), not from the
+    caller. The exemption is applied at the call site in dns_probe_compare,
+    not here.
+    """
+    if not ALLOWED_RESOLVERS:
+        return True
+    return resolver.lower() in ALLOWED_RESOLVERS
 
 
 def _valid_family(family: str) -> bool:
@@ -293,9 +303,8 @@ def _ssm_reachable(session, instance_id: str) -> bool:
 
 _SSM_UNREACHABLE_MSG = (
     "SSM is not reachable for instance {iid}. Ensure SSM VPC endpoints "
-    "(ssm, ssmmessages, ec2messages) or an EC2 Instance Connect Endpoint are in "
-    "place and the instance role has AmazonSSMManagedInstanceCore. Not falling "
-    "back to a public path."
+    "(ssm, ssmmessages, ec2messages) are in place and the instance role has "
+    "AmazonSSMManagedInstanceCore. Not falling back to a public path."
 )
 
 
@@ -550,12 +559,22 @@ def dns_probe_compare(
             "ERROR: no resolvers to probe. Pass `resolvers` explicitly or leave "
             "include_dhcp_dns=true on a VPC whose DHCP option set names a resolver."
         )
+
+    # Two-pass validation: caller-supplied resolvers are gated by both syntax
+    # AND ALLOWED_RESOLVERS; DHCP-discovered resolvers are exempt from the
+    # allowlist because they originate from VPC infrastructure, not the caller.
+    caller_supplied = set(resolvers or [])
     for r in resolver_set:
         if not _valid_resolver(r):
             return (
-                f"ERROR: resolver '{r}' is not a literal IP or an allowlisted "
-                "hostname. The comparison feature must not become an "
+                f"ERROR: resolver '{r}' is not a valid IP or hostname. "
+                "The comparison feature must not become an "
                 "arbitrary-egress primitive."
+            )
+        if r in caller_supplied and not _resolver_allowed(r):
+            return (
+                f"ERROR: resolver '{r}' is not in ALLOWED_RESOLVERS. "
+                f"Permitted: {', '.join(sorted(ALLOWED_RESOLVERS))}."
             )
 
     # L3: check SSM reachability ONCE, not per (resolver, family) triple.
@@ -717,7 +736,21 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
         private = ep.get("PrivateDnsEnabled", False)
         if etype == "Interface":
             svc = ep.get("ServiceName", "")
-            apex = svc.split("com.amazonaws.")[-1] if "com.amazonaws." in svc else svc
+            # Convert ServiceName to the private-DNS FQDN the endpoint installs.
+            # com.amazonaws.us-east-1.secretsmanager -> secretsmanager.us-east-1.amazonaws.com
+            # com.amazonaws.cn.cn-north-1.s3 -> s3.cn-north-1.amazonaws.com.cn
+            if "com.amazonaws." in svc:
+                parts = svc.split(".")  # [com, amazonaws, us-east-1, secretsmanager] or [com, amazonaws, cn, cn-north-1, s3]
+                if len(parts) >= 4 and parts[2] == "cn":
+                    # China partition: com.amazonaws.cn.<region>.<service>
+                    apex = f"{parts[-1]}.{parts[3]}.amazonaws.com.cn"
+                elif len(parts) >= 4:
+                    # Standard/GovCloud: com.amazonaws.<region>.<service>
+                    apex = f"{parts[-1]}.{parts[2]}.amazonaws.com"
+                else:
+                    apex = svc
+            else:
+                apex = svc
             vpces.append(Vpce(service_apex=apex, private_dns=private,
                               source="direct", gated=True))
         elif etype in ("Resource", "ServiceNetwork"):
@@ -922,6 +955,24 @@ def dns_simulate_change(
     if ctype not in known:
         return f"ERROR: unknown change type '{ctype}'. Supported: {', '.join(sorted(known))}."
 
+    # Validate required fields per change type. Stable errors prevent KeyError
+    # deep in dns_model.apply_change().
+    _required_fields = {
+        "enable_vpce_private_dns": ["service_apex"],
+        "associate_phz": ["zone"],
+        "add_resolver_rule": ["domain"],
+        "associate_dns_firewall": ["domains", "action"],
+        "associate_profile": ["profile_id"],
+        "set_snva_preference": ["preference"],
+        "set_dhcp_dns": ["servers"],
+    }
+    missing = [f for f in _required_fields.get(ctype, []) if f not in change]
+    if missing:
+        return (
+            f"ERROR: change type '{ctype}' requires fields: "
+            f"{', '.join(_required_fields[ctype])}. Missing: {', '.join(missing)}."
+        )
+
     session = _assume(account_id, region, READONLY_ROLE_ARN_PATTERN, "dns-sim-change")
     model = _build_effective_model(session, vpc_id, onprem_zones)
     names = candidate_names or _derive_candidate_names(model)
@@ -951,7 +1002,13 @@ def dns_simulate_change(
             f"Poll association status = COMPLETE before trusting resolution.\n"
         )
     if not impacts:
-        return header + "\nNo currently-resolving names change or break. ✓"
+        source_label = "operator-supplied" if candidate_names else "API-derived from current config"
+        return (
+            header + f"\nNo currently-resolving names change or break within the "
+            f"{len(names)}-name candidate set ({source_label}). "
+            f"Names not in this set were not evaluated; supply `candidate_names` "
+            f"or enable Resolver Query Logging for broader coverage."
+        )
 
     lines = [
         "\n| name | before | after | traps | severity | vol |",
