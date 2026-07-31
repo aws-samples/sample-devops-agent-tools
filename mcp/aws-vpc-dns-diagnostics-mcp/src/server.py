@@ -1121,5 +1121,7 @@ except AttributeError:
     handler = mcp.http_app()
 
 if __name__ == "__main__":
-    # Local testing.
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
+    # Local testing. Bind loopback only: this path has no SigV4 boundary in
+    # front of it, so binding 0.0.0.0 would expose the diagnostic tools to
+    # anything that can reach this host.
+    mcp.run(transport="streamable-http", host="127.0.0.1", port=8000)

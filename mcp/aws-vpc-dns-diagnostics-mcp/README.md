@@ -148,24 +148,29 @@ can be set up front.
 
 ### Step 3 — Register with DevOps Agent
 
-Register the `MCPEndpointUrl` output as an MCP server using **AWS SigV4** auth.
+Register the MCP endpoint using **AWS SigV4** auth. The endpoint is the
+`MCPEndpointUrl` output with `/mcp` appended, because FastMCP serves the
+Streamable HTTP transport at `/mcp` rather than at the root. A POST to the bare
+Function URL returns 404, and `/mcp/` returns a 307 redirect that invalidates the
+request signature, so use `/mcp` exactly.
+
 Registration is account-level: the server is registered once per AWS account and
 then shared with individual Agent Spaces, which select which tools they need.
 
 | Setting | Value |
 | --- | --- |
 | Service type | `mcpserversigv4` |
-| Endpoint | `MCPEndpointUrl` output from step 1 |
+| Endpoint | `MCPEndpointUrl` output from step 1, with `/mcp` appended |
 | Region | The region the function is deployed in |
 | Service name | `lambda` |
-| IAM role | A role trusting `aidevops.amazonaws.com` with `lambda:InvokeFunctionUrl` on the function URL |
+| IAM role | A role trusting `aidevops.amazonaws.com` with `lambda:InvokeFunctionUrl` and `lambda:InvokeFunctionWithResponseStream` on the function |
 
 #### Option A — DevOps Agent console
 
 1. Open the DevOps Agent console and go to **Capability Providers**.
 2. Choose **Register MCP Server**.
 3. **MCP server details**: enter a name, and the `MCPEndpointUrl` output from
-   step 1 as the **Endpoint URL**.
+   step 1 with `/mcp` appended as the **Endpoint URL**.
 4. **Authorization flow**: select **AWS SigV4**.
 5. **Authorization configuration**:
    - **Configure IAM role**: select an existing role, or follow the console's
@@ -184,7 +189,7 @@ aws devops-agent register-service \
   --service-details '{
     "mcpserversigv4": {
       "name": "aws-vpc-dns-diagnostics",
-      "endpoint": "<MCPEndpointUrl>",
+      "endpoint": "<MCPEndpointUrl>/mcp",
       "authorizationConfig": {
         "region": "<region>",
         "service": "lambda",
@@ -226,9 +231,38 @@ Attach only the permission needed to invoke the endpoint:
     "Action": "lambda:InvokeFunctionUrl",
     "Resource": "arn:aws:lambda:REGION:ACCOUNT_ID:function:aws-vpc-dns-diagnostics-mcp-STAGE",
     "Condition": { "StringEquals": { "lambda:FunctionUrlAuthType": "AWS_IAM" } }
+  },
+  {
+    "Effect": "Allow",
+    "Action": "lambda:InvokeFunctionWithResponseStream",
+    "Resource": "arn:aws:lambda:REGION:ACCOUNT_ID:function:aws-vpc-dns-diagnostics-mcp-STAGE"
   }]
 }
 ```
+
+Both actions are required. The Function URL is created with
+`InvokeMode: RESPONSE_STREAM` so the transport can stream SSE, and the streaming
+invoke path is authorized by `lambda:InvokeFunctionWithResponseStream`, which is a
+separate action from `lambda:InvokeFunctionUrl`. Granting only the latter leaves
+the streaming call an implicit deny. Note that
+`lambda:InvokeFunctionWithResponseStream` does not accept the
+`lambda:FunctionUrlAuthType` condition key, so it is a separate statement.
+
+Verify both before registering, rather than assuming:
+
+```bash
+for action in lambda:InvokeFunctionUrl lambda:InvokeFunctionWithResponseStream; do
+  aws iam simulate-principal-policy \
+    --policy-source-arn <role-arn> \
+    --action-names "$action" \
+    --resource-arns arn:aws:lambda:REGION:ACCOUNT_ID:function:aws-vpc-dns-diagnostics-mcp-STAGE \
+    --query 'EvaluationResults[0].{Action:EvalActionName,Decision:EvalDecision}'
+done
+```
+
+Both must report `allowed`. An `implicitDeny` here surfaces at registration as an
+opaque `403 Forbidden` from the Function URL, with no invocation recorded in the
+function's CloudWatch log group.
 
 ### Step 4 — Configure tools in your Agent Space
 
