@@ -1,0 +1,92 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  DNS Diagnostic MCP - test infrastructure module 04: VPC Lattice resource
+  endpoint (resources-only path) for exercising the ungated custom-domain shadow.
+
+  Stands up a resource gateway in the test VPC, a resource configuration with a
+  CustomDomainName (the shadow apex), and a Resource-type VPC endpoint so that
+  _build_effective_model's list_resource_endpoint_associations read has a live
+  target scoped to this VPC. This is the "resources only, no service network"
+  case that reading service-network associations alone would miss.
+
+  Imports the network from module 01.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: dns-diag-test
+  CustomDomainName:
+    Type: String
+    Default: app.lattice-test.internal
+    Description: Custom domain the resource configuration publishes (shadow apex).
+
+Resources:
+  # Resource gateway lives in the (provider) VPC; here we reuse the test VPC.
+  ResourceGatewaySg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'DNS diag test - Lattice resource gateway SG'
+      VpcId: !ImportValue {'Fn::Sub': '${NamePrefix}-VpcId'}
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-rgw-sg
+
+  ResourceGateway:
+    Type: AWS::VpcLattice::ResourceGateway
+    Properties:
+      Name: !Sub ${NamePrefix}-rgw
+      VpcIdentifier: !ImportValue {'Fn::Sub': '${NamePrefix}-VpcId'}
+      SubnetIds:
+        - !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetAId'}
+        - !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetBId'}
+      SecurityGroupIds:
+        - !Ref ResourceGatewaySg
+      IpAddressType: IPV4
+
+  # Resource configuration with a custom domain - this domain becomes the shadow
+  # apex the tool must detect via the resource-endpoint read.
+  ResourceConfiguration:
+    Type: AWS::VpcLattice::ResourceConfiguration
+    Properties:
+      Name: !Sub ${NamePrefix}-rc
+      ResourceGatewayId: !Ref ResourceGateway
+      ResourceConfigurationType: SINGLE
+      CustomDomainName: !Ref CustomDomainName
+      ResourceConfigurationDefinition:
+        DnsResource:
+          DomainName: !Ref CustomDomainName
+          IpAddressType: IPV4
+      PortRanges:
+        - '443'
+
+  # Consumer-side Resource-type VPC endpoint pointing at the config. This is
+  # what the tool actually reads (DescribeVpcEndpoints -> DnsEntries); the
+  # gateway/config above are the provider side (in a real cross-account setup
+  # they live in another account and the consumer never sees them).
+  ResourceEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !ImportValue {'Fn::Sub': '${NamePrefix}-VpcId'}
+      VpcEndpointType: Resource
+      ResourceConfigurationArn: !GetAtt ResourceConfiguration.Arn
+      SubnetIds:
+        - !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetAId'}
+        - !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetBId'}
+      SecurityGroupIds:
+        - !Ref ResourceGatewaySg
+
+Outputs:
+  ResourceGatewayId:
+    Value: !Ref ResourceGateway
+  ResourceConfigurationId:
+    Value: !Ref ResourceConfiguration
+  ResourceEndpointId:
+    Value: !Ref ResourceEndpoint
+  CustomDomainName:
+    Value: !Ref CustomDomainName

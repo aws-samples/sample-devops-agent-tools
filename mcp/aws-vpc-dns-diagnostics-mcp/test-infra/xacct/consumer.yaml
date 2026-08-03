@@ -1,0 +1,45 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  CONSUMER-side VPC for the cross-account DNS visibility test. Deploy this in
+  the consumer account. A dedicated VPC that receives the shared/associated
+  Route 53 constructs from the provider account, so you can enumerate what is
+  actually visible from the consumer perspective.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: xacct-dns-consumer
+  VpcCidr:
+    Type: String
+    Default: 10.91.0.0/16
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: !Sub '${NamePrefix}-vpc'}]
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Select [0, !Cidr [!Ref VpcCidr, 4, 8]]
+      Tags: [{Key: Name, Value: !Sub '${NamePrefix}-sn-a'}]
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Select [1, !Cidr [!Ref VpcCidr, 4, 8]]
+      Tags: [{Key: Name, Value: !Sub '${NamePrefix}-sn-b'}]
+
+Outputs:
+  VpcId: {Value: !Ref Vpc}
+  SubnetAId: {Value: !Ref SubnetA}
+  SubnetBId: {Value: !Ref SubnetB}

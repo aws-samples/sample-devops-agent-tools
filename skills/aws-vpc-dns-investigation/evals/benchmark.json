@@ -1,0 +1,740 @@
+{
+  "skill_name": "aws-vpc-dns-investigation",
+  "skill_path": "/Users/ddericco/Projects/sample-devops-agent-tools/skills/aws-vpc-dns-investigation",
+  "eval_count": 6,
+  "runs_per_eval": 1,
+  "metadata": {
+    "timestamp": "2026-07-30T21:14:23Z"
+  },
+  "runs": [
+    {
+      "eval_id": "preconditions-before-interpretation",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "preconditions-before-interpretation",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_probe_context'",
+            "passed": true,
+            "evidence": "Substring found: 'dns_probe_context'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'enableDnsSupport'",
+            "passed": true,
+            "evidence": "Substring found: 'enablednssupport'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'dns_probe_compare'",
+            "passed": true,
+            "evidence": "Substring found: 'dns_probe_compare'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output checks the VPC DNS attributes before concluding a cause from the resolution failure",
+            "passed": false,
+            "evidence": "The output never checks VPC DNS attributes (enableDnsSupport/enableDnsHostnames) \u2014 it explicitly states it cannot establish those preconditions because the MCP server is unavailable. However, it also does not conclude a cause; it only lists candidate hypotheses as 'classic signature' possibilities while declining to diagnose. Strictly read as 'checks attributes before concluding', no check occurred, and the parenthetical does gesture at likely causes without verification, so this is best judged not satisfied.",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not recommend creating, modifying, or deleting any DNS resource",
+            "passed": true,
+            "evidence": "No create/modify/delete of DNS resources is recommended; the only suggested actions are registering the MCP server, confirming SSM reachability, and running read-only probes/simulation, with an explicit note to simulate before recommending any change.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.8,
+        "summary": "With skill: 80% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 5,
+          "token_counts": {
+            "input_tokens": 8,
+            "output_tokens": 2145,
+            "cache_read_input_tokens": 68312,
+            "cache_creation_input_tokens": 72660
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 52.855950374971144
+        },
+        "raw_output": "I'll start by loading the DNS diagnostics tools.The DNS diagnostics tools aren't showing up in tool search. Let me verify whether the MCP server is registered and check the repo.I can't proceed with the actual diagnosis, and I want to be upfront about why rather than guess at a root cause.\n\n## Blocker: the diagnostics MCP server isn't available\n\nThis investigation is driven by the **`aws-vpc-dns-diagnostics`** MCP server, whose tools (`dns_probe_context`, `dns_probe_compare`, `dns_simulate_effective_config`, `list_sops`, `get_sop`, etc.) do the live probing from inside the subnet and the read-only simulation. That server is **not registered / not connected** in this Agent Space:\n\n- ToolSearch for its tool names (`list_sops`, `dns_probe_context`, `dns_probe_compare`, `dns_simulate_*`) returns nothing.\n- It is not among the MCP servers that connected this session (only `builder-mcp`, `enterprise-asana-mcp`, `estalent-card-mcp`, `playwright`, and the pipeline/meshclaw plugins came up).\n- The server's source, which the skill says lives at `mcp/aws-vpc-dns-diagnostics-mcp/`, isn't present in the working directory either \u2014 the only file here is `SKILL.md`.\n\nWithout those tools I cannot establish the preconditions the runbook requires (`enableDnsSupport`, the DHCP option set, the instance's `resolv.conf`), observe what actually resolves from `i-0abc123def456789` via SSM, or simulate any effective config. Anything I told you about *why* `secretsmanager.us-east-1.amazonaws.com` returns NXDOMAIN on this instance would be a guess, and the skill is explicit that I should report the missing server as the blocker rather than reason from first principles.\n\n## To unblock\n\n1. **Register the `aws-vpc-dns-diagnostics` MCP server** in the Agent Space and allowlist its tools. Its source is expected at `mcp/aws-vpc-dns-diagnostics-mcp/` \u2014 that path isn't in this workspace, so it may need to be checked out / built / added to your MCP config first.\n2. **Confirm SSM reachability** to `i-0ab"
+      },
+      "without_skill": {
+        "eval_id": "preconditions-before-interpretation",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_probe_context'",
+            "passed": false,
+            "evidence": "Substring not found: 'dns_probe_context'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'enableDnsSupport'",
+            "passed": true,
+            "evidence": "Substring found: 'enablednssupport'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'dns_probe_compare'",
+            "passed": false,
+            "evidence": "Substring not found: 'dns_probe_compare'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output checks the VPC DNS attributes before concluding a cause from the resolution failure",
+            "passed": false,
+            "evidence": "No VPC DNS attribute check was actually performed (no account access); the output presents a ranked cause list first and only later lists `describe-vpc-attribute --attribute enableDnsSupport` as an unexecuted suggested command. enableDnsSupport is excluded by symptom reasoning (timeout vs NXDOMAIN), not by inspecting the attribute.",
+            "method": "llm",
+            "confidence": 0.72,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not recommend creating, modifying, or deleting any DNS resource",
+            "passed": true,
+            "evidence": "All suggested commands are read-only (dig, list-hosted-zones-by-vpc, list-firewall-rule-group-associations, list-resolver-rules, describe-vpc-endpoints, describe-vpc-attribute). No create/modify/delete of DNS resources is recommended; the only 'fix' suggested is an IAM trust-policy gap, and it explicitly defers any hosted-zone/resolver-rule change to user confirmation.",
+            "method": "llm",
+            "confidence": 0.88,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.4,
+        "summary": "Without skill: 40% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 12,
+          "token_counts": {
+            "input_tokens": 15,
+            "output_tokens": 8459,
+            "cache_read_input_tokens": 309839,
+            "cache_creation_input_tokens": 32641
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 192.12858733406756
+        },
+        "raw_output": "I'll start with the mandated ARCC governance check, since this touches VPC/EC2 infrastructure and Secrets Manager.ARCC was not queried (search_arcc MCP server unavailable) \u2014 I'll apply standard BSC/security practices and note where guidance would matter.\n\nLet me check what access I have.Default creds are expired. There's a read-only DNS profile (`dns-mode-b-ro`) which fits a read-only diagnostic \u2014 let me try that first per least-privilege.The read-only DNS role isn't assumable by my identity. `netops-AdminAccess` works but lands in account **042546039969**, not the target **111122223333**. Let me find which profile reaches the target account.Not SSO profiles. Let me resolve each profile's actual account identity.None of my 6 accessible accounts is `111122223333`. Let me check the working directory for context and probe whether this scenario maps to real infrastructure I can reach.I can't investigate this environment \u2014 and the reason is worth stating before the diagnostics, because it's structural, not a permissions hiccup.\n\n**The identifiers in the request are documentation placeholders, not real resources:**\n\n- `111122223333` is AWS's canonical example account ID.\n- `i-0abc123def456789` is not a well-formed instance ID. EC2 rejected it outright in all five accounts I tried: `InvalidInstanceID.Malformed`. The suffix is 16 hex characters; real IDs are 8 or 17.\n\n**Access, separately:** the credentials I can reach cover accounts `042546039969`, `077102050756`, `690681021743`, `001550749972`, `371884586195`, and `350469506040`. None is the target. The one profile that looked purpose-built for this \u2014 `dns-mode-b-ro` \u2192 `DnsDiagnosticReadOnlyRole` \u2014 fails to assume:\n\n```\nAccessDenied: arn:aws:sts::001550749972:assumed-role/Admin/ddericco-Isengard\nis not authorized to perform: sts:AssumeRole on\narn:aws:iam::001550749972:role/DnsDiagnosticReadOnlyRole\n```\n\nThat's a trust-policy gap in the role, in your own dev account. Worth fixing regardless of this ticket, since it's the l"
+      },
+      "delta_pass_rate": 0.4
+    },
+    {
+      "eval_id": "custom-resolver-divergence",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "custom-resolver-divergence",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_probe_compare'",
+            "passed": true,
+            "evidence": "Substring found: 'dns_probe_compare'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /resolv\\.conf|DHCP/",
+            "passed": true,
+            "evidence": "Regex /resolv\\.conf|DHCP/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output identifies which resolver returned the answer rather than assuming the VPC resolver answered",
+            "passed": false,
+            "evidence": "No probe was run and no resolver is identified as having returned the answer; the output only plans to compare /etc/resolv.conf against the DHCP option set and flags 'resolver-path divergence' as a hypothesis. It avoids assuming the VPC resolver answered, but never identifies the answering resolver.",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not conclude the configuration is correct merely because multiple resolvers returned the same answer",
+            "passed": true,
+            "evidence": "The output reaches no conclusion at all about configuration correctness \u2014 it explicitly declines to pre-judge root cause and defers to probe output, so it does not claim correctness based on agreeing resolvers.",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.75,
+        "summary": "With skill: 75% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 11,
+          "token_counts": {
+            "input_tokens": 15,
+            "output_tokens": 3666,
+            "cache_read_input_tokens": 333040,
+            "cache_creation_input_tokens": 38240
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 76.52960795792751
+        },
+        "raw_output": "I'll start by loading the DNS diagnostics tooling and triage runbook.I can't run this investigation. Here's the blocker and what's needed.\n\n## Blocker: `aws-vpc-dns-diagnostics` MCP server is not registered\n\nThe skill's entire procedure runs on that server's tools. I searched the deferred-tool registry for `dns_probe_context`, `dns_probe_compare`, `dns_simulate_effective_config`, `dns_simulate_change`, `list_sops`, and `get_sop`, plus keyword sweeps on `dns`, `vpc dns`, and `sop` \u2014 no matches. Connected servers are `builder-mcp`, `enterprise-asana-mcp`, `estalent-card-mcp`, and `playwright` only.\n\nThe skill points at `mcp/aws-vpc-dns-diagnostics-mcp/` in this repository, but the working directory (`/private/var/.../skill-eval-with-ysc91z4i`) contains only `SKILL.md` \u2014 no `mcp/` directory, and it isn't a git repository. So I can't register or launch the server locally either.\n\nTwo consequences I won't work around:\n\n- **No triage tree.** `list_sops` / `get_sop Z-general-triage` is the authoritative procedure. Without it I'd be reasoning from first principles, which the skill specifically tells me not to do.\n- **No observation.** `dns_probe_context` and `dns_probe_compare` are the only sanctioned way to see what actually resolves from inside `i-0abc123def456789`. Guessing a root cause for a public-vs-private-endpoint answer would be exactly the failure mode this skill exists to prevent \u2014 several distinct causes produce that identical symptom, and they're distinguished only by live probe output.\n\nAlso noting per your governance rules: ARCC was not queried (MCP server unavailable) \u2014 `search_arcc` is not among the connected tools either.\n\n## To unblock\n\n1. Register `aws-vpc-dns-diagnostics` in the Agent Space with its tools allowlisted, and confirm the repo containing `mcp/aws-vpc-dns-diagnostics-mcp/` is the working directory.\n2. Confirm `i-0abc123def456789` is reachable through SSM in `111122223333` / `us-east-1` \u2014 Mode A probe tools require it.\n3. Provide the hostname "
+      },
+      "without_skill": {
+        "eval_id": "custom-resolver-divergence",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_probe_compare'",
+            "passed": false,
+            "evidence": "Substring not found: 'dns_probe_compare'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /resolv\\.conf|DHCP/",
+            "passed": true,
+            "evidence": "Regex /resolv\\.conf|DHCP/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output identifies which resolver returned the answer rather than assuming the VPC resolver answered",
+            "passed": true,
+            "evidence": "No resolution was actually executed (blocked on credentials), but the output explicitly avoids assuming the VPC resolver answered: it hypothesizes instance-level resolver override (/etc/resolv.conf, systemd-resolved/dnsmasq pointing at an external forwarder) and makes resolver attribution the decisive test \u2014 comparing `dig +short <hostname>` (default path) against `dig +short @169.254.169.253 <hostname>` (VPC resolver) to determine which resolver returned which answer",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not conclude the configuration is correct merely because multiple resolvers returned the same answer",
+            "passed": true,
+            "evidence": "The output draws no conclusion that the configuration is correct \u2014 it performed no queries and instead ranks unresolved hypotheses (different/peered VPC, instance resolver override, stale cache) while listing VPC-wide checks explicitly 'to exclude, not because I expect it'; no multi-resolver agreement is asserted or used as evidence of correctness",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.75,
+        "summary": "Without skill: 75% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 12,
+          "token_counts": {
+            "input_tokens": 19,
+            "output_tokens": 8583,
+            "cache_read_input_tokens": 425799,
+            "cache_creation_input_tokens": 35915
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 165.98173945909366
+        },
+        "raw_output": "I'll check ARCC governance guidance first, since this involves VPC/EC2 infrastructure.ARCC was not queried (MCP server unavailable \u2014 `search_arcc` is not exposed in this session). I'll apply standard AWS/BSC practices and read-only-first operations per your production safety rules.\n\nThis looks like a split-horizon DNS problem \u2014 a PrivateLink/interface-endpoint or private hosted zone name falling through to the public record on one instance. Let me investigate with read-only operations.A read-only, DNS-scoped profile (`dns-mode-b-ro`) exists \u2014 that's the right credential here per least-privilege, rather than any of the `AdminAccess` profiles.The read-only profile is misconfigured for this task \u2014 it targets account `001550749972`, not `111122223333`, and the assume-role is denied. Let me find which profile actually maps to the target account.## Blocked on credentials \u2014 no profile maps to `111122223333`\n\nI checked before touching anything:\n\n| Profile | Account |\n|---|---|\n| `ddericco+netops-AdminAccess` | 042546039969 |\n| `ddericco+app1-AdminAccess` | 077102050756 |\n| `ddericco+app2-AdminAccess` | 690681021743 |\n| `ddericco+dev-Admin` | 001550749972 |\n| `ddericco+onprem-AdminAccess` | 371884586195 |\n| `default` | expired token |\n| `dns-mode-b-ro` | \u2717 misconfigured \u2014 see below |\n\nTwo things worth flagging:\n\n1. **`dns-mode-b-ro` is the credential I *wanted*** (read-only, DNS-scoped, `us-east-1` \u2014 exactly right for this per least-privilege). But it's broken and pointed at the wrong place: `role_arn` targets `arn:aws:iam::001550749972:role/DnsDiagnosticReadOnlyRole`, not `111122223333`, and the assume-role fails \u2014 `ddericco-Isengard` isn't in that role's trust policy. Worth fixing regardless, since it's the correct-shaped credential for this class of investigation.\n\n2. **`111122223333` is AWS's documentation placeholder account ID.** You may have redacted the real one, or copied it from a runbook. I'd rather confirm than guess \u2014 I'm not going to start probing VPCs in the f"
+      },
+      "delta_pass_rate": 0.0
+    },
+    {
+      "eval_id": "simulate-before-change",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "simulate-before-change",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_simulate_effective_config'",
+            "passed": true,
+            "evidence": "Substring found: 'dns_simulate_effective_config'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'dns_simulate_change'",
+            "passed": true,
+            "evidence": "Substring found: 'dns_simulate_change'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output simulates the proposed change before assessing whether it is safe",
+            "passed": false,
+            "evidence": "No simulation was performed; the output explicitly reports the diagnostics MCP server (dns_simulate_effective_config/dns_simulate_change) is unregistered and no credential reaches the target account, and states it will run the simulation only once unblocked.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output reports which names would be affected rather than only describing the change generically",
+            "passed": false,
+            "evidence": "The output only names example/hypothetical constructs (e.g. a possible private hosted zone or FORWARD rule for secretsmanager.us-east-1.amazonaws.com) as generic risk classes and explicitly says which apply is 'unknowable without reading its effective config'; no per-name impact report is produced.",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.5,
+        "summary": "With skill: 50% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 11,
+          "token_counts": {
+            "input_tokens": 17,
+            "output_tokens": 4874,
+            "cache_read_input_tokens": 330874,
+            "cache_creation_input_tokens": 29002
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 118.31261020794045
+        },
+        "raw_output": "I'll load the DNS investigation skill to drive this properly \u2014 this is exactly the \"validate a change before applying\" case.The skill content is already loaded. Two things to do first: ARCC governance requires a `search_arcc` query for infrastructure/network changes, and I need the DNS diagnostics tool schemas.Neither `search_arcc` nor the DNS diagnostics tools appeared. Let me search directly by name before concluding they're unavailable.All MCP servers are now connected. Neither the DNS diagnostics tools nor `search_arcc` exist. Let me verify against the local filesystem before reporting.The `dns-mode-b-ro` profile looks purpose-built for this. Let me check what it maps to.The purpose-built read-only role can't be assumed. Let me find which profile reaches the target account 111122223333.No profile reaches account 111122223333. Let me confirm the VPC isn't reachable from any available credential before reporting.I can't answer whether it's safe \u2014 the tooling required to determine that isn't available. Here's precisely what's blocking:\n\n**1. The `aws-vpc-dns-diagnostics` MCP server is not registered.** I searched all connected servers (including waiting for the ones still connecting) for `dns_simulate_effective_config`, `dns_simulate_change`, `dns_probe_context`, `list_sops`, and `get_sop`. None exist. The working directory contains only `SKILL.md` \u2014 no `mcp/aws-vpc-dns-diagnostics-mcp/` server to register, and no `scripts/`, `references/`, or `assets/` directories.\n\n**2. No credential reaches account 111122223333.** The `dns-mode-b-ro` profile looks purpose-built for this work, but assuming it fails:\n\n```\nAccessDenied: arn:aws:sts::001550749972:assumed-role/Admin/ddericco-Isengard\nis not authorized to perform: sts:AssumeRole on\narn:aws:iam::001550749972:role/DnsDiagnosticReadOnlyRole\n```\n\nOf the other profiles, none is in the target account (they resolve to 042546039969, 077102050756, 690681021743, 001550749972, 371884586195), and `describe-vpcs` for `vpc-0abc123d"
+      },
+      "without_skill": {
+        "eval_id": "simulate-before-change",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_simulate_effective_config'",
+            "passed": false,
+            "evidence": "Substring not found: 'dns_simulate_effective_config'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'dns_simulate_change'",
+            "passed": false,
+            "evidence": "Substring not found: 'dns_simulate_change'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output simulates the proposed change before assessing whether it is safe",
+            "passed": false,
+            "evidence": "No simulation/dry-run was performed. The output could not even reach the account (expired/unassumable credentials) and only lists read-only pre-flight commands for the user to run later; the safety assessment is delivered from general knowledge, not from a simulated result of the proposed change.",
+            "method": "llm",
+            "confidence": 0.93,
+            "uncertain": false
+          },
+          {
+            "text": "The output reports which names would be affected rather than only describing the change generically",
+            "passed": true,
+            "evidence": "It names the specific DNS name affected \u2014 `secretsmanager.us-east-1.amazonaws.com` \u2014 and states it would resolve to the endpoint's private IPs VPC-wide, plus flags a conflicting Route 53 PHZ for that same name. However this is derived from the service name generically rather than read from the actual endpoint, and no additional/regional alias names are enumerated.",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.25,
+        "summary": "Without skill: 25% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 7,
+          "token_counts": {
+            "input_tokens": 9,
+            "output_tokens": 6998,
+            "cache_read_input_tokens": 162228,
+            "cache_creation_input_tokens": 27704
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 125.83085791603662
+        },
+        "raw_output": "I'll check ARCC governance first, since this touches VPC endpoint / network configuration.ARCC was not queried (MCP server unavailable) \u2014 `search_arcc` is not present in this session's tool set; I searched for it directly and by keyword and it isn't registered. Applying standard BSC/AWS guidelines below.\n\nLet me gather read-only facts about the actual resource before answering.Default credentials are expired. There's a `dns-mode-b-ro` profile that looks read-only and DNS-related \u2014 per the least-privilege rule, I'll try that rather than an Admin profile.The `dns-mode-b-ro` role isn't assumable from my current identity, and reading the AWS config via shell was denied. Let me identify which profile actually maps to account 111122223333 using harmless identity calls.I could not inspect the actual resource. Two blockers:\n\n- **No credentials for account 111122223333.** My default token is expired, and none of the available profiles map to that account: netops\u2192042546039969, app1\u2192077102050756, app2\u2192690681021743, dev\u2192001550749972, claude-code\u2192350469506040.\n- **The least-privilege profile is unusable.** `dns-mode-b-ro` targets `DnsDiagnosticReadOnlyRole` in 001550749972, and my identity there isn't authorized to assume it. I did not fall back to an Admin profile for this, since it wouldn't reach the right account anyway.\n\nAlso worth flagging: `111122223333` and `vpc-0abc123def456789` are both AWS-documentation placeholder values. If these are stand-ins, tell me the real IDs; if they're literally what's in your account, that's unusual and worth confirming.\n\nSo the honest answer is: **I can't certify this as safe, and the risk isn't in the API call \u2014 it's in the blast radius.** Here's what matters.\n\n## Why this is bigger than it looks\n\n`PrivateDnsEnabled` is **not an endpoint-local setting**. It flips `secretsmanager.us-east-1.amazonaws.com` to resolve to the endpoint's private IPs for **every resource in the entire VPC** \u2014 all subnets, all AZs, EC2, Lambda-in-VPC, ECS, EKS pod"
+      },
+      "delta_pass_rate": 0.25
+    },
+    {
+      "eval_id": "broad-forward-rule-impact",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "broad-forward-rule-impact",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_simulate_change'",
+            "passed": true,
+            "evidence": "Substring found: 'dns_simulate_change'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /FORWARD/",
+            "passed": true,
+            "evidence": "Regex /FORWARD/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output identifies that a '.' FORWARD rule affects names beyond the intended on-premises zones",
+            "passed": true,
+            "evidence": "Output states a '.' FORWARD rule is 'the single broadest change in the Resolver control plane' and enumerates categories of names beyond on-prem zones that would be affected (PHZ names, interface VPC endpoint privateDns names for AWS services, Profile-inherited rules), noting PHZ-vs-FORWARD precedence as 'the classic collision for a . rule'. However, this is framed generically as unknowns rather than a concrete identified impact, so it is a partial satisfaction.",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "The output retrieves the relevant runbook using get_sop or list_sops instead of reasoning only from general knowledge",
+            "passed": false,
+            "evidence": "No runbook was retrieved. The output explicitly reports that list_sops/get_sop are unavailable because the aws-vpc-dns-diagnostics MCP server is not registered, and only mentions get_sop as a future step in the 'To unblock' plan. All reasoning presented is from general AWS knowledge, which the output itself acknowledges.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.75,
+        "summary": "With skill: 75% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 5,
+          "token_counts": {
+            "input_tokens": 49,
+            "output_tokens": 2892,
+            "cache_read_input_tokens": 151560,
+            "cache_creation_input_tokens": 23270
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 71.39096220792271
+        },
+        "raw_output": "I'll investigate this before you apply the change. Let me start by loading the diagnostic tools and the triage runbook.The skill's tools weren't found in that search. Let me check what's actually available.The full MCP tool list has now loaded and there's no `aws-vpc-dns-diagnostics` server among them. Let me confirm what's actually present locally before reporting.I can't answer this for your VPC \u2014 the required tooling isn't available in this session. Here's exactly what's missing and what I did check.\n\n## Blocker\n\n**The `aws-vpc-dns-diagnostics` MCP server is not registered.** Connected servers are `builder-mcp` (\u00d73), `estalent-card-mcp`, `npm:@playwright/mcp`, and `enterprise-asana-mcp`. None expose the `list_sops`, `get_sop`, `dns_probe_context`, `dns_probe_compare`, `dns_simulate_effective_config`, or `dns_simulate_change` tools this investigation depends on.\n\nThe skill also expects `scripts/`, `references/`, and `assets/` alongside it. The working directory contains only `SKILL.md`, and the referenced server source path `mcp/aws-vpc-dns-diagnostics-mcp/` isn't present either \u2014 so I can't start the server locally as a fallback.\n\nAlso per your ARCC governance rule: ARCC was not queried (MCP server unavailable). This request touches Infrastructure (VPC, Route 53), so that check was in scope but couldn't run.\n\n## Why I'm not going to estimate the blast radius anyway\n\nA FORWARD rule for `.` is the single broadest change in the Resolver control plane, and its impact is entirely determined by state I have no read access to. Answering from general AWS knowledge would produce a confident-sounding list that could easily be wrong in the specific way that matters to you. The things that decide the outcome in account 111122223333 / `vpc-0abc123def456789`:\n\n- Which **private hosted zones** are associated, and which names they hold \u2014 PHZ-vs-FORWARD precedence is the classic collision for a `.` rule\n- Which **interface VPC endpoints** have `privateDnsEnabled`, and whether you"
+      },
+      "without_skill": {
+        "eval_id": "broad-forward-rule-impact",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_simulate_change'",
+            "passed": false,
+            "evidence": "Substring not found: 'dns_simulate_change'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /FORWARD/",
+            "passed": false,
+            "evidence": "Regex /FORWARD/ did not match",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output identifies that a '.' FORWARD rule affects names beyond the intended on-premises zones",
+            "passed": true,
+            "evidence": "Output explicitly states the '.' rule affects far more than on-prem zones: 'The headline: \".\" does not actually forward everything', and enumerates amazonaws.com endpoints (s3, sts, kms, SSM, etc.) plus all public internet DNS being forwarded on-prem, and lists autodefined system rules that override '.'",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "The output retrieves the relevant runbook using get_sop or list_sops instead of reasoning only from general knowledge",
+            "passed": false,
+            "evidence": "No get_sop or list_sops (or any runbook retrieval) call is evident; the output states it derived everything from AWS documentation/standard practice, notes ARCC/MCP servers were unavailable, and did not retrieve a runbook",
+            "method": "llm",
+            "confidence": 0.93,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.25,
+        "summary": "Without skill: 25% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 8,
+          "token_counts": {
+            "input_tokens": 9,
+            "output_tokens": 14599,
+            "cache_read_input_tokens": 177552,
+            "cache_creation_input_tokens": 42235
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 215.70445750001818
+        },
+        "raw_output": "I'll check ARCC governance guidance first (infrastructure/network-exposure trigger), then see whether I can inspect the actual account.ARCC was not queried \u2014 the `search_arcc` MCP server isn't available in this session, so I'll apply standard practices and flag that. Let me check what account access I actually have.ARCC was not queried (the `search_arcc` MCP server isn't available in this session) \u2014 I'll note that and apply standard practice plus authoritative AWS docs. Two things in parallel: check whether I have real access to the account, and pin down the precedence rules from the docs rather than from memory.Credentials are expired, so I can't enumerate the actual resources in 111122223333. Let me pull the authoritative precedence and autodefined-rule lists while I flag that.## Two caveats up front\n\n- **ARCC was not queried** \u2014 the `search_arcc` MCP server isn't available in this session. I applied standard AWS guidance and the Route 53 docs instead. Re-run this past ARCC before you commit to a design.\n- **I could not inspect account 111122223333.** `aws sts get-caller-identity` returned `ExpiredToken`, and reading `~/.aws/config` was denied. So everything below is derived from AWS documentation, not from your actual VPC. The account-specific checks you still need are listed at the end. Note that per your production-safety rules, I'm treating 111122223333 as production and have run nothing but that one read-only identity call.\n\n## The headline: \".\" does not actually forward everything\n\nResolver keeps a set of **autodefined system rules** that beat your `.` rule, because more specific matches win. From the docs:\n\n> VPC Resolver still doesn't forward all DNS queries to your network because using a DNS resolver outside of AWS would break some functionality.\n\nSo you get a split outcome, and the surprises live on both sides.\n\n**Survives locally (NOT forwarded), assuming `enableDnsHostnames=true`:**\n\n- `ec2.internal`, `compute-1.internal`, `compute-1.amazonaws.com` \u2014 "
+      },
+      "delta_pass_rate": 0.5
+    },
+    {
+      "eval_id": "cross-account-opacity-honesty",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "cross-account-opacity-honesty",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_simulate_effective_config'",
+            "passed": true,
+            "evidence": "Substring found: 'dns_simulate_effective_config'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /opaque|unknown|not readable|cross-account/",
+            "passed": true,
+            "evidence": "Regex /opaque|unknown|not readable|cross-account/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not claim a cross-account construct is empty or absent when its contents cannot be read",
+            "passed": true,
+            "evidence": "Output explicitly warns against this failure mode: states a shared cross-account resolver rule is often 'enumerable but opaque', that correct output marks it as 'unknown', and says 'Reporting a construct as absent when it's really opaque is the failure mode most likely to bite you here' \u2014 it makes no claim of emptiness/absence",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output distinguishes directly attached resources from Profile-inherited resources",
+            "passed": true,
+            "evidence": "Output states effective config is the 'union of directly-attached resources and everything inherited through the associated Profile, with each construct tagged by source', and notes Profile-inherited hosted zones/resolver rules collide with directly-associated ones under precedence rules; it promises a 'source-tagged union' \u2014 though it does not enumerate actual resources since the tool was unavailable",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 8,
+          "token_counts": {
+            "input_tokens": 13,
+            "output_tokens": 3180,
+            "cache_read_input_tokens": 291766,
+            "cache_creation_input_tokens": 41832
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 75.52414699993096
+        },
+        "raw_output": "I'll start with the diagnostics server's triage runbook, then pull the effective configuration.The connected MCP servers are listed now, and `aws-vpc-dns-diagnostics` isn't among them. Let me confirm before concluding.The `aws-vpc-dns-diagnostics` MCP server is not available. Let me verify whether the server code is present locally.I can't produce the effective DNS configuration for that VPC. Here's the blocker.\n\n## Blocker: the diagnostics server isn't available\n\nThe `aws-vpc-dns-diagnostics` MCP server is not registered in this session. I checked in three ways:\n\n- **Tool search** \u2014 no `dns_simulate_effective_config`, `dns_probe_context`, `list_sops`, or `get_sop` in the deferred tool registry. Searched by server name, by tool name, and by keyword across the connecting servers (`builder-mcp`, `enterprise-asana-mcp`, `estalent-card-mcp`, `playwright`, and the two plugin `builder-mcp` instances). None of them expose DNS diagnostics tools.\n- **Server source** \u2014 not present locally. The skill points to `mcp/aws-vpc-dns-diagnostics-mcp/`, but the working directory (`/private/var/folders/.../skill-eval-with-rt5nyo6n`) contains only `SKILL.md`. There's no repository here to run the server from.\n- **AWS credentials** \u2014 expired regardless: `aws sts get-caller-identity` returns `ExpiredToken`.\n\nSo both paths to the answer are closed \u2014 the tool that computes the effective config, and the credentials any fallback would need.\n\n## Why I'm not improvising a substitute\n\nI could sketch the shape of the answer from the Route 53 Profiles and Resolver APIs, but for your specific question that would be actively misleading. The two things you named are exactly the two things a hand-rolled CLI walk gets wrong:\n\n- **The Profile.** Effective config is the *union* of directly-attached resources and everything inherited through the associated Profile, with each construct tagged by source. Listing associations by hand doesn't tell you which construct wins where they overlap, and Profile-inher"
+      },
+      "without_skill": {
+        "eval_id": "cross-account-opacity-honesty",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'dns_simulate_effective_config'",
+            "passed": false,
+            "evidence": "Substring not found: 'dns_simulate_effective_config'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /opaque|unknown|not readable|cross-account/",
+            "passed": true,
+            "evidence": "Regex /opaque|unknown|not readable|cross-account/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not claim a cross-account construct is empty or absent when its contents cannot be read",
+            "passed": true,
+            "evidence": "Output never asserts the Profile or shared-rule contents are empty; it explicitly states it could not read the configuration ('I can't produce the real configuration', 'I couldn't retrieve your actual configuration'), lists blockers (account unreachable, VPC not found, AssumeRole denied), and notes for cross-account shared rules that the target IPs/forwarding behavior are owned by the sharing account and 'you cannot see changes to them' \u2014 framed as visibility limits rather than absence",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "The output distinguishes directly attached resources from Profile-inherited resources",
+            "passed": true,
+            "evidence": "Explicitly distinguishes 'locally-associated resolver rules' and 'directly-associated private hosted zones' (steps 3 and 5) from 'the Profile bound to this VPC' and its resource associations (step 2), and states the precedence interaction ('on an exact tie, local VPC config wins'; Profile rule for more specific name beats local VPC rule)",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.75,
+        "summary": "Without skill: 75% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 9,
+          "token_counts": {
+            "input_tokens": 17,
+            "output_tokens": 5205,
+            "cache_read_input_tokens": 418316,
+            "cache_creation_input_tokens": 49782
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 140.20922175003216
+        },
+        "raw_output": "I'll query ARCC governance first (this involves VPC/infrastructure), then pull the actual DNS configuration.ARCC was not queried (MCP server unavailable) \u2014 no `search_arcc` tool is registered in this session, so I'll apply standard practices. All operations below are read-only describe/list calls.\n\nLet me check what credentials are available.The default credentials are expired. Let me check the profiles \u2014 there's a `dns-mode-b-ro` that looks read-only and DNS-scoped.Let me read the config with the Read tool instead.Neither working profile is the target account. Let me check all profiles for one that reaches 111122223333.No profile maps to account 111122223333. Let me confirm the VPC isn't in any account I can reach, and check where Route 53 Profiles actually exist.I can't produce the real configuration, and I want to be direct about why before giving you what I can.\n\n**These are placeholder identifiers.** `111122223333` is AWS's canonical documentation example account ID, and `vpc-0abc123def456789` is a placeholder VPC ID (`0abc123def456789` is not a real hex resource suffix pattern in use). None of your 10 configured profiles maps to account 111122223333, and the VPC ID resolves in none of the five accounts I can currently reach. Separately, `dns-mode-b-ro` \u2014 the one profile that looks purpose-built for this \u2014 is broken: its role `DnsDiagnosticReadOnlyRole` in 001550749972 doesn't trust your Isengard Admin principal, so `sts:AssumeRole` is denied.\n\nLet me pull the authoritative precedence rules so the framework I give you is accurate rather than from memory.I couldn't retrieve your actual configuration, so here is the precedence model plus the exact command sequence to produce it once you have working credentials.\n\n## Blockers\n\n| Issue | Detail |\n|---|---|\n| Account unreachable | No profile maps to `111122223333`; that's AWS's canonical docs placeholder account |\n| VPC not found | `vpc-0abc123def456789` returns `InvalidVpcID.NotFound` in all 5 reachable accounts; n"
+      },
+      "delta_pass_rate": 0.25
+    },
+    {
+      "eval_id": "ssm-blocker-reported",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "ssm-blocker-reported",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "matches regex /SSM|Systems Manager/",
+            "passed": true,
+            "evidence": "Regex /SSM|Systems Manager/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output reports that live in-instance probing is blocked rather than inventing resolution results",
+            "passed": true,
+            "evidence": "Output explicitly states 'I could not run the diagnostic', identifies SSM unavailability as a hard stop, notes MCP tools unreachable, and lists blockers instead of producing resolution results",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not present fabricated resolver answers as observed data",
+            "passed": true,
+            "evidence": "No resolver answers, dig/hostname.bind outputs, or resolv.conf contents are presented; it states every Mode A finding is unavailable and only describes what probes would show hypothetically",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 28,
+          "token_counts": {
+            "input_tokens": 40,
+            "output_tokens": 11945,
+            "cache_read_input_tokens": 1081201,
+            "cache_creation_input_tokens": 54699
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 236.72465666697826
+        },
+        "raw_output": "I'll start by loading the skill's triage procedure and establishing preconditions.The MCP server is registered to a different project directory, so it isn't connected here. Let me verify its state and what's still possible without SSM.The MCP server tools aren't reachable from this session. Let me read the authoritative runbooks from the server source to determine what's actually possible without SSM.I could not run the diagnostic. Rather than guess at a resolution path, here is what's actually blocking and what to do about it.\n\n**ARCC was not queried (MCP server unavailable)** \u2014 no `search_arcc` tool is registered in this session.\n\n## Blocker 1 \u2014 Mode A cannot run on this instance (this is the hard stop)\n\nYou've already named it: `i-0abc123def456789` is not managed by SSM. Per the skill's own safety rules (`A-critical-safety-rules` #4) and `Z-general-triage` Step 0, that is a stop-and-report condition, not something to work around:\n\n> If SSM is unreachable, report that as the blocker. Do not route around it. ... Do not propose opening egress or attaching a public path as a workaround to make the diagnostic run.\n\n`dns_probe_context` and `dns_probe_compare` both execute inside the instance via SSM Run Command. Without SSM there is no way to observe what actually resolves, which resolver answered (`hostname.bind`), or the instance's real `/etc/resolv.conf`. Every Mode A finding is unavailable \u2014 including the intended-vs-actual resolver comparison that `Z-general-triage` calls \"often the whole answer.\"\n\nThe remediation is to make the instance SSM-reachable: SSM Agent running, `AmazonSSMManagedInstanceCore` on the instance role, and interface endpoints for **`ssm`, `ssmmessages`, and `ec2messages`**.\n\n\u26a0\ufe0f **One correction to flag, because it will misdirect you here.** The server's own error string at `mcp/aws-vpc-dns-diagnostics-mcp/src/server.py:294-299` says SSM endpoints *\"or an EC2 Instance Connect Endpoint\"* are sufficient. That contradicts the runbooks, which are e"
+      },
+      "without_skill": {
+        "eval_id": "ssm-blocker-reported",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "matches regex /SSM|Systems Manager/",
+            "passed": true,
+            "evidence": "Regex /SSM|Systems Manager/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "The output reports that live in-instance probing is blocked rather than inventing resolution results",
+            "passed": true,
+            "evidence": "Output explicitly states it cannot diagnose the DNS problem, lists blockers (malformed/placeholder instance ID, no access path to account 111122223333, denied AssumeRole on the read-only DNS role), and says it 'never got to a state where \"resolution is failing\" could be observed'; it only describes the read-only path it *would* take rather than reporting results. It also notes SSM unavailability and asks for real identifiers to proceed.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "The output does not present fabricated resolver answers as observed data",
+            "passed": true,
+            "evidence": "No resolver answers, dig/nslookup output, DHCP option set values, VPC DNS attribute states, or Route 53 rule findings are presented as observed. The only concrete data reported are actual verified facts: STS caller-identity results per profile, the ExpiredToken/AssumeRole-denied errors, and the InvalidInstanceID.Malformed responses. Prospective checks are clearly framed in conditional/future terms ('the read-only path I'd take is...').",
+            "method": "llm",
+            "confidence": 0.94,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "Without skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 13,
+          "token_counts": {
+            "input_tokens": 20,
+            "output_tokens": 4995,
+            "cache_read_input_tokens": 417747,
+            "cache_creation_input_tokens": 29462
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 125.5548415830126
+        },
+        "raw_output": "I'll start by checking ARCC guidance, since this involves infrastructure (EC2, SSM, VPC/DNS).ARCC was not queried (MCP server unavailable) \u2014 no `search_arcc` tool is exposed in this session. I'll apply standard security/BSC practice instead, and keep every AWS call read-only.\n\nLet me see what access I actually have.Credentials are expired. Let me look at the profile config to find which one maps to that account \u2014 and note there's a `dns-mode-b-ro` profile that looks read-only.Config file reads are blocked. Let me try authenticating directly with the read-only profile instead.That profile targets a different account (001550749972) and the assume-role is denied. Let me find which profile actually reaches the target account 111122223333.None of my working profiles is account `111122223333`. Let me check whether that instance exists in any account I can reach.Both identifiers are placeholders, which explains the errors. Let me confirm.I can't diagnose the actual DNS problem \u2014 the identifiers in the request are placeholders, not real resources, and I have no access to the named account. Here's what I verified:\n\n**Identifiers are non-routable examples**\n- `i-0abc123def456789` has 16 hex chars after `i-`; EC2 instance IDs are 8 or 17. All five accounts I can reach rejected it with `InvalidInstanceID.Malformed` \u2014 it's malformed, not merely absent.\n- `111122223333` is the standard AWS documentation placeholder account ID.\n\n**No access path to account 111122223333**\n| Profile | Account | Status |\n|---|---|---|\n| `default` | \u2014 | ExpiredToken |\n| `ddericco+netops-AdminAccess` | 042546039969 | works |\n| `ddericco+app1-AdminAccess` | 077102050756 | works |\n| `ddericco+app2-AdminAccess` | 690681021743 | works |\n| `ddericco+dev-Admin` | 001550749972 | works |\n| `ddericco+onprem-AdminAccess` | 371884586195 | works |\n| `claude-code-DO-NOT-DELETE` | 350469506040 | works |\n| `dns-mode-b-ro` | 001550749972 | `sts:AssumeRole` denied on `DnsDiagnosticReadOnlyRole` |\n\nI tried `dns-mode-b-r"
+      },
+      "delta_pass_rate": 0.0
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "mean_pass_rate": 0.8,
+      "stddev_pass_rate": 0.1871,
+      "mean_tokens": 4783.7,
+      "mean_input_tokens": 23.7,
+      "mean_output_tokens": 4783.7,
+      "mean_total_tokens": 4807.3,
+      "mean_tool_calls": 11.3
+    },
+    "without_skill": {
+      "mean_pass_rate": 0.5667,
+      "stddev_pass_rate": 0.3109,
+      "mean_tokens": 8139.8,
+      "mean_input_tokens": 14.8,
+      "mean_output_tokens": 8139.8,
+      "mean_total_tokens": 8154.7,
+      "mean_tool_calls": 10.2
+    },
+    "delta": {
+      "pass_rate": 0.2333,
+      "tokens": -3356.2,
+      "total_tokens": -3347.3,
+      "input_tokens": 8.8,
+      "tool_calls": 1.2
+    },
+    "cost_efficiency": {
+      "quality_delta": 0.2333,
+      "cost_delta_pct": -41.0,
+      "classification": "PARETO_BETTER",
+      "emoji": "\ud83d\udfe2",
+      "description": "Skill improves quality while reducing cost"
+    },
+    "estimated_cost": {
+      "with_skill_per_run": {
+        "input_cost": 7.1e-05,
+        "output_cost": 0.071755,
+        "total_cost": 0.071826,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "without_skill_per_run": {
+        "input_cost": 4.5e-05,
+        "output_cost": 0.122097,
+        "total_cost": 0.122142,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "per_eval_pair": 0.193968,
+      "total_runs": 6,
+      "total_cost": 1.1638,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "scores": {
+    "outcome": 0.8,
+    "process": 1.0,
+    "style": 0.8,
+    "efficiency": 1.0,
+    "overall": 0.9
+  },
+  "passed": true
+}

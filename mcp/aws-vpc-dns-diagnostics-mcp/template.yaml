@@ -1,0 +1,178 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  DNS Diagnostic MCP Server for AWS DevOps Agent.
+
+  A single Lambda exposes two tool families over Streamable HTTP (via Lambda
+  Web Adapter + a Function URL with AWS_IAM / SigV4 auth):
+
+    * dns_probe_*    (Mode A) - live, comparative, multi-resolver DNS diagnosis
+                      run inside a target EC2 instance via SSM Run Command.
+    * dns_simulate_* (Mode B) - symbolic pre-change validation of the VPC's
+                      effective DNS resolution (control-plane read only).
+
+  Least privilege is preserved by per-tool-family credential scoping: the
+  function's own execution role holds NO diagnostic permissions and may only
+  assume one of two scoped roles per call - a read-only role (simulate) or a
+  probe role whose sole privileged grant is a resource-scoped ssm:SendCommand
+  to a single diagnostic SSM document.
+
+Globals:
+  Function:
+    Timeout: 180
+    Runtime: python3.12
+    MemorySize: 1024
+
+Parameters:
+  StageName:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+
+  AllowedAccounts:
+    Type: CommaDelimitedList
+    Description: >
+      REQUIRED. Comma-separated account IDs the tools may inspect (via AssumeRole
+      into the scoped roles deployed in each target account). There is no
+      default and '*' is refused: an account allowlist is the boundary that stops
+      the server assuming a role into an arbitrary account, so it must be stated
+      explicitly. Supply at least one 12-digit account ID.
+    AllowedPattern: '^[0-9]{12}$'
+    ConstraintDescription: >
+      AllowedAccounts must be one or more 12-digit AWS account IDs. A wildcard is
+      not accepted.
+
+  AllowedRegions:
+    Type: CommaDelimitedList
+    Description: >
+      Regions the tools may operate in. Use '*' only for dev/testing.
+    Default: '*'
+
+  AllowedVpcs:
+    Type: CommaDelimitedList
+    Description: >
+      VPC IDs the tools may target. Use '*' only for dev/testing.
+    Default: '*'
+
+  AllowedResolvers:
+    Type: CommaDelimitedList
+    Description: >
+      Extra resolver IPs/hostnames the probe tools may query beyond those
+      discovered on the instance and the VPC .2 / IPv6 resolver. Use '*' only
+      for dev/testing.
+    Default: '*'
+
+  DiagnosticDocumentName:
+    Type: String
+    Default: dns-diagnostic-probe
+    Description: >
+      Name of the SSM document the probe role is permitted to send. The probe
+      role's ssm:SendCommand is resource-scoped to THIS document only.
+
+  ProbeRoleArnPattern:
+    Type: String
+    Default: 'arn:aws:iam::*:role/DnsDiagnosticProbeRole'
+    Description: >
+      ARN (or ARN pattern) of the per-account probe role the function may
+      assume for Mode A. Deploy this role separately in each allowed account.
+
+  ReadOnlyRoleArnPattern:
+    Type: String
+    Default: 'arn:aws:iam::*:role/DnsDiagnosticReadOnlyRole'
+    Description: >
+      ARN (or ARN pattern) of the per-account read-only role the function may
+      assume for Mode B. Deploy this role separately in each allowed account.
+
+Resources:
+  # ============================================================
+  # Lambda function with Lambda Web Adapter (Streamable HTTP)
+  # ============================================================
+  DnsDiagnosticMCPFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub aws-vpc-dns-diagnostics-mcp-${StageName}
+      Handler: run.sh
+      CodeUri: src/
+      Description: DNS Diagnostic MCP Server - Streamable HTTP via Lambda Web Adapter
+      Architectures:
+        - x86_64
+      Layers:
+        # Lambda Web Adapter layer
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:24
+        - !Ref DependenciesLayer
+      Environment:
+        Variables:
+          # Lambda Web Adapter config
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
+          AWS_LWA_PORT: "8000"
+          AWS_LWA_READINESS_CHECK_PATH: /mcp
+          AWS_LWA_READINESS_CHECK_MIN_UNHEALTHY_STATUS: 500
+          AWS_LWA_INVOKE_MODE: response_stream
+          AWS_LWA_READINESS_CHECK_PROTOCOL: http
+          AWS_LWA_ASYNC_INIT: "true"
+          # MCP server config
+          PYTHONPATH: /opt/python
+          STAGE_NAME: !Ref StageName
+          # Tool-level allowlists (defense-in-depth on top of IAM)
+          ALLOWED_ACCOUNTS: !Join [",", !Ref AllowedAccounts]
+          ALLOWED_REGIONS: !Join [",", !Ref AllowedRegions]
+          ALLOWED_VPCS: !Join [",", !Ref AllowedVpcs]
+          ALLOWED_RESOLVERS: !Join [",", !Ref AllowedResolvers]
+          # Per-tool-family scoped roles (assumed per call; see server.py)
+          PROBE_ROLE_ARN_PATTERN: !Ref ProbeRoleArnPattern
+          READONLY_ROLE_ARN_PATTERN: !Ref ReadOnlyRoleArnPattern
+          DIAGNOSTIC_DOCUMENT_NAME: !Ref DiagnosticDocumentName
+      Policies:
+        # The function's OWN role holds NO diagnostic permissions. It may only
+        # assume the two scoped roles. This is the core least-privilege split:
+        # a Mode B (read-only) call never rides on a role holding ssm:SendCommand.
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sts:AssumeRole
+              Resource:
+                - !Ref ProbeRoleArnPattern
+                - !Ref ReadOnlyRoleArnPattern
+      # Function URL with RESPONSE_STREAM for streamable-HTTP / SSE support.
+      # AWS_IAM auth == callers (the DevOps Agent) sign requests with SigV4.
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: RESPONSE_STREAM
+
+  # ============================================================
+  # Dependencies layer (FastMCP + boto3)
+  # ============================================================
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub aws-vpc-dns-diagnostics-mcp-deps-${StageName}
+      Description: FastMCP and dependencies for the DNS Diagnostic MCP server
+      ContentUri: layers/dependencies/
+      CompatibleRuntimes:
+        - python3.12
+      CompatibleArchitectures:
+        - x86_64
+    Metadata:
+      BuildMethod: makefile
+
+Outputs:
+  MCPEndpointUrl:
+    Description: >
+      MCP server endpoint URL. Register this in your DevOps Agent Space as the
+      MCP server endpoint (SigV4 / AWS_IAM auth).
+    Value: !GetAtt DnsDiagnosticMCPFunctionUrl.FunctionUrl
+
+  FunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt DnsDiagnosticMCPFunction.Arn
+
+  FunctionRoleArn:
+    Description: >
+      Central Lambda execution-role ARN. Pass this as CentralFunctionRoleArn when
+      deploying scoped-roles.yaml in each target account (it is the trust
+      principal the read-only and probe roles allow). SAM auto-generates this
+      role as <FunctionLogicalId>Role.
+    Value: !GetAtt DnsDiagnosticMCPFunctionRole.Arn

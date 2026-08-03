@@ -1,0 +1,133 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  DNS Diagnostic MCP - test infrastructure module 03: Mode B config surface.
+
+  Stands up the control-plane constructs the dns_simulate_* family reads and
+  reasons over:
+    * a Route 53 Resolver outbound endpoint (2 ENIs) + security group.
+    * a FORWARD rule for internal.corp -> a placeholder on-prem target, and a
+      SYSTEM rule carve-out for amazonaws.com, both associated with the VPC.
+    * a DNS Firewall domain list + rule group (BLOCK) associated with the VPC.
+
+  These give the effective-config builder real resolver rules, a SYSTEM
+  carve-out, and a DNS Firewall association to inventory and simulate against.
+
+  NOTE: the outbound resolver endpoint (2 ENIs) is the main cost driver of the
+  test infra (~$0.25/ENI-hour => ~$12/day). Delete module 03 first when done.
+
+  Imports the network from module 01.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: dns-diag-test
+  OnPremTargetIp:
+    Type: String
+    Default: 10.99.0.53
+    Description: Placeholder on-prem DNS IP for the FORWARD rule target.
+
+Resources:
+  ResolverEndpointSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'DNS diag test - resolver outbound endpoint SG (DNS egress)'
+      VpcId: !ImportValue {'Fn::Sub': '${NamePrefix}-VpcId'}
+      SecurityGroupEgress:
+        - IpProtocol: udp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${NamePrefix}-resolver-ep-sg
+
+  OutboundEndpoint:
+    Type: AWS::Route53Resolver::ResolverEndpoint
+    Properties:
+      Name: !Sub ${NamePrefix}-outbound
+      Direction: OUTBOUND
+      SecurityGroupIds: [!Ref ResolverEndpointSg]
+      IpAddresses:
+        - SubnetId: !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetAId'}
+        - SubnetId: !ImportValue {'Fn::Sub': '${NamePrefix}-SubnetBId'}
+
+  # FORWARD rule: onprem.corp -> placeholder on-prem target. Deliberately a
+  # DIFFERENT domain from module 02's PHZ (internal.corp) so the PHZ resolution
+  # case and the FORWARD case stay isolated. To demonstrate the FORWARD-vs-PHZ
+  # precedence collision on purpose, simulate/add a FORWARD rule for
+  # internal.corp via Mode B rather than baking the collision into the fixture.
+  ForwardRule:
+    Type: AWS::Route53Resolver::ResolverRule
+    Properties:
+      Name: !Sub ${NamePrefix}-fwd-onprem-corp
+      DomainName: onprem.corp.
+      RuleType: FORWARD
+      ResolverEndpointId: !Ref OutboundEndpoint
+      TargetIps:
+        - Ip: !Ref OnPremTargetIp
+          Port: '53'
+
+  ForwardRuleAssoc:
+    Type: AWS::Route53Resolver::ResolverRuleAssociation
+    Properties:
+      ResolverRuleId: !Ref ForwardRule
+      VPCId: !ImportValue {'Fn::Sub': '${NamePrefix}-VpcId'}
+
+  # SYSTEM rule carve-out for amazonaws.com (keeps AWS FQDNs on VPC-native
+  # resolution even if a broad FORWARD rule is later added - the exact trap the
+  # broad-FORWARD-sweep detector reasons about).
+  SystemRule:
+    Type: AWS::Route53Resolver::ResolverRule
+    Properties:
+      Name: !Sub ${NamePrefix}-system-amazonaws
+      DomainName: amazonaws.com.
+      RuleType: SYSTEM
+
+  SystemRuleAssoc:
+    Type: AWS::Route53Resolver::ResolverRuleAssociation
+    Properties:
+      ResolverRuleId: !Ref SystemRule
+      VPCId: !ImportValue {'Fn::Sub': '${NamePrefix}-VpcId'}
+
+  # ---- DNS Firewall ----
+  BlockDomainList:
+    Type: AWS::Route53Resolver::FirewallDomainList
+    Properties:
+      Name: !Sub ${NamePrefix}-block-list
+      Domains:
+        - blocked.example.com.
+
+  FirewallRuleGroup:
+    Type: AWS::Route53Resolver::FirewallRuleGroup
+    Properties:
+      Name: !Sub ${NamePrefix}-frg
+      FirewallRules:
+        - FirewallDomainListId: !Ref BlockDomainList
+          Priority: 100
+          Action: BLOCK
+          BlockResponse: NXDOMAIN
+
+  FirewallAssoc:
+    Type: AWS::Route53Resolver::FirewallRuleGroupAssociation
+    Properties:
+      Name: !Sub ${NamePrefix}-frg-assoc
+      FirewallRuleGroupId: !Ref FirewallRuleGroup
+      VpcId: !ImportValue {'Fn::Sub': '${NamePrefix}-VpcId'}
+      Priority: 101
+
+Outputs:
+  OutboundEndpointId:
+    Value: !Ref OutboundEndpoint
+  ForwardRuleId:
+    Value: !Ref ForwardRule
+  SystemRuleId:
+    Value: !Ref SystemRule
+  FirewallRuleGroupId:
+    Value: !Ref FirewallRuleGroup

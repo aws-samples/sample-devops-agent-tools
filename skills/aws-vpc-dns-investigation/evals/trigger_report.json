@@ -1,0 +1,182 @@
+{
+  "skill_name": "aws-vpc-dns-investigation",
+  "skill_path": "/Users/ddericco/Projects/sample-devops-agent-tools/skills/aws-vpc-dns-investigation",
+  "query_results": [
+    {
+      "query": "Which skill would help me investigate why a name is not resolving from an EC2 instance in my VPC? Just name it; do not run it.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 2.0,
+      "mean_output_tokens": 65.0,
+      "mean_total_tokens": 67.0
+    },
+    {
+      "query": "Which skill would help me check whether enabling private DNS on an interface endpoint would break resolution? Just name it; do not run it.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 2.0,
+      "mean_output_tokens": 82.0,
+      "mean_total_tokens": 84.0
+    },
+    {
+      "query": "How do I set up an S3 bucket lifecycle policy?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 6.0,
+      "mean_output_tokens": 3825.0,
+      "mean_total_tokens": 3831.0
+    },
+    {
+      "query": "What are the best practices for DynamoDB table design?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 6.0,
+      "mean_output_tokens": 2941.0,
+      "mean_total_tokens": 2947.0
+    },
+    {
+      "query": "Write a Terraform module for an Application Load Balancer.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    },
+    {
+      "query": "How do I register a public domain name and create a public hosted zone in Route 53?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 4342.0,
+      "mean_total_tokens": 4346.0
+    },
+    {
+      "query": "My RDS instance is running out of storage. How do I scale it?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 2717.0,
+      "mean_total_tokens": 2721.0
+    },
+    {
+      "query": "Explain the difference between an IAM role and an IAM user.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 2.0,
+      "mean_output_tokens": 904.0,
+      "mean_total_tokens": 906.0
+    },
+    {
+      "query": "My EC2 instance in a private subnet cannot reach the internet. It has no public IP and no NAT gateway. How do I fix this?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 2539.0,
+      "mean_total_tokens": 2543.0
+    },
+    {
+      "query": "Check the NS and SOA records for example.com in my Route 53 public hosted zone to verify delegation is correct.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    },
+    {
+      "query": "I want to transfer my domain registration from GoDaddy to Route 53. What are the steps?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 2.0,
+      "mean_output_tokens": 2326.0,
+      "mean_total_tokens": 2328.0
+    },
+    {
+      "query": "Configure DNS failover routing for my CloudFront distribution using Route 53 health checks.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    },
+    {
+      "query": "My Lambda function is timing out when calling an external API. How do I troubleshoot the network path?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 4401.0,
+      "mean_total_tokens": 4405.0
+    },
+    {
+      "query": "Set up GeoDNS with Route 53 geolocation routing policies to serve different content by region.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 2.0,
+      "mean_output_tokens": 4232.0,
+      "mean_total_tokens": 4234.0
+    }
+  ],
+  "summary": {
+    "total_queries": 14,
+    "passed": 14,
+    "failed": 0,
+    "trigger_precision": 1.0,
+    "no_trigger_precision": 1.0,
+    "mean_total_tokens_per_run": 2029.4,
+    "estimated_cost": {
+      "per_run": {
+        "input_cost": 8e-06,
+        "output_cost": 0.030401,
+        "total_cost": 0.030409,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "total_runs": 14,
+      "total_cost": 0.4257,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "passed": true
+}

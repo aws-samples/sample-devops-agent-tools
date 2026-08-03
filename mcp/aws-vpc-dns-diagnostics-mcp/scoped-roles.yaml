@@ -1,0 +1,217 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Per-account scoped roles for the DNS Diagnostic MCP Server. Deploy this stack
+  in EACH account the MCP server is allowed to inspect. It creates two roles the
+  central MCP Lambda assumes per tool family, preserving least privilege:
+
+    * DnsDiagnosticReadOnlyRole - Mode B (dns_simulate_*). Read-only control
+      plane + optional query-log read. NEVER holds ssm:SendCommand.
+    * DnsDiagnosticProbeRole    - Mode A (dns_probe_*). Its ONLY privileged
+      grant is a resource-scoped ssm:SendCommand to a single diagnostic SSM
+      document, plus the reads needed to locate/target an instance.
+
+Parameters:
+  CentralFunctionRoleArn:
+    Type: String
+    Description: >
+      ARN of the central MCP Lambda's execution role that is permitted to
+      assume these roles (the trust principal).
+
+  DiagnosticDocumentName:
+    Type: String
+    Default: dns-diagnostic-probe
+    Description: Name of the SSM document the probe role may send.
+
+Resources:
+  # ------------------------------------------------------------
+  # Diagnostic SSM document (the on-instance enforcement boundary)
+  # ------------------------------------------------------------
+  # Accepts only three pattern-validated parameters (Name/Resolver/Family) and
+  # renders a FIXED read-only probe set. No free command string is accepted, so
+  # nothing beyond the predefined probes can run on the instance.
+  DnsDiagnosticProbeDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      Name: !Ref DiagnosticDocumentName
+      DocumentType: Command
+      DocumentFormat: YAML
+      Content:
+        schemaVersion: '2.2'
+        description: >-
+          DNS diagnostic probe runner (Mode A). Runs a fixed, read-only DNS
+          probe set for a single (Name, Resolver, Family) triple.
+        parameters:
+          Name:
+            type: String
+            description: DNS name to resolve. Strict DNS charset only.
+            allowedPattern: '^([A-Za-z0-9_-]{1,63}\.)*[A-Za-z0-9_-]{1,63}\.?$'
+            maxChars: 253
+          Resolver:
+            type: String
+            description: Resolver IP (v4/v6) or hostname. No shell metacharacters.
+            allowedPattern: '^[A-Za-z0-9_.:-]{1,253}$'
+            maxChars: 253
+          Family:
+            type: String
+            description: DNS record family.
+            allowedValues: [A, AAAA]
+        mainSteps:
+          - action: aws:runShellScript
+            name: dnsProbe
+            precondition:
+              StringEquals: [platformType, Linux]
+            inputs:
+              timeoutSeconds: '60'
+              runCommand:
+                - '#!/bin/bash'
+                - 'set -u'
+                - 'NAME="{{ Name }}"'
+                - 'RESOLVER="{{ Resolver }}"'
+                - 'FAMILY="{{ Family }}"'
+                - 'echo "=== resolv.conf ==="'
+                - 'cat /etc/resolv.conf 2>/dev/null || echo "(no /etc/resolv.conf)"'
+                - 'echo "=== resolvectl ==="'
+                - 'if command -v resolvectl >/dev/null 2>&1; then resolvectl status 2>/dev/null || true; else echo "(resolvectl not present)"; fi'
+                - 'echo "=== dig answer ==="'
+                - 'dig +short "$NAME" "$FAMILY" @"$RESOLVER" || true'
+                - 'echo "=== dig stats ==="'
+                - 'dig "$NAME" "$FAMILY" @"$RESOLVER" +stats || true'
+                - 'echo "=== resolver identity (hostname.bind) ==="'
+                - 'dig hostname.bind CH TXT @"$RESOLVER" +short || true'
+                - 'echo "=== getent hosts ==="'
+                - 'getent hosts "$NAME" || echo "(getent: no match)"'
+
+  # ------------------------------------------------------------
+  # Mode B - read-only control-plane role (dns_simulate_*)
+  # ------------------------------------------------------------
+  DnsDiagnosticReadOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DnsDiagnosticReadOnlyRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref CentralFunctionRoleArn
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: dns-simulate-readonly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Route 53 / Resolver / Profiles do NOT populate aws:ResourceAccount
+              # in the request context, so guarding these with that condition key
+              # evaluates false and silently denies. This role is already
+              # single-account (deployed per target account, trusted only by the
+              # central role), so no condition is needed here.
+              - Effect: Allow
+                Action:
+                  # Route 53 Resolver: rules, endpoints, DNS Firewall, associations
+                  - route53resolver:List*
+                  - route53resolver:Get*
+                  # Route 53 Profiles: inherited resource set
+                  - route53profiles:List*
+                  - route53profiles:Get*
+                  # Hosted zones + record sets (candidate-name source)
+                  - route53:List*
+                  - route53:Get*
+                  # SNVA / SNRA config. Named explicitly rather than
+                  # vpc-lattice:List*/Get*: a wildcard would silently pick up any
+                  # future API that happens to carry a List/Get prefix. These are
+                  # the only two the server calls.
+                  - vpc-lattice:ListServiceNetworkVpcAssociations
+                  - vpc-lattice:GetResourceConfiguration
+                Resource: '*'
+              # EC2 supports aws:ResourceAccount; keep the account guard on these.
+              - Effect: Allow
+                Action:
+                  # VPCEs, DHCP option sets, VPC attributes
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeVpcAttribute
+                  - ec2:DescribeVpcEndpoints
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeNetworkInterfaces
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceAccount': !Ref 'AWS::AccountId'
+              # NOTE: no CloudWatch Logs grants. Resolver query-log enrichment for
+              # candidate-name volume ranking is designed but NOT implemented, so
+              # logs:StartQuery / GetQueryResults / DescribeLogGroups are
+              # deliberately absent rather than granted ahead of the code that
+              # would use them. Add them in the same change that adds the calls.
+
+  # ------------------------------------------------------------
+  # Mode A - probe role (dns_probe_*)
+  # ------------------------------------------------------------
+  DnsDiagnosticProbeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DnsDiagnosticProbeRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref CentralFunctionRoleArn
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: dns-probe-ssm
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # The ONLY privileged grant: send exactly one diagnostic document.
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:aws:ssm:*:${AWS::AccountId}:document/${DiagnosticDocumentName}
+              # SendCommand also needs the instance resource; scope to this account.
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:aws:ec2:*:${AWS::AccountId}:instance/*
+                Condition:
+                  StringEquals:
+                    'aws:ResourceAccount': !Ref 'AWS::AccountId'
+              # Read command results and confirm SSM connectivity (no execution).
+              - Effect: Allow
+                Action:
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommandInvocations
+                  - ssm:DescribeInstanceInformation
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceAccount': !Ref 'AWS::AccountId'
+              # Reads needed to locate/target an instance and interpret results.
+              # DescribeVpcs + DescribeDhcpOptions back dns_probe_context's DHCP
+              # option-set discovery (the VPC-INTENDED resolver), which
+              # dns_probe_compare also uses to auto-populate the comparison set.
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeVpcAttribute
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    'aws:ResourceAccount': !Ref 'AWS::AccountId'
+
+Outputs:
+  DiagnosticDocumentName:
+    Description: Name of the diagnostic SSM document the probe role may send
+    Value: !Ref DnsDiagnosticProbeDocument
+  ReadOnlyRoleArn:
+    Description: Assume this for Mode B (dns_simulate_*)
+    Value: !GetAtt DnsDiagnosticReadOnlyRole.Arn
+  ProbeRoleArn:
+    Description: Assume this for Mode A (dns_probe_*)
+    Value: !GetAtt DnsDiagnosticProbeRole.Arn

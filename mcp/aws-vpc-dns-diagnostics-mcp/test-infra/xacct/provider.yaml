@@ -1,0 +1,151 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  PROVIDER-side resources for the cross-account DNS visibility test. Deploy this
+  in the provider (owner) account. These constructs are shared/associated to the
+  consumer account out-of-band (RAM + PHZ auth handshake), then enumerated from
+  the consumer to see what is actually visible.
+
+Parameters:
+  NamePrefix:
+    Type: String
+    Default: xacct-dns-test
+  ConsumerAccountId:
+    Type: String
+    Description: >
+      12-digit AWS account ID of the CONSUMER account that the Route 53
+      constructs are shared with. No default - supply this at deploy time.
+    AllowedPattern: '^[0-9]{12}$'
+    ConstraintDescription: Must be a 12-digit AWS account ID.
+  # A throwaway VPC in the provider account to host the resolver outbound endpoint.
+  ProviderVpcCidr:
+    Type: String
+    Default: 10.90.0.0/16
+
+Resources:
+  # ---- minimal provider VPC (for the outbound resolver endpoint) ----
+  ProviderVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref ProviderVpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{Key: Name, Value: !Sub '${NamePrefix}-provider-vpc'}]
+  SubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref ProviderVpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !Select [0, !Cidr [!Ref ProviderVpcCidr, 4, 8]]
+      Tags: [{Key: Name, Value: !Sub '${NamePrefix}-sn-a'}]
+  SubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref ProviderVpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !Select [1, !Cidr [!Ref ProviderVpcCidr, 4, 8]]
+      Tags: [{Key: Name, Value: !Sub '${NamePrefix}-sn-b'}]
+  ResolverEpSg:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: 'xacct dns test - resolver outbound endpoint SG'
+      VpcId: !Ref ProviderVpc
+      SecurityGroupEgress:
+        - {IpProtocol: udp, FromPort: 53, ToPort: 53, CidrIp: 0.0.0.0/0}
+        - {IpProtocol: tcp, FromPort: 53, ToPort: 53, CidrIp: 0.0.0.0/0}
+      Tags: [{Key: Name, Value: !Sub '${NamePrefix}-resolver-ep-sg'}]
+
+  # ---- (1) PHZ for direct cross-account association (non-RAM handshake) ----
+  DirectPhz:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: direct.xacct-test.internal.
+      # Associate to the PROVIDER vpc at create; consumer assoc done out-of-band.
+      VPCs:
+        - {VPCId: !Ref ProviderVpc, VPCRegion: !Ref 'AWS::Region'}
+  DirectPhzRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref DirectPhz
+      Name: app.direct.xacct-test.internal.
+      Type: A
+      TTL: '60'
+      ResourceRecords: ['10.90.200.10']
+
+  # ---- (2) Resolver outbound endpoint + FORWARD rule (shared via RAM) ----
+  OutboundEndpoint:
+    Type: AWS::Route53Resolver::ResolverEndpoint
+    Properties:
+      Name: !Sub '${NamePrefix}-outbound'
+      Direction: OUTBOUND
+      SecurityGroupIds: [!Ref ResolverEpSg]
+      IpAddresses:
+        - {SubnetId: !Ref SubnetA}
+        - {SubnetId: !Ref SubnetB}
+  SharedForwardRule:
+    Type: AWS::Route53Resolver::ResolverRule
+    Properties:
+      Name: !Sub '${NamePrefix}-fwd-ram'
+      DomainName: ram-forward.xacct-test.internal.
+      RuleType: FORWARD
+      ResolverEndpointId: !Ref OutboundEndpoint
+      TargetIps: [{Ip: 10.90.0.53, Port: '53'}]
+
+  # ---- (3) DNS Firewall domain list + rule group (shared via RAM) ----
+  FirewallDomainList:
+    Type: AWS::Route53Resolver::FirewallDomainList
+    Properties:
+      Name: !Sub '${NamePrefix}-blocklist'
+      Domains: ['blocked-xacct.example.com.']
+  FirewallRuleGroup:
+    Type: AWS::Route53Resolver::FirewallRuleGroup
+    Properties:
+      Name: !Sub '${NamePrefix}-frg'
+      FirewallRules:
+        - FirewallDomainListId: !Ref FirewallDomainList
+          Priority: 100
+          Action: BLOCK
+          BlockResponse: NXDOMAIN
+
+  # ---- (4) Route 53 Profile + resources INSIDE it (shared via RAM) ----
+  Profile:
+    Type: AWS::Route53Profiles::Profile
+    Properties:
+      Name: !Sub '${NamePrefix}-profile'
+  # A resolver rule contributed via the profile (well-supported). The
+  # profile-PHZ association is added out-of-band via CLI (ARN form differs).
+  ProfileForwardRule:
+    Type: AWS::Route53Resolver::ResolverRule
+    Properties:
+      Name: !Sub '${NamePrefix}-profile-fwd'
+      DomainName: profile-forward.xacct-test.internal.
+      RuleType: FORWARD
+      ResolverEndpointId: !Ref OutboundEndpoint
+      TargetIps: [{Ip: 10.90.0.54, Port: '53'}]
+  ProfileRuleAssoc:
+    Type: AWS::Route53Profiles::ProfileResourceAssociation
+    Properties:
+      Name: !Sub '${NamePrefix}-profile-rule-assoc'
+      ProfileId: !Ref Profile
+      ResourceArn: !GetAtt ProfileForwardRule.Arn
+  # A standalone PRIVATE PHZ we associate INTO the profile via CLI post-deploy.
+  # NOTE: a VPCs block is REQUIRED to make this a PRIVATE zone - without it CFN
+  # creates a PUBLIC zone, which Route 53 Profiles reject (RSLVR-05207).
+  ProfilePhz:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: profile-phz.xacct-test.internal.
+      VPCs:
+        - {VPCId: !Ref ProviderVpc, VPCRegion: !Ref 'AWS::Region'}
+
+Outputs:
+  ProviderVpcId: {Value: !Ref ProviderVpc}
+  DirectPhzId: {Value: !Ref DirectPhz}
+  SharedForwardRuleArn: {Value: !GetAtt SharedForwardRule.Arn}
+  FirewallRuleGroupArn: {Value: !GetAtt FirewallRuleGroup.Arn}
+  ProfileArn: {Value: !GetAtt Profile.Arn}
+  ProfileId: {Value: !Ref Profile}
+  ProfilePhzId: {Value: !Ref ProfilePhz}
+  ProfileForwardRuleArn: {Value: !GetAtt ProfileForwardRule.Arn}
