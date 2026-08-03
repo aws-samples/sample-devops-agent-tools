@@ -1,0 +1,66 @@
+{
+  "skill": "database-rds-devops",
+  "version": "1.0",
+  "trigger_tests": [
+    {
+      "query": "Run a health check on my Aurora MySQL cluster",
+      "should_trigger": true
+    },
+    {
+      "query": "My RDS MySQL instance has high CPU usage",
+      "should_trigger": true
+    },
+    {
+      "query": "Check slow queries on my database cluster",
+      "should_trigger": true
+    },
+    {
+      "query": "Getting Too many connections errors on MySQL",
+      "should_trigger": true
+    },
+    {
+      "query": "Is my Aurora PostgreSQL at risk for transaction ID wraparound?",
+      "should_trigger": true
+    },
+    {
+      "query": "Check replication lag on my Aurora read replicas",
+      "should_trigger": true
+    },
+    {
+      "query": "Analyze storage fragmentation on my MySQL database",
+      "should_trigger": true
+    },
+    {
+      "query": "My database connection pool is exhausted",
+      "should_trigger": true
+    },
+    {
+      "query": "Review security configuration of my RDS instance",
+      "should_trigger": true
+    },
+    {
+      "query": "How do I deploy a Lambda function?",
+      "should_trigger": false
+    },
+    {
+      "query": "Help me configure my VPC routing tables",
+      "should_trigger": false
+    },
+    {
+      "query": "My S3 bucket permissions are wrong",
+      "should_trigger": false
+    },
+    {
+      "query": "How do I set up a CI/CD pipeline?",
+      "should_trigger": false
+    },
+    {
+      "query": "My ECS service keeps crashing",
+      "should_trigger": false
+    },
+    {
+      "query": "Help me write a CloudFormation template for an EC2 instance",
+      "should_trigger": false
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "skill": "database-rds-devops",
+  "version": "1.0",
+  "evals": [
+    {
+      "id": "full-health-check",
+      "description": "Agent performs full health check on Aurora MySQL cluster",
+      "prompt": "Run a comprehensive health check on my Aurora MySQL cluster named prod-analytics-cluster in us-east-1",
+      "assertions": [
+        "mentions CloudWatch metrics collection",
+        "includes health score or grading",
+        "checks encryption status",
+        "checks backup retention",
+        "checks Performance Insights",
+        "checks Multi-AZ configuration",
+        "provides prioritized recommendations"
+      ]
+    },
+    {
+      "id": "high-cpu-troubleshooting",
+      "description": "Agent diagnoses high CPU on Aurora MySQL",
+      "prompt": "My Aurora MySQL cluster is showing sustained 95% CPU utilization. Help me diagnose the root cause.",
+      "assertions": [
+        "queries CloudWatch CPUUtilization metric",
+        "analyzes slow query log via CloudWatch Logs",
+        "references Query 6.1 or 6.2 for CPU-intensive queries",
+        "checks for missing indexes",
+        "provides specific optimization recommendations"
+      ]
+    },
+    {
+      "id": "connection-exhaustion",
+      "description": "Agent investigates connection limit issues",
+      "prompt": "My application is getting 'Too many connections' errors connecting to my RDS MySQL instance.",
+      "assertions": [
+        "checks CloudWatch DatabaseConnections metric",
+        "references Query 3.1 for connection utilization",
+        "identifies connection percentage vs max_connections",
+        "recommends RDS Proxy or connection pooling",
+        "suggests checking for connection leaks"
+      ]
+    },
+    {
+      "id": "replication-lag",
+      "description": "Agent troubleshoots Aurora replica lag",
+      "prompt": "My Aurora MySQL read replica is showing 2 seconds of lag. This is unusual. What should I investigate?",
+      "assertions": [
+        "checks CloudWatch AuroraReplicaLag metric",
+        "notes that Aurora typically has < 100ms lag",
+        "references Query 4.2 for Aurora-specific lag details",
+        "checks for long-running transactions on writer",
+        "suggests checking reader CPU utilization"
+      ]
+    },
+    {
+      "id": "postgresql-wraparound",
+      "description": "Agent checks PostgreSQL transaction ID wraparound risk",
+      "prompt": "How do I check if my Aurora PostgreSQL cluster is at risk for transaction ID wraparound?",
+      "assertions": [
+        "checks CloudWatch MaximumUsedTransactionIDs metric",
+        "references PG Query 7.2 for transaction ID age",
+        "explains the 2 billion transaction limit",
+        "provides severity thresholds",
+        "recommends VACUUM if age is high"
+      ]
+    }
+  ]
+}

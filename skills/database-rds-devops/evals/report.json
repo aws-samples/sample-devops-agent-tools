@@ -1,0 +1,19 @@
+{
+  "skill_name": "database-rds-devops",
+  "skill_path": "/Users/kiranmam/kirans-code/sample-devops-agent-tools/skills/database-rds-devops",
+  "score": 100,
+  "grade": "A",
+  "passed": true,
+  "summary": {
+    "critical": 0,
+    "warning": 0,
+    "info": 0,
+    "total": 0
+  },
+  "findings": [],
+  "metadata": {
+    "structure_findings": 0,
+    "security_findings": 0,
+    "permission_findings": 0
+  }
+}

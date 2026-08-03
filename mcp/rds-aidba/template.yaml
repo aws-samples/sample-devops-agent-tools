@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  rds-aidba MCP Server for AWS DevOps Agent.
+  Uses mcp-proxy + Lambda Web Adapter for Streamable HTTP. Function URL with IAM auth.
+
+Globals:
+  Function:
+    Timeout: 180
+    Runtime: python3.12
+    MemorySize: 1024
+
+Parameters:
+  ClusterArn:
+    Type: String
+  SecretArn:
+    Type: String
+  DatabaseName:
+    Type: String
+    Default: information_schema
+  StageName:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+  AllowedClusters:
+    Type: String
+    Default: '*'
+  AllowedDatabases:
+    Type: String
+    Default: '*'
+
+Resources:
+  RdsAidbaFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub rds-aidba-mcp-${StageName}
+      Handler: run.sh
+      CodeUri: src/
+      Architectures: [x86_64]
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:24
+        - !Ref DependenciesLayer
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
+          AWS_LWA_PORT: '8000'
+          AWS_LWA_READINESS_CHECK_PATH: /mcp
+          AWS_LWA_READINESS_CHECK_MIN_UNHEALTHY_STATUS: '500'
+          AWS_LWA_INVOKE_MODE: response_stream
+          AWS_LWA_READINESS_CHECK_PROTOCOL: http
+          AWS_LWA_ASYNC_INIT: 'true'
+          PYTHONPATH: /opt/python
+          CLUSTER_ARN: !Ref ClusterArn
+          SECRET_ARN: !Ref SecretArn
+          DATABASE_NAME: !Ref DatabaseName
+          STAGE_NAME: !Ref StageName
+          ALLOWED_CLUSTERS: !Ref AllowedClusters
+          ALLOWED_DATABASES: !Ref AllowedDatabases
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: RESPONSE_STREAM
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action: [rds-data:ExecuteStatement, rds-data:BatchExecuteStatement]
+              Resource: !Ref ClusterArn
+        - Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !Ref SecretArn
+        - Statement:
+            - Effect: Allow
+              Action: [rds:DescribeDBClusters, rds:DescribeDBInstances, rds:DescribeDBEngineVersions, rds:DescribeDBProxies, rds:DescribeDBProxyTargets]
+              Resource: '*'
+        - Statement:
+            - Effect: Allow
+              Action: [cloudwatch:GetMetricStatistics, cloudwatch:GetMetricData, pi:GetResourceMetrics, pi:DescribeDimensionKeys]
+              Resource: '*'
+
+  DependenciesLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub rds-aidba-mcp-deps-${StageName}
+      ContentUri: layers/dependencies/
+      CompatibleRuntimes: [python3.12]
+      CompatibleArchitectures: [x86_64]
+    Metadata:
+      BuildMethod: makefile
+
+Outputs:
+  McpEndpointUrl:
+    Description: Register in DevOps Agent (Service Name = lambda, Auth = SigV4)
+    Value: !Sub ${RdsAidbaFunctionUrl.FunctionUrl}mcp
+  FunctionArn:
+    Value: !GetAtt RdsAidbaFunction.Arn
