@@ -30,5 +30,29 @@
   {
     "query": "Explain the difference between an IAM role and an IAM user.",
     "should_trigger": false
+  },
+  {
+    "query": "My EC2 instance in a private subnet cannot reach the internet. It has no public IP and no NAT gateway. How do I fix this?",
+    "should_trigger": false
+  },
+  {
+    "query": "Check the NS and SOA records for example.com in my Route 53 public hosted zone to verify delegation is correct.",
+    "should_trigger": false
+  },
+  {
+    "query": "I want to transfer my domain registration from GoDaddy to Route 53. What are the steps?",
+    "should_trigger": false
+  },
+  {
+    "query": "Configure DNS failover routing for my CloudFront distribution using Route 53 health checks.",
+    "should_trigger": false
+  },
+  {
+    "query": "My Lambda function is timing out when calling an external API. How do I troubleshoot the network path?",
+    "should_trigger": false
+  },
+  {
+    "query": "Set up GeoDNS with Route 53 geolocation routing policies to serve different content by region.",
+    "should_trigger": false
   }
 ]
