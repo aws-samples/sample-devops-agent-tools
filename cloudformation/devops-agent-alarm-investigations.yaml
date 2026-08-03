@@ -1,0 +1,515 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Forwards a single Amazon CloudWatch alarm to an AWS DevOps Agent webhook so that
+  alarm opens an investigation. One stack = one alarm: it creates an Amazon
+  EventBridge rule scoped to that alarm's ARN, an AWS Lambda signing function
+  (inline), a least-privilege execution role, and a log group. It reads the webhook
+  HMAC key from an AWS Secrets Manager secret you supply by ARN.
+
+  Prerequisite: create the Agent Space and its generic (HMAC) webhook first
+  (console — no API), store the HMAC key in a Secrets Manager secret, then pass the
+  webhook URL, the secret ARN, and the alarm ARN to this stack.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: AWS DevOps Agent Webhook
+        Parameters:
+          - WebhookUrl
+          - WebhookSecretArn
+          - AgentName
+      - Label:
+          default: Alarm
+        Parameters:
+          - AlarmArn
+      - Label:
+          default: Log Encryption (optional)
+        Parameters:
+          - LogKmsKeyArn
+      - Label:
+          default: Function Tuning (optional)
+        Parameters:
+          - ReservedConcurrency
+    ParameterLabels:
+      WebhookUrl:
+        default: DevOps Agent generic (HMAC) webhook URL
+      WebhookSecretArn:
+        default: Secrets Manager ARN of the webhook HMAC key
+      AgentName:
+        default: Target DevOps Agent name (used to tag created resources)
+      AlarmArn:
+        default: ARN of the single CloudWatch alarm to forward
+      ReservedConcurrency:
+        default: Lambda reserved concurrency (blank = unreserved pool)
+
+Parameters:
+  WebhookUrl:
+    Type: String
+    Description: >
+      HTTPS URL of the AWS DevOps Agent generic (HMAC) webhook, created in the
+      Agent Space console. Must be a valid AWS DevOps Agent webhook URL.
+    AllowedPattern: '^https://(?!localhost([:/]|$))(?!0\.)(?!0[xX])(?!127\.)(?!169\.254\.)(?!10\.)(?!192\.168\.)(?!172\.(1[6-9]|2[0-9]|3[01])\.)(?!\[)[A-Za-z0-9.-]+(:[0-9]+)?(/.*)?$'
+    ConstraintDescription: >
+      Must be a valid AWS DevOps Agent webhook URL (HTTPS).
+
+  WebhookSecretArn:
+    Type: String
+    Description: >
+      ARN of an AWS Secrets Manager secret holding the webhook HMAC signing key.
+      Create the secret and store the key yourself, then pass its ARN here. You own
+      the secret and can share it across several stacks.
+    AllowedPattern: '^arn:aws[a-zA-Z-]*:secretsmanager:.+'
+    ConstraintDescription: Must be a Secrets Manager secret ARN.
+
+  AgentName:
+    Type: String
+    Description: >
+      Name/label of the AWS DevOps Agent this integration targets. Used only to tag
+      the resources this stack creates (Lambda, EventBridge rule, role, log group)
+      with DevOpsAgent=<name> for identification and cost allocation; it does not
+      affect routing (routing is determined by the webhook URL).
+    MinLength: 1
+    MaxLength: 256
+    AllowedPattern: "^[A-Za-z0-9 _.:/=+@-]{1,256}$"
+    ConstraintDescription: >
+      1-256 characters using letters, numbers, spaces, and _ . : / = + - @
+      (the AWS tag-value character set).
+
+  AlarmArn:
+    Type: String
+    Description: >
+      ARN of the single Amazon CloudWatch alarm this stack forwards. Only ALARM
+      state changes for this exact alarm are sent to the webhook.
+    AllowedPattern: '^arn:aws[a-zA-Z-]*:cloudwatch:[a-z0-9-]+:[0-9]{12}:alarm:.+'
+    ConstraintDescription: Must be a CloudWatch alarm ARN.
+
+  LogKmsKeyArn:
+    Type: String
+    Description: >
+      (Optional) ARN of a customer-managed AWS KMS key used to encrypt the Lambda's
+      CloudWatch log group. Leave empty to use the default AWS-managed key. If set,
+      the key policy must allow the CloudWatch Logs service in this Region.
+    Default: ''
+    AllowedPattern: '^(arn:aws[a-zA-Z-]*:kms:.+)?$'
+    ConstraintDescription: Must be empty or a KMS key ARN.
+
+  ReservedConcurrency:
+    Type: String
+    Default: '1'
+    Description: >
+      (Optional) Reserved concurrency for the signing Lambda. The default of 1
+      serializes forwarding for a single low-frequency alarm. Leave this empty to use
+      the account's unreserved concurrency pool instead — do that if stack creation
+      fails because the account has no spare reserved concurrency to allocate.
+    AllowedPattern: '^([1-9][0-9]{0,3})?$'
+    ConstraintDescription: Must be empty (unreserved) or an integer 1-9999.
+
+Conditions:
+  HasLogKmsKey: !Not [!Equals [!Ref LogKmsKeyArn, '']]
+  HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, '']]
+
+Resources:
+  # Deleted with the stack so redeploying the same stack name works cleanly. The log
+  # group has a fixed name (needed to scope the execution role to it and to set
+  # retention/KMS), so it must not outlive the stack. Switch both policies to Retain
+  # if you need the forwarding record to survive stack deletion.
+  SigningFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AWS::StackName}-alarm-investigations'
+      RetentionInDays: 30
+      KmsKeyId: !If [HasLogKmsKey, !Ref LogKmsKeyArn, !Ref 'AWS::NoValue']
+      Tags:
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: DevOpsAgent
+          Value: !Ref AgentName
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: alarm-investigations-least-privilege
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: WriteFunctionLogs
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !GetAtt SigningFunctionLogGroup.Arn
+              - Sid: ReadWebhookSecret
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref WebhookSecretArn
+      Tags:
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: DevOpsAgent
+          Value: !Ref AgentName
+
+  SigningFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: SigningFunctionLogGroup
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-alarm-investigations'
+      Description: >
+        HMAC-signs a payload for the configured CloudWatch alarm and POSTs it to
+        the DevOps Agent webhook.
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 15
+      MemorySize: 128
+      # Concurrency defaults to 1 (see ReservedConcurrency): with the rule's
+      # 8h/32-attempt retry, an alarm storm may serialize or delay a forward, which
+      # surfaces as a late/missing investigation the operator notices. Acceptable for
+      # a single low-frequency alarm. Set ReservedConcurrency empty to use the
+      # unreserved pool if the account cannot allocate reserved concurrency.
+      ReservedConcurrentExecutions: !If
+        - HasReservedConcurrency
+        - !Ref ReservedConcurrency
+        - !Ref 'AWS::NoValue'
+      Role: !GetAtt ExecutionRole.Arn
+      Environment:
+        Variables:
+          SECRET_ARN: !Ref WebhookSecretArn
+          WEBHOOK_URL: !Ref WebhookUrl
+          ALARM_ARN: !Ref AlarmArn
+      Code:
+        ZipFile: |
+          """Forward one CloudWatch alarm's ALARM state change to a DevOps Agent webhook."""
+          import base64
+          import datetime
+          import hashlib
+          import hmac
+          import http.client
+          import ipaddress
+          import json
+          import os
+          import socket
+          import ssl
+          import time
+          import urllib.parse
+
+          import boto3
+
+          SECRET_ARN = os.environ["SECRET_ARN"]
+          WEBHOOK_URL = os.environ["WEBHOOK_URL"]
+          ALARM_ARN = os.environ["ALARM_ARN"]
+
+          secrets = boto3.client("secretsmanager")
+
+
+          def _key_from_secret(secret_string):
+              # Accept either a raw key string or a JSON object with a key field, so a
+              # secret stored either way yields the correct HMAC key instead of silently
+              # signing with the wrong value.
+              try:
+                  parsed = json.loads(secret_string)
+              except (ValueError, TypeError):
+                  key = secret_string
+              else:
+                  if isinstance(parsed, dict):
+                      key = None
+                      for field in ("webhookSecret", "hmac", "key", "secret"):
+                          if isinstance(parsed.get(field), str):
+                              key = parsed[field]
+                              break
+                      if key is None:
+                          raise RuntimeError(
+                              "Secret JSON has no recognized key field (webhookSecret/hmac/key/secret)"
+                          )
+                  else:
+                      key = secret_string
+              if not key or not key.strip():
+                  raise RuntimeError("HMAC key is empty")
+              return key
+
+
+          def _get_secret():
+              # Fetched fresh each invocation (concurrency is low and the alarm is
+              # low-frequency), so an updated key takes effect immediately. Accept a
+              # secret stored as SecretString or as SecretBinary (UTF-8 bytes).
+              resp = secrets.get_secret_value(SecretId=SECRET_ARN)
+              raw = resp.get("SecretString")
+              if raw is None:
+                  blob = resp.get("SecretBinary")
+                  if blob is None:
+                      raise RuntimeError("Secret has neither SecretString nor SecretBinary")
+                  try:
+                      raw = blob.decode("utf-8")
+                  except (UnicodeDecodeError, AttributeError):
+                      raise RuntimeError("SecretBinary is not valid UTF-8")
+              return _key_from_secret(raw)
+
+
+          def _sign(payload_json, timestamp):
+              msg = ("%s:%s" % (timestamp, payload_json)).encode("utf-8")
+              digest = hmac.new(_get_secret().encode("utf-8"), msg, hashlib.sha256).digest()
+              return base64.b64encode(digest).decode("utf-8")
+
+
+          _NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
+
+
+          def _embedded_ipv4(ip):
+              # Extract any IPv4 embedded in an IPv6 address (mapped ::ffff:0:0/96,
+              # NAT64 64:ff9b::/96, 6to4, Teredo) so an internal v4 cannot hide inside an
+              # address that ipaddress would otherwise report as globally routable.
+              if ip.ipv4_mapped is not None:
+                  return ip.ipv4_mapped
+              if ip in _NAT64_PREFIX:
+                  return ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+              if ip.sixtofour is not None:
+                  return ip.sixtofour
+              if ip.teredo is not None:
+                  return ip.teredo[1]
+              return None
+
+
+          def _is_forbidden_ip(ip):
+              # Do not rely on is_global alone (its correctness varies by CPython patch
+              # level). Check the address and any embedded IPv4 against explicit
+              # non-public ranges.
+              candidates = [ip]
+              if isinstance(ip, ipaddress.IPv6Address):
+                  embedded = _embedded_ipv4(ip)
+                  if embedded is not None:
+                      candidates.append(embedded)
+              for addr in candidates:
+                  if (
+                      not addr.is_global
+                      or addr.is_private
+                      or addr.is_loopback
+                      or addr.is_link_local
+                      or addr.is_reserved
+                      or addr.is_multicast
+                      or addr.is_unspecified
+                  ):
+                      return True
+              return False
+
+
+          def _resolve_public_ip(host, port):
+              # Resolve once and require EVERY candidate address to pass the layered
+              # non-public check. Returns one validated IP; connecting to that exact IP
+              # below removes the check-then-connect race (DNS rebinding / TOCTOU).
+              validated = None
+              for _family, _type, _proto, _canon, sockaddr in socket.getaddrinfo(
+                  host, port, type=socket.SOCK_STREAM
+              ):
+                  ip = ipaddress.ip_address(sockaddr[0])
+                  if _is_forbidden_ip(ip):
+                      raise RuntimeError(
+                          "Webhook host %s resolves to non-public address %s" % (host, ip)
+                      )
+                  if validated is None:
+                      validated = sockaddr[0]
+              if validated is None:
+                  raise RuntimeError("Webhook host %s did not resolve" % host)
+              return validated
+
+
+          class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+              # Connect to a pre-validated IP while keeping SNI and certificate
+              # verification bound to the original hostname, so the connection cannot be
+              # re-resolved to a different (internal) address after validation.
+              def __init__(self, host, validated_ip, **kwargs):
+                  super().__init__(host, **kwargs)
+                  self._validated_ip = validated_ip
+
+              def connect(self):
+                  sock = socket.create_connection((self._validated_ip, self.port), self.timeout)
+                  self.sock = self._context.wrap_socket(sock, server_hostname=self.host)
+
+
+          def _post(payload_json, timestamp, signature):
+              parsed = urllib.parse.urlparse(WEBHOOK_URL)
+              if parsed.scheme != "https":
+                  raise RuntimeError("Webhook URL must use HTTPS")
+              host = parsed.hostname
+              if not host:
+                  raise RuntimeError("Webhook URL has no host")
+              # Honor the port from the URL (default 443). The non-public IP check
+              # below is port-independent, so any port is still SSRF-guarded.
+              port = parsed.port or 443
+              validated_ip = _resolve_public_ip(host, port)
+              path = parsed.path or "/"
+              if parsed.query:
+                  path = "%s?%s" % (path, parsed.query)
+              # http.client does not auto-follow redirects, so a 3xx is surfaced as a
+              # non-2xx error rather than chasing the payload to another host.
+              conn = _PinnedHTTPSConnection(
+                  host, validated_ip, port=port, timeout=10,
+                  context=ssl.create_default_context(),
+              )
+              try:
+                  conn.request(
+                      "POST", path, body=payload_json.encode("utf-8"),
+                      headers={
+                          "Content-Type": "application/json",
+                          "x-amzn-event-timestamp": timestamp,
+                          "x-amzn-event-signature": signature,
+                      },
+                  )
+                  status = conn.getresponse().status
+              finally:
+                  conn.close()
+              if status not in (200, 202):
+                  raise RuntimeError("Webhook returned HTTP %s" % status)
+              return status
+
+
+          MAX_EVENT_AGE_SECONDS = 8 * 3600
+
+
+          def _too_old(detail, now_epoch):
+              # Skip events whose alarm state-change is older than the EventBridge retry
+              # window, so a long-delayed redelivery does not open a stale investigation.
+              # We do NOT check whether the alarm is currently in ALARM — a transient
+              # alarm that already recovered is still worth investigating.
+              ts = detail.get("state", {}).get("timestamp")
+              if not ts:
+                  return False
+              try:
+                  raised = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+              except ValueError:
+                  return False
+              return (now_epoch - raised.timestamp()) > MAX_EVENT_AGE_SECONDS
+
+
+          def handler(event, context):
+              detail = event.get("detail", {})
+              if detail.get("state", {}).get("value") != "ALARM":
+                  print("skipped: state is not ALARM")
+                  return {"status": "skipped", "reason": "not ALARM state"}
+
+              resources = event.get("resources") or []
+              alarm_arn = resources[0] if resources else None
+              # The ARN is the only alarm field we forward; AWS DevOps Agent enriches
+              # from it. Strip control chars and cap length before it is logged or
+              # compared, since a forged event could place arbitrary text here.
+              if isinstance(alarm_arn, str):
+                  alarm_arn = "".join(c for c in alarm_arn if c.isprintable())[:2048]
+              else:
+                  alarm_arn = None
+
+              # The EventBridge rule already filters to this alarm's ARN, but a
+              # same-account caller or an allowed cross-account event bus could invoke
+              # us with a different (or missing) ARN. Refuse anything that is not the
+              # exact configured alarm, and record the attempt.
+              if alarm_arn != ALARM_ARN:
+                  print("skipped: resources[0] %r does not match configured alarm %r "
+                        "(possible spoofing)" % (alarm_arn, ALARM_ARN))
+                  return {"status": "skipped", "reason": "alarm ARN mismatch"}
+
+              now = int(time.time())
+              if _too_old(detail, now):
+                  print("skipped: alarm state change older than 8h")
+                  return {"status": "skipped", "reason": "alarm state change older than 8h"}
+              iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
+
+              # incidentId MUST be stable across EventBridge retries of the same event,
+              # or the agent cannot deduplicate and each retry opens a new
+              # investigation. Prefer the EventBridge event id (constant across
+              # retries); fall back to the alarm ARN + state-change timestamp, which
+              # are also retry-stable. Never derive it from wall-clock time.
+              event_id = event.get("id")
+              if isinstance(event_id, str):
+                  event_id = "".join(c for c in event_id if c.isprintable())[:256] or None
+              else:
+                  event_id = None
+              state_ts = detail.get("state", {}).get("timestamp")
+              if event_id:
+                  incident_id = event_id
+              elif isinstance(state_ts, str) and state_ts:
+                  incident_id = "%s-%s" % (alarm_arn, state_ts)
+              else:
+                  incident_id = "%s-%s" % (alarm_arn, now)
+
+              # Forward only the alarm ARN and the raised state — no alarm name,
+              # reason, or metric data. AWS DevOps Agent enriches from the ARN.
+              payload_obj = {
+                  "eventType": "incident",
+                  "incidentId": incident_id,
+                  "action": "created",
+                  "priority": "HIGH",
+                  "title": "CloudWatch alarm in ALARM state",
+                  "description": "CloudWatch alarm %s entered ALARM state." % alarm_arn,
+                  "timestamp": iso,
+                  "data": {"metadata": {"alarmArn": alarm_arn, "state": "ALARM"}},
+              }
+              payload_json = json.dumps(payload_obj, separators=(",", ":"))
+              signature = _sign(payload_json, iso)
+              status = _post(payload_json, iso, signature)
+              print("forwarded %s to DevOps Agent webhook (HTTP %s); incidentId=%s"
+                    % (alarm_arn, status, payload_obj["incidentId"]))
+              return {"status": "forwarded", "incidentId": payload_obj["incidentId"]}
+      Tags:
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: DevOpsAgent
+          Value: !Ref AgentName
+
+  # Rule scoped to exactly one alarm ARN — the rule itself is the filter.
+  AlarmStateChangeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub 'Forwards ALARM-state changes for ${AlarmArn} to the signing Lambda.'
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - CloudWatch Alarm State Change
+        resources:
+          - !Ref AlarmArn
+        detail:
+          state:
+            value:
+              - ALARM
+      State: ENABLED
+      Targets:
+        - Id: SigningFunction
+          Arn: !GetAtt SigningFunction.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 32
+            MaximumEventAgeInSeconds: 28800
+      Tags:
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: DevOpsAgent
+          Value: !Ref AgentName
+
+  PermissionForEvents:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SigningFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AlarmStateChangeRule.Arn
+      SourceAccount: !Ref 'AWS::AccountId'
+
+Outputs:
+  SigningFunctionArn:
+    Description: ARN of the alarm-forwarding signing Lambda.
+    Value: !GetAtt SigningFunction.Arn
+
+  EventRuleArn:
+    Description: ARN of the EventBridge rule scoped to the alarm.
+    Value: !GetAtt AlarmStateChangeRule.Arn
+
+  ForwardedAlarmArn:
+    Description: The CloudWatch alarm this stack forwards.
+    Value: !Ref AlarmArn
