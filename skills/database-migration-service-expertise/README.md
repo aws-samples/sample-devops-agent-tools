@@ -31,7 +31,7 @@ You need an existing [Agent Space](https://docs.aws.amazon.com/devopsagent/lates
 
 ### 2. IAM permissions for DMS read access
 
-The Agent Space IAM role needs read-only permissions for DMS resources. Nearly all required actions are already covered by the `AIDevOpsAgentAccessPolicy` managed policy attached to the DevOps Agent role. The one exception is `dms:TestConnection`, which must be granted separately — use the [CloudFormation template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml).
+The Agent Space IAM role needs read-only permissions for DMS resources. Nearly all required actions are already covered by the `AIDevOpsAgentAccessPolicy` managed policy attached to the DevOps Agent role. The one exception is `dms:TestConnection`, which must be granted separately — use the [CloudFormation template](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml).
 
 For reference, the complete action set used by this skill:
 ```json

@@ -49,7 +49,7 @@ The AWS DevOps Agent's primary cloud-source role needs read access to MSK and
 CloudWatch. All calls except `kafka:GetBootstrapBrokers` are covered by
 `AIDevOpsAgentAccessPolicy`. `kafka:GetBootstrapBrokers` is granted by the
 opt-in `EnableMskOperations` parameter (default `true`) in
-[`cloudformation/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies.yaml).
+[`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](https://github.com/aws/tools-for-devops-agent/blob/main/cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml).
 The full set of actions the skill uses in practice:
 
 ```
