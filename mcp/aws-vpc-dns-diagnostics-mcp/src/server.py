@@ -620,6 +620,25 @@ from dns_model import (  # noqa: E402
 )
 
 
+def _paginate(method, result_key: str, token_key: str = "NextToken", **kwargs) -> list:
+    """Exhaust a paginated AWS API call and return the full list of items.
+
+    Most AWS APIs use 'NextToken' in both request and response. VPC Lattice
+    uses lowercase 'nextToken'. The caller specifies which via token_key.
+    """
+    items: list = []
+    token = None
+    while True:
+        if token:
+            kwargs[token_key] = token
+        resp = method(**kwargs)
+        items.extend(resp.get(result_key, []))
+        token = resp.get(token_key)
+        if not token:
+            break
+    return items
+
+
 def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None = None) -> EffectiveModel:
     """
     Build the VPC's effective DNS model from live control-plane reads: the union
@@ -645,9 +664,10 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
     snva_preference = "VERIFIED_DOMAINS_ONLY"
     specified_domains: tuple[str, ...] = ()
     try:
-        assocs = lattice.list_service_network_vpc_associations(
-            vpcIdentifier=vpc_id
-        ).get("items", [])
+        assocs = _paginate(
+            lattice.list_service_network_vpc_associations,
+            "items", token_key="nextToken", vpcIdentifier=vpc_id,
+        )
         # Prefer an association that actually enables private DNS; else the first.
         chosen = next((a for a in assocs if a.get("privateDnsEnabled")), assocs[0] if assocs else None)
         if chosen:
@@ -664,9 +684,11 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
     vpces: list[Vpce] = []
 
     # --- directly-attached Resolver rules ---
-    for assoc in r53r.list_resolver_rule_associations(
-        Filters=[{"Name": "VPCId", "Values": [vpc_id]}]
-    ).get("ResolverRuleAssociations", []):
+    for assoc in _paginate(
+        r53r.list_resolver_rule_associations,
+        "ResolverRuleAssociations",
+        Filters=[{"Name": "VPCId", "Values": [vpc_id]}],
+    ):
         rid = assoc["ResolverRuleId"]
         try:
             rule = r53r.get_resolver_rule(ResolverRuleId=rid)["ResolverRule"]
@@ -682,12 +704,17 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
                 domain="", rule_type="FORWARD", target="", source="direct", opaque=True))
 
     # --- directly-attached DNS Firewall rule groups ---
-    for fga in r53r.list_firewall_rule_group_associations(
-        VpcId=vpc_id
-    ).get("FirewallRuleGroupAssociations", []):
+    for fga in _paginate(
+        r53r.list_firewall_rule_group_associations,
+        "FirewallRuleGroupAssociations",
+        VpcId=vpc_id,
+    ):
         fgid = fga["FirewallRuleGroupId"]
         try:
-            frules = r53r.list_firewall_rules(FirewallRuleGroupId=fgid).get("FirewallRules", [])
+            frules = _paginate(
+                r53r.list_firewall_rules, "FirewallRules",
+                FirewallRuleGroupId=fgid,
+            )
         except Exception:
             # Rule group associated but not readable (cross-account share) ->
             # record an opaque BLOCK marker so it is not silently dropped.
@@ -697,9 +724,10 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
             continue
         for fr in frules:
             try:
-                dl = r53r.list_firewall_domains(
-                    FirewallDomainListId=fr["FirewallDomainListId"]
-                ).get("Domains", [])
+                dl = _paginate(
+                    r53r.list_firewall_domains, "Domains",
+                    FirewallDomainListId=fr["FirewallDomainListId"],
+                )
                 opaque = False
             except Exception:
                 # Domain list not readable from this account (RAM-shared group /
@@ -715,9 +743,10 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
             ))
 
     # --- associated PHZs ---
-    for hz in r53.list_hosted_zones_by_vpc(
-        VPCId=vpc_id, VPCRegion=session.region_name
-    ).get("HostedZoneSummaries", []):
+    for hz in _paginate(
+        r53.list_hosted_zones_by_vpc, "HostedZoneSummaries",
+        VPCId=vpc_id, VPCRegion=session.region_name,
+    ):
         phzs.append(Phz(zone=hz["Name"], source="direct"))
 
     # --- VPC endpoints: every DNS shadow the CONSUMER VPC sees, derived purely
@@ -729,9 +758,10 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
     #     This does NOT read resource configurations or gateways - those are
     #     provider-only constructs a consumer account cannot enumerate (a
     #     resource config may be RAM-shared and its gateway invisible here).
-    for ep in ec2.describe_vpc_endpoints(
-        Filters=[{"Name": "vpc-id", "Values": [vpc_id]}]
-    ).get("VpcEndpoints", []):
+    for ep in _paginate(
+        ec2.describe_vpc_endpoints, "VpcEndpoints",
+        Filters=[{"Name": "vpc-id", "Values": [vpc_id]}],
+    ):
         etype = ep.get("VpcEndpointType", "")
         private = ep.get("PrivateDnsEnabled", False)
         if etype == "Interface":
@@ -780,7 +810,9 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
 
     # --- Route 53 Profiles inherited resources (the union) ---
     try:
-        profile_assocs = r53p.list_profile_associations().get("ProfileAssociations", [])
+        profile_assocs = _paginate(
+            r53p.list_profile_associations, "ProfileAssociations",
+        )
     except Exception:
         profile_assocs = []
     for pa in profile_assocs:
@@ -789,7 +821,10 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
         pid = pa["ProfileId"]
         src = f"profile:{pid}"
         try:
-            pras = r53p.list_profile_resource_associations(ProfileId=pid).get("ProfileResourceAssociations", [])
+            pras = _paginate(
+                r53p.list_profile_resource_associations, "ProfileResourceAssociations",
+                ProfileId=pid,
+            )
         except Exception:
             pras = []
         for pr in pras:
@@ -819,7 +854,10 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
                         domain="", rule_type="FORWARD", target="", source=src, opaque=True))
             elif rtype == "FirewallRuleGroup":
                 try:
-                    frules = r53r.list_firewall_rules(FirewallRuleGroupId=pr["ResourceId"]).get("FirewallRules", [])
+                    frules = _paginate(
+                        r53r.list_firewall_rules, "FirewallRules",
+                        FirewallRuleGroupId=pr["ResourceId"],
+                    )
                 except Exception:
                     firewall_rules.append(FirewallRule(
                         domains=(), action="BLOCK", block_response="NXDOMAIN",
@@ -827,9 +865,10 @@ def _build_effective_model(session, vpc_id: str, onprem_zones: list[str] | None 
                     continue
                 for fr in frules:
                     try:
-                        dl = r53r.list_firewall_domains(
-                            FirewallDomainListId=fr["FirewallDomainListId"]
-                        ).get("Domains", [])
+                        dl = _paginate(
+                            r53r.list_firewall_domains, "Domains",
+                            FirewallDomainListId=fr["FirewallDomainListId"],
+                        )
                         opaque = False
                     except Exception:
                         dl, opaque = [], True
@@ -898,14 +937,24 @@ def dns_simulate_effective_config(
     def _rows(items, fmt):
         return "\n".join(fmt(i) for i in items) if items else "_(none)_"
 
+    def _rule_row(r):
+        if r.opaque:
+            return f"- [OPAQUE] {r.rule_type} rule, domain/target unknown [{r.source}]"
+        return f"- `{r.domain}` {r.rule_type} -> {r.target} [{r.source}]"
+
+    def _fw_row(f):
+        if f.opaque:
+            return f"- [OPAQUE] {f.action}/{f.block_response} p{f.priority}, domain list unknown [{f.source}]"
+        return f"- {f.action}/{f.block_response} p{f.priority} on {len(f.domains)} domains [{f.source}]"
+
     return (
         f"**Effective DNS config for {vpc_id}** ({account_id}/{region})\n\n"
         f"enableDnsSupport: {m.dns_support} | SNVA preference: {m.snva_preference}"
         f"{(' | specified domains: ' + ', '.join(m.specified_domains)) if m.specified_domains else ''}\n\n"
         f"**Resolver rules** ({len(m.resolver_rules)}):\n"
-        f"{_rows(m.resolver_rules, lambda r: f'- `{r.domain}` {r.rule_type} -> {r.target} [{r.source}]')}\n\n"
+        f"{_rows(m.resolver_rules, _rule_row)}\n\n"
         f"**DNS Firewall rules** ({len(m.firewall_rules)}):\n"
-        f"{_rows(m.firewall_rules, lambda f: f'- {f.action}/{f.block_response} p{f.priority} on {len(f.domains)} domains [{f.source}]')}\n\n"
+        f"{_rows(m.firewall_rules, _fw_row)}\n\n"
         f"**PHZ associations** ({len(m.phzs)}):\n"
         f"{_rows(m.phzs, lambda p: f'- `{p.zone}` [{p.source}]')}\n\n"
         f"**Interface VPCEs** ({len(m.vpces)}):\n"
