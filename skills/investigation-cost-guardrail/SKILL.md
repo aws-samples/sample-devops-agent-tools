@@ -1,304 +1,319 @@
 ---
-name: investigation-cost-guardrail
-description: Estimates the downstream AWS API cost of an incident investigation before the agent runs any CloudWatch Logs Insights, GetMetricData, X-Ray, or cross-region query, shows a per-step cost plan, and cancels if the estimate exceeds a threshold or no time window is provided. This skill applies ONLY to diagnosing a problem that has already happened (an incident, error, outage, alarm, latency spike, or failure) for example 'what happened', 'why is X down', 'look into this alarm', 'investigate the errors'. It does NOT apply to actions that create, change, deploy, scale, or configure resources (for example deploying a CDK or CloudFormation stack, or scaling a service), nor to architecture or Well-Architected reviews, cost or billing reports, inventory listing, or general how-to questions.
+name: investigation-cost-guardrail-extended
+description: Extended cost guardrail for AWS DevOps Agent that covers ALL AWS services and native agent tools. Before the agent makes any paid API call, this skill estimates cost, enforces budgets per investigation, detects expensive operations across all services (Athena queries, S3 scans, DynamoDB scans, SageMaker inference, PromQL, etc.), enforces time window requirements, monitors cumulative call volume, and cancels if thresholds are exceeded. This skill applies to ALL investigations regardless of which services are involved.
 metadata:
-  author: inesttia
-  version: "1.0.0"
+  author: tqquresh, inesttia
+  version: "2.0.0"
   aws-devops-agent-skills.agent-types: "Incident RCA"
-  aws-devops-agent-skills.aws-services: "Amazon CloudWatch, AWS X-Ray, AWS CloudTrail"
+  aws-devops-agent-skills.aws-services: "All"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
 ---
 
-# Investigation Cost Guardrail
+# Investigation Cost Guardrail Extended Skill
 
 ## Overview
 
-This skill acts as a cost guardrail for DevOps Agent investigations. Before pulling any data, it:
+This skill provides cost guardrails for ANY AWS service and ALL native agent tools — not just a hardcoded list. It uses **heuristic classification** to determine whether an API operation is free or paid, estimates cost before execution, and enforces per-investigation budgets.
 
-1. Lists every resource the agent will query (CloudWatch Logs, Metrics, CloudTrail, X-Ray)
-2. Queries the actual stored bytes and IncomingBytes metric of relevant CloudWatch Log Groups
-3. Detects cross-region data transfer costs if the Agent Space and workload are in different regions
-4. Produces a visual investigation plan showing every step, its estimated data volume, and cost
-5. Makes a proceed/cancel decision based on total estimated cost vs. threshold (default: $10 — proceeds automatically when the estimate is under $10, cancels and requests operator approval when it is exceeded)
-6. If cancelled: tells the user exactly what information is missing to make it cheaper
+## Design Principle
 
-## Step 1: Parse the investigation request
+Rather than listing every free/paid operation across 200+ AWS services, this skill uses three layers:
 
-You MUST determine:
-- Which CloudWatch Log Groups are relevant to the investigation
-- Which CloudWatch Metrics namespaces/dimensions to query
-- Whether X-Ray or CloudTrail is needed
-- Whether a time window was explicitly provided by the user
-- **ALL AWS regions the investigation will touch** (see region rule below)
+1. **Heuristic rules** — classify any operation based on naming patterns and behavior
+2. **Known-paid registry** — explicit overrides for high-cost operations with pricing formulas
+3. **Response validation** — detect metered usage from API response fields after execution
 
-### Region determination (MUST follow this order)
+## Activation
 
-DevOps Agent monitors resources across ALL regions in an account, and a single investigation can span multiple regions. You MUST derive each region from concrete evidence — never assume or default to us-east-1:
+This skill MUST be ALWAYS ACTIVE during investigations. It does NOT require user invocation.
 
-1. **From the resource ARN** — extract the region segment (e.g., `arn:aws:logs:eu-west-1:...` → `eu-west-1`)
-2. **From the triggering alarm** — CloudWatch alarms are region-scoped; use the alarm's region
-3. **From the log group / metric** — the region where it is queried
-4. **From the topology** — if the investigation spans services in multiple regions, collect EVERY region involved, not just one
+---
 
-You MUST build a list of all involved regions. For each region, Step 2 queries its log groups and its own Pricing API rate separately (rates differ by region).
+## Layer 0: Native Agent Tool Classification
 
-You MUST identify the Agent Space region (where DevOps Agent is deployed) to detect cross-region transfer in Step 3.
+Before Layer 1 heuristics, classify the agent's own tools. These are NOT `use_aws` calls but have distinct billing implications:
 
-### Agent Space region detection
+### Tool Cost Matrix
 
-The Agent Space region is provided in the system context:
-- ARN: `arn:aws:aidevops:<REGION>:<ACCOUNT>:agentspace/<ID>`
-- Extract the region segment (e.g., `us-east-1`)
+| Tool | Classification | Cost Model | Guardrail |
+|---|---|---|---|
+| `get_prometheus_metrics` | **PAID** | $0.01 / 1,000 metrics×periods (same billing meter as CloudWatch GetMetricData) | Track series × datapoints per call |
+| `use_aws` | **VARIABLE** | Depends on operation — apply Layers 1–3 | Full heuristic pipeline |
+| `use_azure` | **FREE** | Azure Reader role, no per-call billing | Track count only |
+| `grafana_query_prometheus` | **CAUTION** | Depends on Grafana data source billing model | Track count, warn at 50+ |
+| `use_datadog` | **CAUTION** | Datadog API rate limits (no per-call $ cost, but may throttle) | Track count, warn at 100+ |
+| `use_splunk` | **PAID** | Splunk search license (per GB ingested/searched) | Treat like CW Logs StartQuery |
+| `use_pagerduty` | **FREE** | PagerDuty API (rate limited, not per-call billed) | Track count only |
+| `shell` | **CAUTION** | May invoke `aws`, `az`, `kubectl` — untracked by Layers 1–3 | Log commands, warn if aws/az detected |
+| `subagent` | **PAID** | Counts toward agent-seconds billing ($0.0083/sec) | Track spawns, enforce total time |
+| `fs_read`, `fs_write`, `fs_tree` | **FREE** | Local file I/O | No guardrail needed |
+| `datetime` | **FREE** | Internal state ops | No guardrail needed |
+| `write_scratchpad`, `read_scratchpad` | **FREE** | Internal state (may not be available in all environments) | No guardrail needed |
+| `read_memories` | **FREE** | Internal memory recall | No guardrail needed |
 
-If it is not available, ask the user:
-> "I need to know which region your DevOps Agent is deployed in to calculate cross-region data transfer costs. Which region is your Agent Space in?"
+### PromQL-Specific Controls
 
-**Common mistake:** assuming workload region = Agent Space region. Always verify both independently.
+`get_prometheus_metrics` deserves special handling because:
 
-You MUST NOT:
-- Invent or assume a time window if the user didn't provide one (e.g., do NOT default to "last 1 hour")
-- Assume or default any region for rate lookups — if a region cannot be derived from an ARN, alarm, or resource ID, use the worst-case/fallback estimate and ask the user to confirm the region
+- Cost = (number of series returned) × (number of datapoints per series) / 1000 × $0.01
+- Maximum 500 series per query — a broad query hitting the cap costs ~$0.005 per period
+- Range queries with small `step` multiply cost: `7d / 60s step = 10,080 datapoints × 500 series = 5M metrics`
 
-When inputs are missing (region, log group, or time window), do NOT stop at open-ended questions. Still produce the Step 4 visual plan with worst-case or fallback estimates (flagged ⚠️) and an explicit decision, then list what the user should provide. A missing time window always results in 🚫 CANCEL.
+**Before each PromQL call:**
 
-On failure: show the worst-case plan and CANCEL decision, then ask the user to clarify what service, resource, region, or time window is affected.
+```text
+estimated_metrics = min(500, estimated_series) × (time_range_seconds / step_seconds)
+estimated_cost = (estimated_metrics / 1000) * 0.01
 
-## Step 2: Fetch actual data volume
-
-You MUST query real data. Do NOT estimate without API calls.
-
-**CRITICAL**: You MUST use the AWS Pricing API to get the correct per-unit rate for the workload region. Do NOT hardcode $0.005/GB — rates vary by region. See [references/pricing-reference.md](references/pricing-reference.md) for exact API calls and region prefix mapping. If the Pricing API fails, fall back to the floor estimates in that file and flag with ⚠️.
-
-**CRITICAL**: If a time window is provided (even a broad one like "last 60 days"), you MUST use Path A. Path B is ONLY for when no time window is provided at all.
-
-### CloudWatch Logs Insights cost
-
-#### Path A: Time window provided (any duration)
-
-You MUST query the IncomingBytes CloudWatch metric for the exact time window:
-
-```bash
-aws cloudwatch get-metric-statistics \
-  --namespace "AWS/Logs" \
-  --metric-name "IncomingBytes" \
-  --dimensions Name=LogGroupName,Value="<LOG_GROUP_NAME>" \
-  --start-time "<START>" \
-  --end-time "<END>" \
-  --period <WINDOW_SECONDS> \
-  --statistics Sum \
-  --region <workload_region>
+if estimated_cost > $0.50:
+    ⚠️ WARN — suggest narrower time range, larger step, or label filters
+if estimated_cost > $2.00:
+    🚫 HALT — require approval or suggest aggregation (sum, topk, avg)
 ```
 
-Calculate: `scan_gb = Sum / 1e9` → `cost = scan_gb × regional_rate`  (use 1e9 = GB, matching AWS billing — NOT 1024³, which is GiB and under-counts ~7%)
+**Cost reduction for PromQL:**
 
-#### Path B: No time window provided
+- Use `sum by (label)` to reduce series count
+- Use `topk(N, ...)` to cap returned series
+- Increase `step` (300s instead of 60s = 5× cheaper)
+- Narrow time range (1h instead of 7d = 168× cheaper)
 
-You MUST query describe-log-groups to get total storedBytes (worst case):
+---
 
-```bash
-aws logs describe-log-groups \
-  --log-group-name-prefix "<PREFIX>" \
-  --region <workload_region>
+## Layer 1: Heuristic Classification
+
+Before making ANY `use_aws` call, classify the operation using these rules IN ORDER:
+
+### Rule 1: FREE by default — Metadata operations
+
+An operation is FREE if it matches ALL of these:
+
+- Verb is: `Describe`, `List`, `Get`, `Lookup`, `Check`, `Validate`, `Tag`, `Untag`
+- It returns metadata/configuration (not data content or query results)
+- It does NOT scan, process, or transform customer data
+
+**Examples:** `DescribeInstances`, `ListFunctions`, `GetRole`, `LookupEvents`
+
+> ⚠️ **Exception:** Some services charge per-request even for Get/List operations. Layer 2 overrides this heuristic for: **S3** ($0.0004/1K GET, $0.005/1K LIST), **SQS** ($0.40/1M requests after free tier), **Lambda Invoke** ($0.20/1M). When Layer 2 has an entry, it takes precedence over Rule 1.
+
+> ⚠️ **Tool policy can override cost classification.** Some operations classified as FREE here (e.g., `cloudtrail:LookupEvents`) may be blocked by tool policy in certain environments. If an operation is denied, it costs $0.00 (never executed) — proceed with alternatives.
+
+### Rule 2: PAID — Data-scanning operations
+
+An operation is PAID if it matches ANY of these patterns:
+
+| Pattern | Why It Costs Money | Examples |
+|---|---|---|
+| Verb contains `Query` or `Search` | Scans indexed data | `StartQuery`, `Search`, `StartQueryExecution` |
+| Verb contains `Scan` | Full table/index scan | `Scan` (DynamoDB), `StartScan` |
+| Verb contains `Execute` + processes data | Runs a computation | `StartQueryExecution` (Athena), `ExecuteStatement` |
+| Verb contains `Invoke` + runs workload | Triggers compute | `InvokeEndpoint` (SageMaker), `Invoke` (Lambda) |
+| Operation reads **content** (not metadata) | Data transfer | `GetObject` (S3, large), `GetLogEvents` (bulk), `BatchGetTraces` |
+| Operation starts a **streaming session** | Per-time billing | `StartLiveTail`, `SubscribeToShard` |
+| Operation name contains `Insights` | Analytics processing | `GetContributorInsights`, `StartQuery` |
+
+### Rule 3: CAUTION — High-volume free operations
+
+An operation is FREE but CAUTION if:
+
+- It's a paginated List/Describe that could return thousands of results
+- It has no built-in limit and the scope is broad (e.g., all resources in a region)
+
+**Examples:** `ListObjectsV2` (large bucket), `ListMetrics` (unfiltered), `DescribeTasks` (large cluster)
+
+### Rule 4: UNKNOWN — Cannot classify
+
+If an operation doesn't clearly fit Rules 1–3:
+
+- Treat as **CAUTION** (proceed but track)
+- After execution, check response for metered fields (see Layer 3)
+- If metered: add to the known-paid list for this session
+
+---
+
+## Layer 2: Known-Paid Registry
+
+These operations have **confirmed pricing** with estimation formulas. This list is extensible — operators can add entries.
+
+### Confirmed Paid Operations
+
+| Service | Operation | Cost Formula | Estimation Method |
+|---|---|---|---|
+| CloudWatch Logs | `StartQuery` | $0.005/GB scanned | Query `IncomingBytes` metric for time window |
+| CloudWatch Logs | `StartLiveTail` | $0.01/minute | Duration-based |
+| CloudWatch | `GetMetricData` | $0.01/1,000 metrics×periods | Count metrics and periods |
+| CloudWatch | `get_prometheus_metrics` | $0.01/1,000 metrics×periods | Count series × (range/step) |
+| X-Ray | `GetTraceSummaries` | $0.50/1M traces | Paginate or sample to estimate count |
+| X-Ray | `BatchGetTraces` | $0.50/1M traces | Count trace IDs in request |
+| Athena | `StartQueryExecution` | $5.00/TB scanned | Check table metadata; require `WHERE` clause |
+| DynamoDB | `Scan` | RCU consumed (~$0.25/1M RCU) | Check `TableSizeBytes`; BLOCK unless user approves |
+| DynamoDB | `Query` (broad) | RCU consumed | Check `ItemCount`; warn if > 10K items |
+| S3 | `GetObject` | $0.0004/1,000 requests + $0.09/GB transfer | Count requests; flag if cross-region or >100MB |
+| S3 | `ListObjectsV2`, `ListObjects` | $0.005/1,000 requests | Count calls; warn if paginating heavily |
+| S3 | `PutObject`, `CopyObject` | $0.005/1,000 requests | Count calls |
+| S3 | `SelectObjectContent` | $0.002/GB scanned + $0.0007/GB returned | Check object size |
+| Resource Explorer | `Search` | $0.01/query (after 1000 free/month) | Count calls |
+| SageMaker | `InvokeEndpoint` | Instance-dependent | BLOCK — require explicit approval |
+| Kinesis | `GetRecords` | $0.015/1M records | Estimate from shard count × duration |
+| CloudWatch | Contributor Insights | $0.02/rule/1K events | Count rules and event volume |
+| SQS | All operations | $0.40/1M requests (first 1M free/month) | Count total SQS calls; usually negligible |
+| Lambda | `Invoke` | $0.20/1M requests + compute ($0.0000166667/GB-sec) | BLOCK unless user explicitly requests function execution |
+
+> ℹ️ **Rates are baseline published figures and may vary by region.** The regional rate may be higher, so a rate-based estimate is a lower bound. Treat any estimate within 20% of the remaining budget as exceeding it.
+
+---
+
+## Layer 3: Response Validation
+
+After ANY operation executes, check the response for metered fields:
+
+### Metered Response Fields (indicates cost was incurred)
+
+| Field Pattern | Meaning | Action |
+|---|---|---|
+| `BytesScanned`, `DataScanned` | Data scanning charge | Record GB scanned, add to running cost |
+| `RecordsProcessed`, `ItemCount` | Record processing | Record count, estimate RCU/cost |
+| `QueryExecutionId` + `DataScannedInBytes` | Athena scan | Add to cost at $5/TB |
+| `TracesProcessedCount` | X-Ray processing | Add to cost at $0.50/1M |
+| `ConsumedCapacity` | DynamoDB RCU/WCU | Add to cost at $0.25/1M RCU |
+| `ContentLength` > 100MB | Large object fetch | Flag for transfer cost |
+| `NextToken` after 10+ pages | Pagination runaway | Trigger volume guardrail |
+| `warnings` containing "500 series" | PromQL truncation | Flag max-cost query, suggest narrowing |
+
+If a previously-unclassified operation returns metered fields:
+
+1. Log it as a paid operation for this session
+2. Add the cost to the running total
+3. Warn the user: `⚠️ Discovered paid operation: <service>:<operation> cost $X.XX`
+
+---
+
+## Budget Enforcement
+
+### Per-Investigation Budget
+
+The agent MUST mentally track a running cost estimate throughout the investigation. Since write_scratchpad/read_scratchpad are not available in all environments, budget enforcement is behavioral — the agent maintains the accumulator in its context window.
+
+**At investigation start:**
+
+```text
+Budget: $10.00
+Running cost: $0.00
+Call counts: {}
 ```
 
-Calculate: `scan_gb = storedBytes / 1e9` → `cost = scan_gb × regional_rate`  (1e9 = GB, matching AWS billing)
+**Before each PAID operation:**
 
-### CloudWatch GetMetricData cost
-
-You MUST count the number of metrics and periods the investigation would request:
-
-```
-metrics_cost = (num_metrics × num_periods) / 1000 × regional_rate
-```
-
-For example: 4 metrics × 60 periods = 240 metric requests → $0.0024
-
-### X-Ray cost (if applicable)
-
-If the investigation would scan X-Ray traces, you MUST estimate:
-
-```
-xray_cost = estimated_traces / 1,000,000 × regional_rate
+```text
+estimated_cost = estimate(operation)
+if running_cost + estimated_cost > budget:
+    🚫 HALT — show budget display
+else:
+    proceed
+    # After execution:
+    running_cost += actual_cost (from response fields or estimation)
+    call_counts[service] += 1
 ```
 
-If X-Ray is not configured or not relevant, show $0.00 in the visual plan.
+**Volume guardrails:**
 
-#### X-Ray trace count estimation
-
-To estimate trace count for a time window:
-
-```bash
-aws xray get-trace-summaries \
-  --start-time <START> \
-  --end-time <END> \
-  --region <workload_region>
+```text
+if call_counts[any_service] > 200: ⚠️ WARN
+if call_counts[any_service] > 500: 🚫 HALT
+if sum(all_call_counts) > 1000: 🚫 HALT
 ```
 
-**Preferred (precise):** paginate `get-trace-summaries` over the FULL window (follow `NextToken`) and sum `TracesProcessedCount`. This is the exact count of traces the investigation would scan — no extrapolation needed. Note: `get-trace-summaries` is itself a billable trace-fetch call, so this estimation has a small X-Ray cost of its own.
+> ℹ️ If `write_scratchpad` becomes available in your environment, use it for persistent state across subagent boundaries. Check with: `search_user_tools("scratchpad")`. If found, store `{budget, running_cost, call_counts}` as JSON.
 
-**Fallback (only for very large windows, less precise):** query a representative sample window and extrapolate `total_traces = (sample_count / sample_minutes) × total_minutes`. Trace volume is bursty, so flag this with ⚠️: "Trace count extrapolated from sample — actual may vary." Prefer the longest sample you can afford (not 5 min) to reduce error.
+### Budget Display (on halt)
 
-If X-Ray returns 0 traces, the service may not have tracing enabled — show $0.00 and note "X-Ray not configured or no traces in window".
+```text
+📋 INVESTIGATION BUDGET STATUS
+═══════════════════════════════════════════════════════════
+Budget:      $10.00
+Spent:       $X.XX (Y paid operations)
+Free calls:  Z operations (no cost)
+PromQL:      X,XXX metrics×periods consumed ($X.XX)
+Next op:     <service>:<operation> — estimated $X.XX
+Projected:   $X.XX (exceeds budget by $X.XX)
 
-### CloudTrail cost (if applicable)
-
-**CloudTrail LookupEvents — FREE.** The standard `cloudtrail:LookupEvents` API (last 90 days of management events) has no cost. Investigations use only this — show it in the visual plan as `$0.00 — free` and do NOT estimate it.
-
-#### CloudTrail limitations (platform may block LookupEvents)
-
-⚠️ **Known issue:** the agent platform may block `cloudtrail:LookupEvents`. If this happens:
-
-1. Show it in the visual plan:
-   ```
-   ⚠️ CloudTrail LookupEvents — BLOCKED BY PLATFORM
-      → Cannot estimate CloudTrail activity
-      → "What changed?" analysis will be unavailable
-   ```
-2. Inform the user:
-   > "I won't be able to check what infrastructure changes occurred because CloudTrail access is blocked. The investigation will proceed without change analysis."
-3. Do NOT fail the entire cost estimation — `LookupEvents` is free anyway ($0.00), so a block has no cost impact.
-
-### CloudWatch Contributor Insights (if applicable)
-
-If the investigation would use Contributor Insights rules:
-
-```
-contributor_insights_cost = num_rules × (matching_events / 1000) × regional_rate
+🚫 HALTED — would exceed $10.00 budget.
+💡 Options:
+  → Approve additional $X.XX to continue
+  → Narrow the time window to reduce scan volume
+  → Skip this operation and continue with free alternatives
+  → End investigation with findings so far
 ```
 
-### CloudWatch Live Tail (if applicable)
+---
 
-If the investigation would use Live Tail to stream logs in real time:
+## Time Window Enforcement
 
-```
-live_tail_cost = session_minutes × regional_rate
-```
+For ANY operation classified as PAID that scans data over a time range:
 
-### Free APIs (include in visual plan with $0.00)
+| Scenario | Action |
+|---|---|
+| User provided time window | ✅ Use it — estimate cost for that window |
+| No time window, operation scans data | 🚫 CANCEL — show worst-case cost, ask for window |
+| No time window, operation is bounded (single resource lookup) | ✅ Proceed — no scan involved |
 
-The following APIs have no cost but you MUST still show them in the visual plan for transparency:
-- `CloudWatch Logs FilterLogEvents` — free
-- `CloudTrail LookupEvents` — free
-- `EC2/ECS/RDS Describe*` calls — free
-- `CloudWatch GetMetricStatistics` — negligible ($0.01 per 1,000 requests)
+**Key distinction:** "Get me the config of Lambda X" (bounded, free) vs. "Search logs for errors" (unbounded scan, needs window).
 
-### Fallback: Permission denied
+**PromQL-specific:** Range queries without explicit start/end default to "now" which is safe. But broad label selectors (`{}` with just metric name) can hit 500 series cap — always prefer specific labels.
 
-If any CLI command fails, fall back to 5 GB per log group as a conservative estimate. You MUST flag this in the visual plan with ⚠️:
+---
 
-```
-⚠️ /aws/ecs/prod-api — ESTIMATED (no permission)
-   → Assumed: 5 GB │ Cost: $0.0250 (may be higher)
-```
+## Cross-Region Detection
 
-## Step 3: Calculate cross-region data transfer cost
+For EVERY paid operation:
 
-DevOps Agent's Agent Space is in one region, but the resources it investigates are often in other regions. Cross-region cost applies ONLY to the **result bytes returned** across regions — NOT the scanned volume. The returned size depends on the query type, so estimate `returned_data_gb` accordingly:
-
-```
-for each workload_region ≠ agent_space_region:
-    if aggregation/stats query (counts, group-by, summaries):
-        returned_data_gb ≈ small  (results are tiny — use ~1% of scan_gb, or a few MB cap)
-    elif raw-event / trace fetch (returns matching log lines or traces):
-        returned_data_gb ≈ up to 100% of the matched bytes  (use matched/returned bytes if known)
-    else (query type unknown):
-        returned_data_gb ≈ scan_gb × 0.15   # rough UPPER-BOUND heuristic — flag with ⚠️
-    data_transfer_cost += returned_data_gb × $0.02/GB
+```text
+if target_region ≠ agent_space_region:
+    estimated_return_size = estimate_return_bytes(operation_type)
+    transfer_cost = estimated_return_size × $0.02/GB
+    total_estimate += transfer_cost
+    flag: "⚠️ Cross-region transfer: <target> → <agent_space>"
 ```
 
-Prefer the actual returned-result size when the query type is known (aggregations return almost nothing; raw fetches can return a large share). The 0.15 factor is only a fallback when the query shape is unknown — label it ⚠️ as an upper-bound estimate, not a precise figure.
+Return size heuristics:
 
-If a region matches the Agent Space region: no transfer cost for that region.
-If all resources are in the Agent Space region: total data transfer cost = $0.00.
+- Aggregation queries (stats, count, group-by): ~KB (negligible)
+- PromQL with aggregation (sum, topk): ~KB (negligible)
+- PromQL range query (500 series × 10K points): ~50MB (flag ⚠️)
+- Raw log/trace fetches: up to 100% of matched bytes
+- Describe/List results: ~KB (negligible)
+- Unknown: use 15% of scan volume as upper bound, flag ⚠️
 
-## Step 4: Show the visual investigation plan
+---
 
-You MUST present the visual plan to the user before the decision gate.
+## Cost Reduction Suggestions
 
-**You MUST always render this plan and an explicit decision, even when required inputs are missing or AWS credentials are unavailable.** If you cannot query real data (no credentials, permission denied, or the region/log group is unknown), still produce the plan using worst-case `storedBytes` or the 5 GB-per-log-group fallback, flag those lines with ⚠️, and state the decision. Do NOT replace the plan with open-ended clarifying questions: show the plan and the decision first, then list what is missing. When no time window is provided, the decision is always 🚫 CANCEL (show the worst-case plan and say "CANCELLED — no time window").
+When halting or warning, ALWAYS suggest free or cheaper alternatives:
 
-You MUST show:
-- Every step the agent would take (even if cost = $0)
-- Exact GB and exact cost per step
-- Running total, threshold, and decision
-- Cross-region transfer step with both regions labeled (if applicable)
-- ⚠️ flag on any fallback estimates
+### Generic Alternatives (apply to any service)
 
-See [references/example-output.md](references/example-output.md) for format examples.
+| Pattern | Free/Cheaper Alternative |
+|---|---|
+| Broad time window scan | Narrow to ±30 min around the incident |
+| Multiple resource query | Target specific resource ID |
+| Full scan (DynamoDB, Athena) | Add filter/WHERE/key condition |
+| Analytics query for known string | Use free filter API (FilterLogEvents) — note: LookupEvents may be tool-policy-blocked in some environments |
+| Cross-region operation | Suggest user run from workload region |
+| Large object fetch | Use SelectObjectContent with SQL filter |
+| Pagination explosion | Add limit, filter, or narrower scope |
+| Broad PromQL (no label filters) | Add specific label matchers or use aggregation |
+| PromQL small step (60s over 7d) | Increase to 300s+ or reduce time range |
 
-## Step 5: Decision gate
+### Service-Specific Alternatives
 
-You MUST apply these rules strictly:
+| Instead of... | Use... | Savings |
+|---|---|---|
+| `logs:StartQuery` | `logs:FilterLogEvents` (if searching for known string) | 100% |
+| `cloudwatch:GetMetricData` (many) | `cloudwatch:GetMetricStatistics` (single) | ~100% |
+| `get_prometheus_metrics` (broad) | Add `sum by (label)` or `topk(5, ...)` | 90%+ |
+| `dynamodb:Scan` | `dynamodb:Query` with key condition | ~100% |
+| `athena:StartQueryExecution` (full) | Add partition filter in `WHERE` | 90%+ |
+| `xray:GetTraceSummaries` (broad) | Narrow time + add filter expression | 90%+ |
+| `s3:GetObject` (large) | `s3:SelectObjectContent` with SQL | Variable |
 
-| Condition | Decision | Action |
-|-----------|----------|--------|
-| No time window provided | 🚫 CANCEL | Show worst-case cost, ask for time window |
-| Time window + cost < threshold (default $10) | ✅ PROCEED | Begin investigation |
-| Time window + cost ≥ threshold | 🚫 CANCEL | Show cost, ask for operator approval or a narrower scope |
-
-On CANCEL, you MUST:
-- Show the visual plan
-- List what's missing to make it cheaper
-- Stop completely — do NOT proceed with any investigation
-
-On PROCEED, you MUST:
-- Show the visual plan
-- State: "✅ PROCEEDING — Estimated cost: $X.XX (within $Y.YY threshold)"
-
-## Step 6: Cost reduction suggestions (on cancel)
-
-You MUST provide specific, actionable suggestions:
-
-| User can provide | How it reduces cost | Estimated savings |
-|-----------------|-------------------|-------------------|
-| Exact timestamp (± 5 min) | Scans 10 min instead of all stored data | ~90%+ |
-| Specific log group name | 1 group instead of N | Up to 90% |
-| Known error message | Free FilterLogEvents instead of Logs Insights | 100% of Logs Insights cost |
-| "Skip X-Ray" / "Skip CloudTrail" | Eliminates those cost components | Variable |
-| "Same region only" | No cross-region transfer | Eliminates DT cost |
-
-## Configuration
-
-### Cost threshold
-
-The skill uses a threshold to decide proceed/cancel. Default: `$10.00` — the agent proceeds automatically when the estimate is under the threshold and cancels (requesting approval) when it is exceeded.
-
-The user can set a custom threshold for the session by saying:
-- "Set cost threshold to $1.00"
-- "Auto-approve investigations under $0.50"
-- "Set threshold to $0" (most conservative — always cancel and require approval before any paid query)
-
-Remember it for the session:
-
-| Threshold | Behavior |
-|-----------|----------|
-| $0.00 | Always show plan, always require approval before any paid query (most conservative) |
-| $10.00 (default) | Auto-proceed if under $10, cancel and request approval if exceeded |
-| Custom | Auto-proceed if under, cancel if over |
-
-To reset: "Reset cost threshold to default".
-
-The operator can also set a persistent default in the Agent Space configuration instruction (e.g., "use a cost threshold of $5 for all investigations"), which overrides the built-in $10 default. A threshold the user states in the current conversation takes precedence for that session.
-
-## Calibration guidance
-
-You MUST NOT cancel or flag when:
-- An alarm-triggered investigation has a narrow window (± 30 min) and targets a single resource — this is expected to be low-cost; run the estimation and proceed if under threshold
-- The estimated cost is $0.00 because the log group has no data in the window — proceed, there's nothing to scan
-- The user explicitly says "proceed anyway" or "I approve this cost" — respect the operator's decision
-
-You MUST cancel when:
-- No time window is provided, regardless of how small the log groups appear
-- The estimated cost exceeds the threshold (default $10) — show the plan and cancel, requesting approval or a narrower scope
-- The investigation would scan > 100 GB — flag with ⚠️ even if under threshold
-
-"Cannot determine" is valid when:
-- Log groups are encrypted and DescribeLogGroups doesn't return storedBytes
-- IncomingBytes returns empty datapoints (log group may have no data in that window — cost is $0)
-
-## References
-
-- [Pricing Reference](references/pricing-reference.md) — exact per-unit costs for all APIs
-- [Example Output](references/example-output.md) — full visual plan examples for all decision paths
-- [CloudWatch Pricing](https://aws.amazon.com/cloudwatch/pricing/)
-- [AWS Data Transfer Pricing](https://aws.amazon.com/ec2/pricing/on-demand/#Data_Transfer)
+---
