@@ -1,0 +1,7 @@
+{
+  "buckets": [
+    { "name": "app-data-prod", "region": "us-east-1" },
+    { "name": "logs-archive-prod", "region": "us-west-2" },
+    { "name": "public-assets-web", "region": "eu-west-1" }
+  ]
+}

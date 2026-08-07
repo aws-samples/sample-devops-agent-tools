@@ -1,0 +1,65 @@
+[
+  {
+    "id": "s3-resiliency-smoke-test",
+    "prompt": "Read bucket-context.json. List the bucket names and regions. No analysis needed.",
+    "expected_output": "Lists every bucket from files/bucket-context.json with its name and region exactly as defined in the file.",
+    "files": ["files/bucket-context.json"],
+    "assertions": [
+      "contains 'app-data-prod'",
+      "contains 'logs-archive-prod'",
+      "contains 'public-assets-web'",
+      "contains 'us-east-1'",
+      "contains 'region'"
+    ]
+  },
+  {
+    "id": "s3-resiliency-dimensions",
+    "prompt": "According to the skill, which resiliency dimensions does an S3 bucket review evaluate? No bucket access required.",
+    "expected_output": "Names the nine dimensions: versioning, replication, object lock, bucket policy, block public access, default encryption, ownership controls, server access logging, and static website hosting.",
+    "files": [],
+    "assertions": [
+      "contains 'versioning' or contains 'Versioning'",
+      "contains 'replication' or contains 'Replication'",
+      "contains 'Object Lock' or contains 'object lock'",
+      "contains 'Block Public Access' or contains 'public access'",
+      "contains 'encryption' or contains 'Encryption'",
+      "contains 'ownership' or contains 'Ownership'",
+      "contains 'logging' or contains 'Logging'"
+    ]
+  },
+  {
+    "id": "s3-resiliency-rating-scale",
+    "prompt": "What resiliency rating values can the skill assign to a bucket? No bucket access required.",
+    "expected_output": "Lists the rating values High, Medium, Low, and Indeterminate.",
+    "files": [],
+    "assertions": [
+      "contains 'High'",
+      "contains 'Medium'",
+      "contains 'Low'",
+      "contains 'Indeterminate'"
+    ]
+  },
+  {
+    "id": "s3-resiliency-routing",
+    "prompt": "How does the skill decide between a single-bucket review and a fleet review, and what happens for 21 or more buckets? No bucket access required.",
+    "expected_output": "Explains that routing is automatic by input count: 1 bucket is single-bucket, 2-20 is a fleet single pass, and 21+ is batched (batches of 10) with a manifest for tracking and resume.",
+    "files": [],
+    "assertions": [
+      "contains 'single' or contains 'Single'",
+      "contains 'fleet' or contains 'Fleet'",
+      "contains 'batch' or contains 'Batch'",
+      "contains 'manifest' or contains 'resume'"
+    ]
+  },
+  {
+    "id": "s3-resiliency-read-only-safety",
+    "prompt": "Is this skill safe to run against production buckets? Describe what AWS operations it performs and whether it modifies any resources or reads object data. No bucket access required.",
+    "expected_output": "States the skill is read-only: it performs only read/describe control-plane API calls, never modifies/creates/deletes resources, and never reads object data (GetObject).",
+    "files": [],
+    "assertions": [
+      "contains 'read-only' or contains 'read only' or contains 'READ ONLY'",
+      "contains 'GetObject' or contains 'object data'",
+      "contains 'never' or contains 'not'"
+    ]
+  }
+]
