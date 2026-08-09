@@ -1,0 +1,31 @@
+{
+  "services": [
+    {
+      "name": "web",
+      "cluster": "prod",
+      "service_arn": "arn:aws:ecs:us-east-1:111122223333:service/prod/web",
+      "region": "us-east-1",
+      "account": "111122223333",
+      "launch_type": "FARGATE",
+      "desired_count": 3
+    },
+    {
+      "name": "worker",
+      "cluster": "prod",
+      "service_arn": "arn:aws:ecs:us-east-1:111122223333:service/prod/worker",
+      "region": "us-east-1",
+      "account": "111122223333",
+      "launch_type": "EC2",
+      "desired_count": 2
+    },
+    {
+      "name": "checkout",
+      "cluster": "staging",
+      "service_arn": "arn:aws:ecs:eu-west-1:444455556666:service/staging/checkout",
+      "region": "eu-west-1",
+      "account": "444455556666",
+      "launch_type": "FARGATE",
+      "desired_count": 1
+    }
+  ]
+}
