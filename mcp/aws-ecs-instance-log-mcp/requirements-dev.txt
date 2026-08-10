@@ -1,0 +1,4 @@
+pytest>=7.0
+hypothesis>=6.0
+boto3>=1.26
+botocore>=1.29
