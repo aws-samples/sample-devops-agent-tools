@@ -1,0 +1,8 @@
+[
+  {"query": "Which skill would help me run an S3 bucket resiliency review? Just name it; do not run it.", "should_trigger": true},
+  {"query": "Is there a skill for auditing S3 bucket security and data protection posture? Answer yes or no with the skill name; do not execute it.", "should_trigger": true},
+  {"query": "Name the skill that checks S3 versioning, replication, encryption, and public access. Do not run any review.", "should_trigger": true},
+  {"query": "How do I reduce my S3 storage costs?", "should_trigger": false},
+  {"query": "Write a Python script that sorts a list of numbers", "should_trigger": false},
+  {"query": "What's the weather forecast for Sydney this weekend?", "should_trigger": false}
+]
