@@ -1,0 +1,37 @@
+{
+  "name": "ecs-instance-log-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for DevOps Agent to collect ECS container instance logs via SSM Automation",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "destroy": "cdk destroy"
+  },
+  "keywords": [
+    "aws",
+    "cdk",
+    "ssm",
+    "automation",
+    "mcp",
+    "devops-agent",
+    "ecs",
+    "troubleshooting"
+  ],
+  "author": "AWS",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "aws-cdk": "^2.170.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.170.0",
+    "constructs": "^10.0.0"
+  }
+}
