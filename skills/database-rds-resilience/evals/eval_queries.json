@@ -1,0 +1,12 @@
+[
+  {"query": "Assess resilience for my Aurora cluster prod-orders-1", "should_trigger": true},
+  {"query": "What is my actual RTO if I lose this region?", "should_trigger": true},
+  {"query": "Am I blocked from setting up Aurora Global Database on this cluster?", "should_trigger": true},
+  {"query": "Check my account for cross-region DR quota pressure", "should_trigger": true},
+  {"query": "Why would my snapshot restore take longer than expected?", "should_trigger": true},
+  {"query": "Will KMS throttling affect my disaster recovery restore?", "should_trigger": true},
+  {"query": "What hidden limits could break my RDS failover?", "should_trigger": true},
+  {"query": "Write me a Python function to reverse a string", "should_trigger": false},
+  {"query": "What's the weather in Seattle today?", "should_trigger": false},
+  {"query": "Translate this paragraph to French", "should_trigger": false}
+]
