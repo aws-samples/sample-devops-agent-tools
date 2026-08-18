@@ -1,0 +1,58 @@
+{
+  "skill_name": "analytics-opensearch-expertise",
+  "skill_path": "/home/genealpe/skills/analytics-opensearch-expertise",
+  "timestamp": "2026-08-12T12:02:21Z",
+  "overall_score": 0.884,
+  "overall_grade": "B",
+  "passed": true,
+  "sections": {
+    "audit": {
+      "score": 96,
+      "grade": "A",
+      "passed": true,
+      "normalized": 0.96,
+      "critical": 0,
+      "warning": 0,
+      "info": 2
+    },
+    "functional": {
+      "overall": 0.75,
+      "grade": "C",
+      "passed": true,
+      "scores": {
+        "outcome": 1.0,
+        "process": 0.0,
+        "style": 1.0,
+        "efficiency": 1.0,
+        "overall": 0.75
+      },
+      "estimated_cost": {
+        "with_skill_per_run": {
+          "input_cost": 0.0,
+          "output_cost": 0.0,
+          "total_cost": 0.0,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "without_skill_per_run": {
+          "input_cost": 0.0,
+          "output_cost": 0.0,
+          "total_cost": 0.0,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "per_eval_pair": 0.0,
+        "total_runs": 7,
+        "total_cost": 0.0,
+        "model": "sonnet",
+        "currency": "USD"
+      }
+    },
+    "trigger": {
+      "pass_rate": 1.0,
+      "grade": "A",
+      "passed": true,
+      "total_queries": 7
+    }
+  }
+}

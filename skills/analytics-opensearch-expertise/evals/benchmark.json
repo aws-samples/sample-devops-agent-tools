@@ -1,0 +1,828 @@
+{
+  "skill_name": "analytics-opensearch-expertise",
+  "skill_path": "/home/genealpe/skills/analytics-opensearch-expertise",
+  "eval_count": 7,
+  "runs_per_eval": 1,
+  "metadata": {
+    "timestamp": "2026-08-12T11:58:36Z"
+  },
+  "runs": [
+    {
+      "eval_id": "opensearch-health-categories",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "opensearch-health-categories",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'Cluster Health' or contains 'cluster health'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'cluster health' \u2014 Substring found: 'cluster health'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Storage' or contains 'Shard'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'storage' \u2014 Substring found: 'storage'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Performance' or contains 'performance'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'performance' \u2014 Substring found: 'performance'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Security' or contains 'security'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'security' \u2014 Substring found: 'security'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Cost' or contains 'cost'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'cost' \u2014 Substring found: 'cost'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 15.636458222026704
+        },
+        "raw_output": "> The five assessment categories are:\n\n1. Cluster Health & Configuration \u2014 cluster status, node count/AZ balance, dedicated masters, engine version and upgrade eligibility\n2. Storage & Shard Strategy \u2014 EBS configuration, shard count/density, active vs. total shards, free storage space\n3. Performance Metrics \u2014 JVM memory pressure, CPU, search/indexing latency and rates, HTTP errors, cluster status history\n4. Security & Access \u2014 encryption at rest, node-to-node encryption, HTTPS enforcement, network exposure, access policy, fine-grained access control\n5. Cost Optimization Signals \u2014 instance right-sizing, storage tiering (UltraWarm/cold), reserved instance coverage"
+      },
+      "without_skill": {
+        "eval_id": "opensearch-health-categories",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'Cluster Health' or contains 'cluster health'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'cluster health': Substring not found: 'cluster health'; contains 'cluster health': Substring not found: 'cluster health'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Storage' or contains 'Shard'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'storage': Substring not found: 'storage'; contains 'shard': Substring not found: 'shard'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Performance' or contains 'performance'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'performance': Substring not found: 'performance'; contains 'performance': Substring not found: 'performance'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Security' or contains 'security'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'security': Substring not found: 'security'; contains 'security': Substring not found: 'security'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Cost' or contains 'cost'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'cost': Substring not found: 'cost'; contains 'cost': Substring not found: 'cost'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 16.34111326900893
+        },
+        "raw_output": "> I don't have a skill that assesses OpenSearch domains. The skills available to me right now are:\n\n- **2x2 Note Collector** \u2014 captures/categorizes notes for your bi-weekly 2x2 report\n- **DLS Program Manager** \u2014 Analytics TFC Data Learning Series program management\n- **artifactory-design** \u2014 HTML artifact design guidance\n\nNone of them define assessment categories for an OpenSearch domain, so I can't quote the five categories without inventing them. If you have an OpenSearch review/assessment skill (e.g., a SKILL.md in ~/.kiro/skills/), point me to its path or drop it in, and I'll list the categories exactly as written."
+      },
+      "delta_pass_rate": 1.0
+    },
+    {
+      "eval_id": "opensearch-required-apis",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "opensearch-required-apis",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'DescribeDomain'",
+            "passed": true,
+            "evidence": "Substring found: 'describedomain'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'DescribeDomainHealth'",
+            "passed": true,
+            "evidence": "Substring found: 'describedomainhealth'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'GetCompatibleVersions'",
+            "passed": true,
+            "evidence": "Substring found: 'getcompatibleversions'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'DescribeReservedInstances'",
+            "passed": true,
+            "evidence": "Substring found: 'describereservedinstances'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'ListDomainNames'",
+            "passed": true,
+            "evidence": "Substring found: 'listdomainnames'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'GetMetricData'",
+            "passed": true,
+            "evidence": "Substring found: 'getmetricdata'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 18.775910616008332
+        },
+        "raw_output": "> From the skill's prerequisites, it needs these read-only IAM permissions:\n\n- es:DescribeDomain \u2014 domain configuration (cluster config, EBS, security options)\n- es:DescribeDomainHealth \u2014 cluster status, shard counts\n- es:GetCompatibleVersions \u2014 upgrade eligibility\n- es:DescribeReservedInstances \u2014 RI coverage\n- es:ListDomainNames \u2014 target resolution / domain discovery\n- cloudwatch:GetMetricData \u2014 performance and storage metrics (namespace AWS/ES)\n\nA few practical notes from the skill:\n\n- Legacy API names: in DevOps Agent tooling the skill tries the legacy Elasticsearch-compatible operations first \u2014 DescribeElasticsearchDomain, ListElasticsearchVersions, GetCompatibleElasticsearchVersions, DescribeReservedElasticsearchInstances \u2014 falling back to the modern names. A broad es:Describe* + es:List* grant covers both namings.\n- Get* actions may be denied under a Describe/List-only policy \u2014 the skill has a built-in fallback for that: it derives upgrade candidates from es:ListVersions instead of GetCompatibleVersions, so 1.4 still runs.\n- Everything is control-plane only \u2014 no data-plane (cluster endpoint) access is required."
+      },
+      "without_skill": {
+        "eval_id": "opensearch-required-apis",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'DescribeDomain'",
+            "passed": false,
+            "evidence": "Substring not found: 'describedomain'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'DescribeDomainHealth'",
+            "passed": false,
+            "evidence": "Substring not found: 'describedomainhealth'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'GetCompatibleVersions'",
+            "passed": false,
+            "evidence": "Substring not found: 'getcompatibleversions'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'DescribeReservedInstances'",
+            "passed": false,
+            "evidence": "Substring not found: 'describereservedinstances'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'ListDomainNames'",
+            "passed": false,
+            "evidence": "Substring not found: 'listdomainnames'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'GetMetricData'",
+            "passed": false,
+            "evidence": "Substring not found: 'getmetricdata'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 16.426152881002054
+        },
+        "raw_output": "> None. The 2x2 Note Collector skill doesn't touch AWS at all \u2014 it needs no AWS APIs, credentials, or IAM permissions.\n\nEverything it does runs through:\n- Local filesystem \u2014 reading/writing JSON and markdown under /local/home/genealpe/obsidian-vault/2x2_notes/\n- Outlook MCP tools \u2014 calendar_view, email_folders, email_search (authenticated via your Microsoft 365 identity, not IAM)\n- Slack MCP tools \u2014 search, get_messages (Slack token, not IAM)\n\nSo there's no IAM policy to scope or read-only role to configure for it."
+      },
+      "delta_pass_rate": 1.0
+    },
+    {
+      "eval_id": "opensearch-arn-parsing",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "opensearch-arn-parsing",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'region'",
+            "passed": true,
+            "evidence": "Substring found: 'region'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'account'",
+            "passed": true,
+            "evidence": "Substring found: 'account'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'domain'",
+            "passed": true,
+            "evidence": "Substring found: 'domain'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /field|segment|position|part|colon/",
+            "passed": true,
+            "evidence": "Regex /field|segment|position|part|colon/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 21.15945057402132
+        },
+        "raw_output": "> An OpenSearch domain ARN is a colon-delimited string with six fields:\n\narn:aws:es:us-west-2:123456789012:domain/my-domain\n 1   2   3     4          5              6\n\n\nSplitting on ::\n\n- **Field 4 \u2192 Region** \u2014 e.g., us-west-2\n- **Field 5 \u2192 Account ID** \u2014 e.g., 123456789012\n- **Field 6 \u2192 Domain name** \u2014 the last field is domain/my-domain; the skill takes everything after the domain/ prefix, yielding my-domain\n\nEquivalent shell one-liner:\n\nbash\nARN=\"arn:aws:es:us-west-2:123456789012:domain/my-domain\"\nREGION=$(echo \"$ARN\" | cut -d: -f4)\nACCOUNT=$(echo \"$ARN\" | cut -d: -f5)\nDOMAIN=$(echo \"$ARN\" | cut -d: -f6 | sed 's|^domain/||')\n\n\nTwo things worth noting:\n\n- The service field (field 3) is es, not opensearch \u2014 Amazon OpenSearch Service kept the legacy Elasticsearch ARN namespace, which is also why the skill tries legacy API names like describe_elasticsearch_domain first.\n- After parsing, the skill doesn't trust the ARN blindly: it runs DescribeDomain to confirm the domain actually exists in that region. If it doesn't resolve, it searches for candidates via ListDomainNames (same region, then others) and stops to ask you which domain to assess rather than substituting a similar-looking one."
+      },
+      "without_skill": {
+        "eval_id": "opensearch-arn-parsing",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'region'",
+            "passed": true,
+            "evidence": "Substring found: 'region'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'account'",
+            "passed": true,
+            "evidence": "Substring found: 'account'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'domain'",
+            "passed": true,
+            "evidence": "Substring found: 'domain'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "matches regex /field|segment|position|part|colon/",
+            "passed": true,
+            "evidence": "Regex /field|segment|position|part|colon/ matched",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "Without skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 37.29119509001612
+        },
+        "raw_output": "Reading directory: /home/genealpe/.kiro/skills (using tool: read, max depth: 1, max entries: 1000, excluding: defaults)> I couldn't verify which skill you mean \u2014 none of the skills loaded in my context (2x2-note-collector, dls-program-manager, artifactory-design) take a domain ARN, and I was blocked from listing your skills directory to find it. So here's how domain ARN parsing works generically, which is almost certainly what the skill does since ARNs have a fixed structure:\n\nAn ARN has six colon-delimited parts:\n\narn:partition:service:region:account-id:resource\n\n\nFor example, an OpenSearch domain ARN:\n\narn:aws:es:us-west-2:123456789012:domain/my-search-domain\n\n\nParsing is a simple split on : (limited to 6 parts, since the resource segment can itself contain colons):\n\n- **Index 0** \u2014 literal arn (validation check)\n- **Index 1** \u2014 partition (aws, aws-cn, aws-us-gov)\n- **Index 2** \u2014 service (es, sagemaker, datazone, etc. \u2014 often validated to confirm it's actually a domain ARN)\n- **Index 3** \u2014 region \u2192 us-west-2\n- **Index 4** \u2014 account ID \u2192 123456789012\n- **Index 5** \u2014 resource \u2192 domain/my-search-domain\n\nThe resource segment then gets a second split on / (or a prefix strip of domain/), and the last component is the domain name \u2192 my-search-domain. Some services use : as the resource separator instead (domain:my-domain), so robust parsers handle both.\n\nIn Python this is typically:\n\npython\nparts = arn.split(\":\", 5)          # ['arn', 'aws', 'es', 'us-west-2', '123456789012', 'domain/my-search-domain']\nregion, account_id = parts[3], parts[4]\ndomain_name = parts[5].split(\"/\", 1)[1]\n\n\nNo AWS call is needed \u2014 everything is derived purely from the string. Typical validation before parsing: check it starts with arn:, has exactly 6 segments, and that the service segment matches the expected one; otherwise fail fast with a clear error rather than passing garbage downstream.\n\nIf you point me at the actual skill file (or paste its path so it's approved for reading), I can confirm "
+      },
+      "delta_pass_rate": 0.0
+    },
+    {
+      "eval_id": "opensearch-jvm-thresholds",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "opensearch-jvm-thresholds",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains '92'",
+            "passed": true,
+            "evidence": "Substring found: '92'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains '80'",
+            "passed": true,
+            "evidence": "Substring found: '80'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains '70'",
+            "passed": true,
+            "evidence": "Substring found: '70'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 16.653900267992867
+        },
+        "raw_output": "> From check 3.1, using the Maximum statistic over the last 24 hours (Average is context only, never used for the verdict):\n\n| Threshold (Max JVMMemoryPressure) | Severity |\n|---|---|\n| > 92% | \ud83d\udd34 Critical \u2014 risk of circuit breaker trips and OOM; scale up instance type or reduce shard count |\n| > 80% | \u26a0\ufe0f Warning \u2014 approaching GC thrashing threshold |\n| > 70% | \u2139\ufe0f Informational \u2014 moderate pressure, monitor trend |\n| \u2264 70% | \u2705 Pass |"
+      },
+      "without_skill": {
+        "eval_id": "opensearch-jvm-thresholds",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains '92'",
+            "passed": false,
+            "evidence": "Substring not found: '92'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains '80'",
+            "passed": false,
+            "evidence": "Substring not found: '80'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains '70'",
+            "passed": false,
+            "evidence": "Substring not found: '70'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 39.65035667401389
+        },
+        "raw_output": "Reading directory: /home/genealpe/.kiro/skills (using tool: read, max depth: 0, max entries: 1000, excluding: defaults)Searching for: JVM Memory Pressure in /home/genealpe/.kiro/skills (using tool: grep)> I can't verify this from the skill file \u2014 the skills loaded in my context (2x2 Note Collector, DLS Program Manager, artifactory-design) don't contain any JVM Memory Pressure thresholds, and my attempts to read other skill files in ~/.kiro/skills/ were blocked in this non-interactive session.\n\nIf you're referring to an OpenSearch/Elasticsearch diagnostics skill, the conventional thresholds it would likely use are:\n\n- Below 75% \u2014 healthy / OK\n- 75\u201390% \u2014 warning (GC pressure building; AWS docs flag sustained >75% as a concern)\n- Above 90% (sometimes 85%) \u2014 critical (risk of ClusterBlockException, rejected writes, OOM)\n\nBut those are industry defaults, not confirmed values from the skill itself. If you can paste the skill file or run this in an interactive session where I can read it, I'll give you the exact thresholds and severity mappings it defines."
+      },
+      "delta_pass_rate": 1.0
+    },
+    {
+      "eval_id": "opensearch-shard-density",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "opensearch-shard-density",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains '25'",
+            "passed": true,
+            "evidence": "Substring found: '25'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains '1,000' or contains '1000'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains '1,000' \u2014 Substring found: '1,000'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains '16'",
+            "passed": true,
+            "evidence": "Substring found: '16'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'heap'",
+            "passed": true,
+            "evidence": "Substring found: 'heap'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 22.428889152011834
+        },
+        "raw_output": "> From the skill's check 2.2 (Shard Count & Density):\n\nBest-practice threshold: 25 shards per GiB of JVM heap per node \u2014 computed as bp_limit = 25 \u00d7 heap_GiB, where per-node heap is estimated from the data node instance type as heap_GiB \u2248 min(32, instance_RAM_GiB / 2). For example, an r6g.xlarge.search (32 GiB RAM \u2192 ~16 GiB heap) gets a best-practice limit of ~400 shards/node, while a t3.medium.search (4 GiB RAM \u2192 ~2 GiB heap) gets ~50 shards/node.\n\nPer-engine-version hard limits:\n- OpenSearch \u2264 2.15: 1,000 shards per node\n- OpenSearch 2.17+: 1,000 shards per 16 GiB of data node heap\n\nVerdict tiers applied against those limits (based on shards_per_node = TotalShards / InstanceCount):\n- \ud83d\udd34 exceeds the hard limit for the engine version\n- \ud83d\udd34 more than 4\u00d7 the best-practice limit\n- \u26a0\ufe0f above the best-practice limit\n- \u2139\ufe0f above 0.5\u00d7 the best-practice limit (monitor heap pressure)\n- \u2705 at or below half the best-practice limit \u2014 treated as a pass, not a finding"
+      },
+      "without_skill": {
+        "eval_id": "opensearch-shard-density",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains '25'",
+            "passed": true,
+            "evidence": "Substring found: '25'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains '1,000' or contains '1000'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains '1,000' \u2014 Substring found: '1,000'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains '16'",
+            "passed": false,
+            "evidence": "Substring not found: '16'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'heap'",
+            "passed": true,
+            "evidence": "Substring found: 'heap'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.75,
+        "summary": "Without skill: 75% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 39.88825350199477
+        },
+        "raw_output": "Reading directory: /home/genealpe/.kiro/skills (using tool: read, max depth: 1, max entries: 1000, excluding: defaults)Searching for: shard density|shards per GB|shard-density in /home/genealpe/.kiro/skills (using tool: grep)> I can't verify this against the skill file itself \u2014 the only skills loaded in my context are the 2x2 Note Collector, DLS Program Manager, and Artifactory Design (none cover shard analysis), and file reads outside this workspace are being blocked in non-interactive mode. So the following is the standard AWS OpenSearch guidance that such a skill would normally encode, not a quote from the skill:\n\nBest-practice shard density threshold:\n- \u2264 25 shards per GiB of JVM heap on each data node. A node with a 32 GiB heap should hold no more than ~800 shards. Exceeding this is the usual \"over-sharded\" warning condition.\n\nPer-engine-version hard limits (cluster.max_shards_per_node):\n- Elasticsearch 7.x and all OpenSearch versions: hard limit of 1,000 shards per data node. Writes that would create shards beyond this are rejected.\n- Elasticsearch 6.x and earlier: no enforced per-node shard limit (only the heap-based best practice applies).\n\nIf you can point me at the skill file from an interactive session (or paste it), I'll confirm the exact thresholds it applies rather than the general guidance."
+      },
+      "delta_pass_rate": 0.25
+    },
+    {
+      "eval_id": "opensearch-gp2-recommendation",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "opensearch-gp2-recommendation",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'gp3'",
+            "passed": true,
+            "evidence": "Substring found: 'gp3'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 15.912488804984605
+        },
+        "raw_output": "> Per check 2.1 (EBS Configuration), a gp2 volume type produces a \u26a0\ufe0f Warning:\n\n\u2502 \"Using gp2 volumes. gp3 offers better price/performance with configurable IOPS and throughput.\"\n\nSo the recommendation is to migrate to gp3. The check also reports total cluster storage as VolumeSize \u00d7 InstanceCount for context. In a full assessment, the warning would also pull in the check 2.1 entry from references/remediation-reference.md (\"Why it matters\" / \"Resolve\" steps / \"Dive deeper\" links) in the Prioritized Recommendations section."
+      },
+      "without_skill": {
+        "eval_id": "opensearch-gp2-recommendation",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'gp3'",
+            "passed": true,
+            "evidence": "Substring found: 'gp3'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "Without skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 28.89204884498031
+        },
+        "raw_output": "Searching for: gp2 in /home/genealpe/.kiro/skills (using tool: grep)> I can't verify this from a skill file \u2014 the only skills loaded in my context are the 2x2 Note Collector, DLS Program Manager, and Artifactory Design, and none of them cover EBS volume types, and my attempt to search your local skills directory was blocked in this non-interactive session.\n\nSo to answer honestly: I don't have access to the skill that contains that recommendation, and I don't want to fabricate its specific guidance.\n\nFor what it's worth, the standard best-practice recommendation (e.g., for OpenSearch/EC2 domains) when a volume is gp2 is to migrate to gp3 \u2014 it delivers a baseline of 3,000 IOPS and 125 MiB/s regardless of size, at roughly 20% lower cost per GB, and lets you provision IOPS/throughput independently of volume size. But that's general AWS knowledge, not the skill's actual wording. If you can point me to the skill file (or run this in an interactive session where I can read it), I'll give you exactly what it says."
+      },
+      "delta_pass_rate": 0.0
+    },
+    {
+      "eval_id": "opensearch-severity-markers",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "opensearch-severity-markers",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'Critical' or contains 'critical'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'critical' \u2014 Substring found: 'critical'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Warning' or contains 'warning'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'warning' \u2014 Substring found: 'warning'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Informational' or contains 'informational' or contains 'Info'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'informational' \u2014 Substring found: 'informational'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Passing' or contains 'passing' or contains 'Pass' or contains 'pass'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'pass' \u2014 Substring found: 'pass'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 19.70007075398462
+        },
+        "raw_output": "> The skill classifies every finding into one of five verdict tiers, determined strictly by which Logic line matches the observed value (never by judgment):\n\n- \ud83d\udd34 Critical (act now) \u2014 e.g., RED cluster status, shard density over the hard limit or >4\u00d7 best practice, free storage <10%, JVM pressure >92%, or the fully-compounded public-endpoint case (4.4)\n- \u26a0\ufe0f Warning (plan action) \u2014 e.g., YELLOW status, gp2 volumes, missing dedicated masters, disabled encryption/HTTPS/FGAC (deliberately capped at \u26a0\ufe0f by owner decision), any 5xx errors\n- \u2139\ufe0f Informational \u2014 context and advisory items, e.g., moderate shard density, latency spikes (3.3/3.4 are informational-only and can never render \u26a0\ufe0f/\ud83d\udd34), cost-optimization signals (5.1\u20135.3)\n- \u2705 PASS \u2014 check evaluated and within healthy bounds\n- **SKIPPED** \u2014 check could not be evaluated (API denied, no datapoints); must state the reason, never silently omitted\n\nThese roll up into the executive summary per category as the worst finding present: any \ud83d\udd34 \u2192 Critical (\ud83d\udd34), else any \u26a0\ufe0f \u2192 Warning (\ud83d\udfe1), else all \u2705/\u2139\ufe0f \u2192 Healthy (\ud83d\udfe2). The full report also includes a 24-row Check Coverage Matrix listing each check's verdict, observed value, and the threshold applied."
+      },
+      "without_skill": {
+        "eval_id": "opensearch-severity-markers",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "contains 'Critical' or contains 'critical'",
+            "passed": true,
+            "evidence": "OR satisfied by: contains 'critical' \u2014 Substring found: 'critical'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Warning' or contains 'warning'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'warning': Substring not found: 'warning'; contains 'warning': Substring not found: 'warning'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Informational' or contains 'informational' or contains 'Info'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'informational': Substring not found: 'informational'; contains 'informational': Substring not found: 'informational'; contains 'info': Substring not found: 'info'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          },
+          {
+            "text": "contains 'Passing' or contains 'passing' or contains 'Pass' or contains 'pass'",
+            "passed": false,
+            "evidence": "No OR branch satisfied \u2014 contains 'passing': Substring not found: 'passing'; contains 'passing': Substring not found: 'passing'; contains 'pass': Substring not found: 'pass'; contains 'pass': Substring not found: 'pass'",
+            "method": "deterministic",
+            "confidence": 1.0,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.25,
+        "summary": "Without skill: 25% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 23.86276526498841
+        },
+        "raw_output": "> None of the skills I have loaded matches that description. To be sure I checked what's available:\n\n- **2x2 Note Collector** \u2014 classifies notes into report sections (Highlights, Risks/Challenges, Goals Progress, Success Stories), not severity levels.\n- **DLS Program Manager** \u2014 flags 3P/compete policy issues in content review, but it's a binary flag/clear outcome, no severity markers.\n- **artifactory-design** \u2014 a design vocabulary guide for HTML artifacts; it doesn't produce findings reports at all.\n\nThere's no skill in my current setup that scans something and classifies findings by severity (e.g., Critical/High/Medium/Low) \u2014 the \"No AWS access required\" phrasing sounds like you might be thinking of an AWS security-audit or Well-Architected-review type skill, which I don't have installed.\n\nIf you can tell me which skill you mean (or where it lives, e.g., a path under ~/.kiro/skills/), I'll read it and give you the exact severity markers it uses."
+      },
+      "delta_pass_rate": 0.75
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "mean_pass_rate": 1.0,
+      "stddev_pass_rate": 0.0,
+      "mean_tokens": 0.0,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0,
+      "mean_tool_calls": 0.0
+    },
+    "without_skill": {
+      "mean_pass_rate": 0.4286,
+      "stddev_pass_rate": 0.4725,
+      "mean_tokens": 0.0,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0,
+      "mean_tool_calls": 0.0
+    },
+    "delta": {
+      "pass_rate": 0.5714,
+      "tokens": 0.0,
+      "total_tokens": 0.0,
+      "input_tokens": 0.0,
+      "tool_calls": 0.0
+    },
+    "estimated_cost": {
+      "with_skill_per_run": {
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "total_cost": 0.0,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "without_skill_per_run": {
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "total_cost": 0.0,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "per_eval_pair": 0.0,
+      "total_runs": 7,
+      "total_cost": 0.0,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "scores": {
+    "outcome": 1.0,
+    "process": 0.0,
+    "style": 1.0,
+    "efficiency": 1.0,
+    "overall": 0.75
+  },
+  "passed": true
+}

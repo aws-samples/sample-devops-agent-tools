@@ -1,0 +1,105 @@
+{
+  "skill_name": "analytics-opensearch-expertise",
+  "skill_path": "/home/genealpe/skills/analytics-opensearch-expertise",
+  "query_results": [
+    {
+      "query": "Which skill would help me assess the health of an Amazon OpenSearch domain? Just name it; do not run it.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    },
+    {
+      "query": "Is there a skill for reviewing OpenSearch cluster configuration, security posture, and cost? Answer with the skill name; do not execute it.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    },
+    {
+      "query": "Name the skill that checks OpenSearch shard density, JVM memory pressure, and encryption settings. Do not run any assessment.",
+      "should_trigger": true,
+      "trigger_count": 1,
+      "run_count": 1,
+      "trigger_rate": 1.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    },
+    {
+      "query": "Write a Python script that sorts a list of numbers",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    },
+    {
+      "query": "What's the weather forecast for Sydney this weekend?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    },
+    {
+      "query": "Create a CloudFormation template for an S3 bucket",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    },
+    {
+      "query": "Run an operational review of my EKS cluster against best practices",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 1,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 0.0,
+      "mean_output_tokens": 0.0,
+      "mean_total_tokens": 0.0
+    }
+  ],
+  "summary": {
+    "total_queries": 7,
+    "passed": 7,
+    "failed": 0,
+    "trigger_precision": 1.0,
+    "no_trigger_precision": 1.0,
+    "mean_total_tokens_per_run": 0.0,
+    "estimated_cost": {
+      "per_run": {
+        "input_cost": 0.0,
+        "output_cost": 0.0,
+        "total_cost": 0.0,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "total_runs": 7,
+      "total_cost": 0.0,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "passed": true
+}

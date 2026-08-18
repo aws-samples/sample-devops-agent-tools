@@ -1,0 +1,85 @@
+[
+  {
+    "id": "opensearch-health-categories",
+    "prompt": "According to the skill, list the five assessment categories it evaluates for an OpenSearch domain. No AWS access required.",
+    "expected_output": "Lists Cluster Health & Configuration, Storage & Shard Strategy, Performance Metrics, Security & Access, and Cost Optimization.",
+    "files": [],
+    "assertions": [
+      "contains 'Cluster Health' or contains 'cluster health'",
+      "contains 'Storage' or contains 'Shard'",
+      "contains 'Performance' or contains 'performance'",
+      "contains 'Security' or contains 'security'",
+      "contains 'Cost' or contains 'cost'"
+    ]
+  },
+  {
+    "id": "opensearch-required-apis",
+    "prompt": "Which read-only AWS APIs / IAM permissions does the skill require to run? No AWS access required.",
+    "expected_output": "Names es:DescribeDomain, es:DescribeDomainHealth, es:GetCompatibleVersions, es:DescribeReservedInstances, es:ListDomainNames, and cloudwatch:GetMetricData.",
+    "files": [],
+    "assertions": [
+      "contains 'DescribeDomain'",
+      "contains 'DescribeDomainHealth'",
+      "contains 'GetCompatibleVersions'",
+      "contains 'DescribeReservedInstances'",
+      "contains 'ListDomainNames'",
+      "contains 'GetMetricData'"
+    ]
+  },
+  {
+    "id": "opensearch-arn-parsing",
+    "prompt": "The skill's required input is a domain ARN. Explain how it parses region, account ID, and domain name from the ARN. No AWS access required.",
+    "expected_output": "States region is field 4, account ID is field 5, and domain name is the value after 'domain/' in field 6.",
+    "files": [],
+    "assertions": [
+      "contains 'region'",
+      "contains 'account'",
+      "contains 'domain'",
+      "matches regex /field|segment|position|part|colon/"
+    ]
+  },
+  {
+    "id": "opensearch-jvm-thresholds",
+    "prompt": "What JVM Memory Pressure thresholds does the skill use, and what severity does each map to? No AWS access required.",
+    "expected_output": "Max > 92% is critical (red), > 80% is warning, > 70% is informational.",
+    "files": [],
+    "assertions": [
+      "contains '92'",
+      "contains '80'",
+      "contains '70'"
+    ]
+  },
+  {
+    "id": "opensearch-shard-density",
+    "prompt": "What is the best-practice shard density threshold the skill applies, and what are the per-engine-version hard limits? No AWS access required.",
+    "expected_output": "Best practice is <= 25 shards per GiB of Java heap; hard limit is 1,000 shards/node for OpenSearch <= 2.15 and 1,000 shards per 16 GB heap for 2.17+.",
+    "files": [],
+    "assertions": [
+      "contains '25'",
+      "contains '1,000' or contains '1000'",
+      "contains '16'",
+      "contains 'heap'"
+    ]
+  },
+  {
+    "id": "opensearch-gp2-recommendation",
+    "prompt": "What does the skill recommend when a domain's EBS VolumeType is gp2? No AWS access required.",
+    "expected_output": "Recommends migrating to gp3 for better price/performance with configurable IOPS and throughput.",
+    "files": [],
+    "assertions": [
+      "contains 'gp3'"
+    ]
+  },
+  {
+    "id": "opensearch-severity-markers",
+    "prompt": "How does the skill classify findings in its report? List the severity markers it uses. No AWS access required.",
+    "expected_output": "Uses Critical, Warning, Informational, and Passing classifications (rendered with red/warning/info/check markers).",
+    "files": [],
+    "assertions": [
+      "contains 'Critical' or contains 'critical'",
+      "contains 'Warning' or contains 'warning'",
+      "contains 'Informational' or contains 'informational' or contains 'Info'",
+      "contains 'Passing' or contains 'passing' or contains 'Pass' or contains 'pass'"
+    ]
+  }
+]

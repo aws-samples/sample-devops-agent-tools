@@ -1,0 +1,9 @@
+[
+  {"query": "Which skill would help me assess the health of an Amazon OpenSearch domain? Just name it; do not run it.", "should_trigger": true},
+  {"query": "Is there a skill for reviewing OpenSearch cluster configuration, security posture, and cost? Answer with the skill name; do not execute it.", "should_trigger": true},
+  {"query": "Name the skill that checks OpenSearch shard density, JVM memory pressure, and encryption settings. Do not run any assessment.", "should_trigger": true},
+  {"query": "Write a Python script that sorts a list of numbers", "should_trigger": false},
+  {"query": "What's the weather forecast for Sydney this weekend?", "should_trigger": false},
+  {"query": "Create a CloudFormation template for an S3 bucket", "should_trigger": false},
+  {"query": "Run an operational review of my EKS cluster against best practices", "should_trigger": false}
+]
