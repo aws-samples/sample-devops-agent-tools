@@ -1,0 +1,76 @@
+{
+  "queries": [
+    {
+      "id": "trigger-bedrock-invokemodel-accessdenied",
+      "query": "Bedrock InvokeModel is returning AccessDeniedException for claude-3-5-sonnet in us-east-1",
+      "should_trigger": true,
+      "rationale": "Named AI/ML service plus an access-denied error is the primary activation case."
+    },
+    {
+      "id": "trigger-verbatim-error-string",
+      "query": "User: arn:aws:sts::111122223333:assumed-role/app-role/session is not authorized to perform: bedrock:InvokeModel on resource: arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0",
+      "should_trigger": true,
+      "rationale": "Verbatim AWS denial string for an AI/ML action; the strongest activation signal."
+    },
+    {
+      "id": "trigger-sagemaker-training-accessdenied",
+      "query": "My SageMaker training job fails with AccessDenied and I cannot tell why",
+      "should_trigger": true,
+      "rationale": "SageMaker job creation failure with a permission error."
+    },
+    {
+      "id": "trigger-passrole",
+      "query": "is not authorized to perform: iam:PassRole on resource: arn:aws:iam::111122223333:role/sagemaker-execution-role",
+      "should_trigger": true,
+      "rationale": "PassRole denial against a SageMaker execution role."
+    },
+    {
+      "id": "trigger-execution-role-s3",
+      "query": "Why can't my SageMaker execution role read from the training data bucket?",
+      "should_trigger": true,
+      "rationale": "Hop-4 downstream permission failure, phrased without the word AccessDenied."
+    },
+    {
+      "id": "no-trigger-general-iam-audit",
+      "query": "Review my IAM roles for least privilege and tell me which ones are too permissive",
+      "should_trigger": false,
+      "rationale": "Posture review with no failure to diagnose. This skill is reactive only; least-privilege auditing is a different task."
+    },
+    {
+      "id": "no-trigger-bedrock-throttling",
+      "query": "Bedrock InvokeModel is returning ThrottlingException, how do I raise my quota?",
+      "should_trigger": false,
+      "rationale": "Bedrock error but a quota problem, not an access problem. Throttling is explicitly excluded because it is commonly mistaken for a permissions issue."
+    },
+    {
+      "id": "no-trigger-s3-accessdenied-non-aiml",
+      "query": "My Lambda function gets AccessDenied writing to an S3 bucket",
+      "should_trigger": false,
+      "rationale": "Access-denied failure but no AI/ML service involved. Adjacent negative — the error class matches but the service scope does not."
+    },
+    {
+      "id": "no-trigger-policy-authoring",
+      "query": "Write me an IAM policy that allows Bedrock model invocation",
+      "should_trigger": false,
+      "rationale": "Policy authoring with no failure. Adjacent negative — mentions Bedrock and IAM but there is nothing to diagnose."
+    },
+    {
+      "id": "no-trigger-model-quality",
+      "query": "My Bedrock model responses are low quality and inconsistent, how do I improve them?",
+      "should_trigger": false,
+      "rationale": "Bedrock issue that is not access-related at all."
+    },
+    {
+      "id": "no-trigger-unsupported-aiml-service",
+      "query": "Amazon Textract is returning AccessDenied when I call AnalyzeDocument",
+      "should_trigger": false,
+      "rationale": "AI/ML access failure in a service this version does not support. Closest adjacent negative — if the skill activates here it should report unsupported rather than diagnose generically, so either outcome must be checked deliberately during manual validation."
+    },
+    {
+      "id": "no-trigger-sagemaker-endpoint-latency",
+      "query": "My SageMaker endpoint has high p99 latency during peak traffic",
+      "should_trigger": false,
+      "rationale": "SageMaker operational issue unrelated to access."
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+[
+  {
+    "id": "aiml-access-chain-hops",
+    "prompt": "According to the skill, what is the authorization chain it walks, and in what order? No AWS access required.",
+    "expected_output": "Names the six hops in order: caller action, iam:PassRole, role trust policy, role permissions, resource policy, organization SCP.",
+    "files": [],
+    "assertions": [
+      "contains 'PassRole'",
+      "contains 'trust' or contains 'Trust'",
+      "contains 'resource policy' or contains 'Resource policy'",
+      "contains 'SCP' or contains 'service control'"
+    ]
+  },
+  {
+    "id": "aiml-access-verdict-states",
+    "prompt": "What verdict states can the skill assign to a hop, and why is there no plain 'allowed' verdict? No AWS access required.",
+    "expected_output": "Names the closed vocabulary — DENIED_BY, WOULD_ALSO_DENY, ALLOWED_BUT_UNVERIFIABLE, CANNOT_DETERMINE, plus the NOT_APPLICABLE and NOT_EVALUATED markers — and explains that no verdict asserts a definitive allow because reading a policy cannot account for session policies, SCPs carrying conditions, or service-side gates outside IAM.",
+    "assertions": [
+      "contains 'DENIED_BY'",
+      "contains 'WOULD_ALSO_DENY'",
+      "contains 'ALLOWED_BUT_UNVERIFIABLE'",
+      "contains 'CANNOT_DETERMINE'",
+      "contains 'session polic' or contains 'condition' or contains 'outside IAM'"
+    ]
+  },
+  {
+    "id": "aiml-access-would-also-deny",
+    "prompt": "A SageMaker call is denied at the trust policy, and the execution role also has no S3 permissions. According to the skill, how should each hop be reported? No AWS access required.",
+    "expected_output": "Names the trust policy as the root cause and marks the later S3 hop WOULD_ALSO_DENY, stating it is a subsequent blocker rather than the current cause, so the chain table never shows a hop as allowing while its finding says it will fail.",
+    "assertions": [
+      "contains 'WOULD_ALSO_DENY'",
+      "contains 'trust'",
+      "contains 'root cause' or contains 'earliest' or contains 'subsequent'"
+    ]
+  },
+  {
+    "id": "aiml-access-evidence-precedence",
+    "prompt": "According to the skill, which evidence is primary: reading policy documents, CloudTrail, or the IAM policy simulator? What happens when they disagree? No AWS access required.",
+    "expected_output": "States that policy documents are primary and the diagnosis stands without CloudTrail or simulation, that where a policy read and simulation disagree the policy read wins, and that the single exception is AllowedByOrganizations at the SCP hop which policy reading cannot compute.",
+    "assertions": [
+      "contains 'polic' and contains 'primary' or contains 'policy read wins'",
+      "contains 'AllowedByOrganizations' or contains 'SCP'",
+      "contains 'simulat'"
+    ]
+  },
+  {
+    "id": "aiml-access-two-passrole-modes",
+    "prompt": "A SageMaker CreateTrainingJob call fails with AccessDenied. According to the skill, what are the two distinct PassRole-related failure modes and why do they need to be distinguished? No AWS access required.",
+    "expected_output": "Distinguishes the caller missing iam:PassRole from the execution role's trust policy not allowing sagemaker.amazonaws.com, and notes the fixes are in different places.",
+    "assertions": [
+      "contains 'iam:PassRole' or contains 'PassRole'",
+      "contains 'trust' or contains 'Trust'",
+      "contains 'sagemaker.amazonaws.com'"
+    ]
+  },
+  {
+    "id": "aiml-access-bedrock-non-iam-causes",
+    "prompt": "Bedrock InvokeModel returns AccessDeniedException but the caller's IAM policy allows bedrock:InvokeModel. According to the skill, what non-IAM causes should be ruled out? No AWS access required.",
+    "expected_output": "Names model access not enabled, AWS Marketplace permissions for third-party models, propagation delay, and region mismatch.",
+    "assertions": [
+      "contains 'model access' or contains 'Model access'",
+      "contains 'Marketplace' or contains 'marketplace'",
+      "contains 'propagation' or contains 'Propagation'",
+      "contains 'region' or contains 'Region'"
+    ]
+  },
+  {
+    "id": "aiml-access-explicit-vs-implicit",
+    "prompt": "According to the skill, why does it matter whether a denial is implicit or explicit? No AWS access required.",
+    "expected_output": "Explains that an explicit deny overrides all allows so adding a permission will not help, while an implicit deny is resolved by adding a scoped allow.",
+    "assertions": [
+      "contains 'explicit'",
+      "contains 'implicit'",
+      "contains 'override' or contains 'will not' or contains 'cannot'"
+    ]
+  },
+  {
+    "id": "aiml-access-read-only-boundary",
+    "prompt": "What write operations is this skill permitted to perform, and where is that actually enforced? No AWS access required.",
+    "expected_output": "States the skill performs no write operations and never applies a policy, and that enforcement comes from the DevOps Agent permission guardrail — a session policy capping effective permissions at roughly ReadOnlyAccess — together with the agent role's IAM permissions, rather than from the skill's instructions.",
+    "assertions": [
+      "contains 'read-only' or contains 'read only' or contains 'no write'",
+      "contains 'guardrail' or contains 'session policy'",
+      "contains 'IAM'"
+    ]
+  },
+  {
+    "id": "aiml-access-runtime-blocked-not-a-permission-gap",
+    "prompt": "The skill reports that cloudtrail:LookupEvents and iam:SimulatePrincipalPolicy were not callable. Should the user grant those permissions or deploy a CloudFormation template to fix it? No AWS access required.",
+    "expected_output": "States that no permission grant fixes this because the block is not in IAM — both actions are read-only, are granted by the managed policy or grantable, and sit inside the permission guardrail, yet are refused by the runtime. Must state that the skill requires no IAM changes and must not recommend a policy change, CloudFormation template, or role edit.",
+    "assertions": [
+      "contains 'not' and contains 'IAM'",
+      "contains 'no IAM changes' or contains 'not a permission gap' or contains 'runtime'",
+      "does not contain 'deploy the CloudFormation template'"
+    ]
+  },
+  {
+    "id": "aiml-access-misleading-error-codes",
+    "prompt": "According to the skill, which access failures do NOT surface as AccessDenied, and what does each actually mean? No AWS access required.",
+    "expected_output": "Names ValidationException 'Could not assume role' as a role trust-policy gap, ValidationException 'No S3 objects found under S3 URL' as commonly the execution role being unable to list the prefix rather than missing data, and ResourceNotFoundException with an 'Access denied' message on a legacy model as deprecation rather than permissions.",
+    "assertions": [
+      "contains 'ValidationException'",
+      "contains 'Could not assume role'",
+      "contains 'No S3 objects found'",
+      "contains 'trust'"
+    ]
+  },
+  {
+    "id": "aiml-access-cross-account-boundary",
+    "prompt": "A Bedrock model in another account returns AccessDenied. According to the skill, what can it determine and what can it not? No AWS access required.",
+    "expected_output": "States the caller side is verifiable including per-policy-type attribution, while the remote account's resource policy and SCPs are not readable, and names what must be checked in the remote account.",
+    "assertions": [
+      "contains 'caller' or contains 'Caller'",
+      "contains 'remote' or contains 'other account' or contains 'cannot'"
+    ]
+  },
+  {
+    "id": "aiml-access-out-of-scope",
+    "prompt": "Does this skill handle Amazon Textract access-denied errors or Bedrock throttling errors? No AWS access required.",
+    "expected_output": "States that Textract is not a supported service in this version and should be reported as unsupported, and that throttling and quota errors are explicitly out of scope.",
+    "assertions": [
+      "contains 'not supported' or contains 'unsupported' or contains 'out of scope'",
+      "contains 'throttl' or contains 'Throttl' or contains 'quota'"
+    ]
+  }
+]

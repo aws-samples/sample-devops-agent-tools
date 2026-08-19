@@ -26,6 +26,7 @@ Skills can be used with these AWS DevOps Agent types:
 - [DMS Operational Review Skill](skills/database-migration-service-expertise/SKILL.md): Conducts AWS Database Migration Service operational reviews with 5-category health scoring, task failure troubleshooting, migration cutover runbooks, version deprecation tracking, and cost optimization
 - [S3 Resiliency Review Skill](skills/storage-s3-resiliency-expertise/SKILL.md): Reviews one or many S3 buckets across nine resiliency, security, and data-protection dimensions using read-only control-plane calls, producing a rated report with prioritized findings and remediation guidance
 - [VPC DNS Investigation Skill](skills/aws-vpc-dns-investigation/SKILL.md): Diagnoses VPC DNS resolution failures and validates DNS control-plane changes before they are applied, driving the aws-vpc-dns-diagnostics MCP server to observe live resolution from inside the affected subnet and to simulate a proposed change
+- [AI/ML Access Diagnostics Skill](skills/aiml-access-diagnostics/SKILL.md): Diagnoses IAM and access failures for Amazon Bedrock and SageMaker calls by tracing the authorization chain from caller identity through iam:PassRole, role trust policy, role permissions, resource policies, and SCPs to identify which hop denied the call
 
 ## Key Concepts
 
