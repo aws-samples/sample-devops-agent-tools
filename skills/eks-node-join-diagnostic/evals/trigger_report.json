@@ -1,0 +1,248 @@
+{
+  "skill_name": "eks-node-join-diagnostic",
+  "skill_path": "/Users/mridulch/Downloads/sample-devops-agent-tools/skills/eks-node-join-diagnostic",
+  "query_results": [
+    {
+      "query": "My EKS managed node group in us-east-1 shows 'Instances failed to join the kubernetes cluster'. The node group is in Create failed state. Can you diagnose what's wrong?",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 305.0,
+      "mean_total_tokens": 308.0
+    },
+    {
+      "query": "I launched self-managed nodes for my EKS cluster but they don't appear in kubectl get nodes. The EC2 instances are running. What's preventing them from registering?",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 607.0,
+      "mean_total_tokens": 610.0
+    },
+    {
+      "query": "Getting TLS handshake timeout when my worker nodes try to connect to the EKS API server. Cluster is private endpoint only.",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 505.7,
+      "mean_total_tokens": 508.7
+    },
+    {
+      "query": "Karpenter is provisioning nodes on my EKS cluster but they stay NotReady. The instances launch fine but never register with the cluster.",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 385.7,
+      "mean_total_tokens": 388.7
+    },
+    {
+      "query": "After upgrading to EKS 1.33, my new node group with AL2 AMI won't start. Getting NodeCreationFailure.",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 712.7,
+      "mean_total_tokens": 715.7
+    },
+    {
+      "query": "kubelet logs on my EKS node show 'Unauthorized' and 'Unable to register node'. I've added the role to aws-auth but it's not working.",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 828.0,
+      "mean_total_tokens": 831.0
+    },
+    {
+      "query": "My EKS node group shows health issue Ec2SecurityGroupNotFound. The node group is in Degraded state.",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 547.7,
+      "mean_total_tokens": 550.7
+    },
+    {
+      "query": "InvalidClientTokenId error when my nodes try to join the EKS cluster in ap-southeast-1. What's wrong?",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 450.7,
+      "mean_total_tokens": 453.7
+    },
+    {
+      "query": "Nodes show 'Container runtime network not ready: cni config uninitialized' and never become Ready.",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 718.7,
+      "mean_total_tokens": 721.7
+    },
+    {
+      "query": "I need to set up a fully private EKS cluster with nodes in isolated subnets. What VPC endpoints do I need to make sure nodes can join?",
+      "should_trigger": true,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": false,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 592.0,
+      "mean_total_tokens": 595.0
+    },
+    {
+      "query": "My EKS cluster API server is slow. kubectl get pods takes 5 seconds. I'm seeing 429 throttling errors.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 571.3,
+      "mean_total_tokens": 574.3
+    },
+    {
+      "query": "Can you review the security posture of my EKS cluster? Check RBAC, pod security, and network policies.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 30.7,
+      "mean_output_tokens": 2124.7,
+      "mean_total_tokens": 2155.3
+    },
+    {
+      "query": "I want to upgrade my EKS cluster from 1.29 to 1.30. Can you check if we're ready?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 4.0,
+      "mean_output_tokens": 834.7,
+      "mean_total_tokens": 838.7
+    },
+    {
+      "query": "My pods keep getting OOMKilled on EKS. Memory utilization is high. How do I right-size?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 758.0,
+      "mean_total_tokens": 761.0
+    },
+    {
+      "query": "Help me set up Karpenter from scratch on my new EKS cluster with Spot and On-Demand instances.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 2966.0,
+      "mean_total_tokens": 2969.0
+    },
+    {
+      "query": "I need to create an EKS cluster using Terraform with managed node groups and VPC CNI.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 5.0,
+      "mean_output_tokens": 1076.0,
+      "mean_total_tokens": 1081.0
+    },
+    {
+      "query": "My ECS tasks are failing health checks behind an ALB. The targets keep going unhealthy.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 612.0,
+      "mean_total_tokens": 615.0
+    },
+    {
+      "query": "Can you generate a cost report for my EKS cluster? I want to know where we're spending the most.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 411.0,
+      "mean_total_tokens": 414.0
+    },
+    {
+      "query": "My EKS nodes keep getting terminated by Karpenter consolidation. How do I prevent that?",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 572.0,
+      "mean_total_tokens": 575.0
+    },
+    {
+      "query": "I'm trying to expose my Kubernetes service through an NLB but it's not getting an external IP.",
+      "should_trigger": false,
+      "trigger_count": 0,
+      "run_count": 3,
+      "trigger_rate": 0.0,
+      "passed": true,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 745.7,
+      "mean_total_tokens": 748.7
+    }
+  ],
+  "summary": {
+    "total_queries": 20,
+    "passed": 10,
+    "failed": 10,
+    "trigger_precision": 0.0,
+    "no_trigger_precision": 1.0,
+    "mean_total_tokens_per_run": 820.8,
+    "estimated_cost": {
+      "per_run": {
+        "input_cost": 1.4e-05,
+        "output_cost": 0.012243,
+        "total_cost": 0.012257,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "total_runs": 20,
+      "total_cost": 0.2451,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "passed": false
+}

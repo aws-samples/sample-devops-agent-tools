@@ -1,0 +1,693 @@
+{
+  "skill_name": "eks-node-join-diagnostic",
+  "skill_path": "/Users/mridulch/Downloads/sample-devops-agent-tools/skills/eks-node-join-diagnostic",
+  "eval_count": 5,
+  "runs_per_eval": 1,
+  "metadata": {
+    "timestamp": "2026-08-12T02:20:34Z"
+  },
+  "runs": [
+    {
+      "eval_id": "1",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "1",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent calls eks:DescribeCluster and eks:DescribeNodegroup",
+            "passed": false,
+            "evidence": "Agent attempted describe-cluster but failed (cluster not found). It did not successfully call DescribeCluster or DescribeNodegroup - instead provided commands for user to run manually.",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks IAM role policies (NJ5)",
+            "passed": false,
+            "evidence": "Agent discusses IAM role policies and lists required ones (NJ5-NJ7), but did not actually check them - it provided CLI commands for the user to run rather than executing the checks itself.",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks authentication mapping \u2014 access entries or aws-auth (NJ6)",
+            "passed": false,
+            "evidence": "Agent discusses authentication mapping (access entries and aws-auth ConfigMap) with NJ6/NJ7 references, but did not actually check them - provided commands for user to execute.",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks security group rules (NJ9-NJ10)",
+            "passed": false,
+            "evidence": "Agent discusses security group requirements (NJ9-NJ10) and provides commands to check them, but did not actually execute the security group checks itself.",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "Agent produces a diagnostic report with pass/fail per check",
+            "passed": false,
+            "evidence": "Output is structured as a prioritized list of potential causes with commands to verify, NOT a diagnostic report with pass/fail per check. No checks were actually completed to produce results.",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          },
+          {
+            "text": "Agent provides specific remediation steps for the identified blocker",
+            "passed": false,
+            "evidence": "Agent provides general remediation steps for each potential blocker category (IAM, SGs, DNS, etc.), but did not identify a SPECIFIC blocker since it couldn't access the cluster. The remediation is generic guidance rather than targeted fixes for an identified issue.",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "With skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 4,
+          "token_counts": {
+            "input_tokens": 5,
+            "output_tokens": 1938,
+            "cache_read_input_tokens": 94280,
+            "cache_creation_input_tokens": 24562
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 41.81420216700644
+        },
+        "raw_output": "I'll run the EKS Node Join Diagnostic for your cluster. Let me gather the foundation data first.The AWS CLI can't find the cluster. Let me verify my AWS credentials and check what's available.I don't have access to a cluster named 'production' in this account \u2014 the available clusters in us-east-1 are 'Test' and 'eks-auto-mode-cluster'. The cluster may be in a different AWS account or profile.\n\nHowever, I can walk you through the systematic diagnostic based on the **58 known failure modes** for EKS node join failures. Given your symptoms (\"Create failed\", instances launched but never registered), here's what to check \u2014 starting with the most common causes:\n\n---\n\n## Most Likely Root Causes (in priority order)\n\n### 1. IAM / Auth Misconfiguration (NJ5\u2013NJ7) \u2014 *Most common cause*\n\nRun these:\n```bash\n# Get the node role from the node group\naws eks describe-nodegroup --cluster-name production --nodegroup-name prod-workers \\\n  --region us-east-1 --query 'nodegroup.nodeRole'\n\n# Check the role has required policies\naws iam list-attached-role-policies --role-name <ROLE_NAME>\n```\n\n**Required policies:**\n- `AmazonEKSWorkerNodePolicy`\n- `AmazonEKS_CNI_Policy`\n- `AmazonEC2ContainerRegistryReadOnly`\n\nThen check auth mapping:\n```bash\n# For API auth mode (EKS 1.28+)\naws eks list-access-entries --cluster-name production --region us-east-1\n\n# For ConfigMap mode\nkubectl get cm aws-auth -n kube-system -o yaml\n```\n\nThe node role ARN must appear as an `EC2_LINUX` access entry **OR** in `aws-auth` mapRoles with groups `system:bootstrappers` and `system:nodes`.\n\n**Gotcha (NJ7):** If using aws-auth and the role has a path (e.g., `arn:aws:iam::123:role/path/MyRole`), you must strip the path to just `role/MyRole`.\n\n---\n\n### 2. Security Groups (NJ9\u2013NJ10)\n\nNodes must be able to reach the API server on TCP 443, and the cluster SG must allow inbound from nodes on 443 and 10250:\n```bash\n# Get cluster security group\naws eks describe-cluster --name production --region us-east-1 \\\n  --query 'cluster.res"
+      },
+      "without_skill": {
+        "eval_id": "1",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent calls eks:DescribeCluster and eks:DescribeNodegroup",
+            "passed": false,
+            "evidence": "The output includes aws eks describe-cluster and describe-nodegroup commands, but they are presented as suggested commands for the user to run, not as actual API calls executed by the agent. No actual results are shown.",
+            "method": "llm",
+            "confidence": 0.8,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks IAM role policies (NJ5)",
+            "passed": false,
+            "evidence": "The output lists required IAM policies and shows a command to verify them, but the agent did not actually execute the check or report results. It's guidance, not an executed check.",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks authentication mapping \u2014 access entries or aws-auth (NJ6)",
+            "passed": false,
+            "evidence": "The output mentions aws-auth ConfigMap mapping but only as a note to verify. No actual check was performed, no access entries were queried, and no results were reported.",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks security group rules (NJ9-NJ10)",
+            "passed": false,
+            "evidence": "Security group rules are discussed with a command to check them, but the agent did not actually execute the check or report findings from real security group rules.",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "Agent produces a diagnostic report with pass/fail per check",
+            "passed": false,
+            "evidence": "There is no pass/fail diagnostic report. The output is a generic troubleshooting guide with categories and suggested commands, not a structured report with pass/fail results per check.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "Agent provides specific remediation steps for the identified blocker",
+            "passed": false,
+            "evidence": "The output provides general remediation guidance for various possible blockers but does not identify a specific blocker since no checks were actually executed. It ends asking if the user wants more help rather than pinpointing the issue.",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "Without skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 1225,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 26588
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 25.82929354099906
+        },
+        "raw_output": "# Troubleshooting: EKS Nodes Failed to Join Cluster\n\nWhen managed node group instances launch but never register with the control plane, the root cause is almost always one of these categories:\n\n## 1. Network/Connectivity (most common)\n\nThe kubelet on each node must reach the EKS API server endpoint. Check:\n\n- **Security groups**: The node security group must allow outbound HTTPS (443) to the cluster endpoint. The cluster security group must allow inbound 443 from the node SG.\n- **Subnet routing**: If using private subnets, you need either a NAT gateway (for public endpoint) or VPC endpoints for `eks`, `ecr.api`, `ecr.dkr`, `s3`, and `sts`.\n- **DNS resolution**: Nodes must resolve the cluster's API endpoint. If using private endpoint only, ensure the VPC DNS settings and the private hosted zone are accessible from the node subnets.\n\n```bash\n# Check cluster endpoint access configuration\naws eks describe-cluster --name production --region us-east-1 \\\n  --query 'cluster.resourcesVpcConfig.{endpoint_public: endpointPublicAccess, endpoint_private: endpointPrivateAccess, subnet_ids: subnetIds, sg: clusterSecurityGroupId}'\n```\n\n## 2. IAM Role / Instance Profile\n\nThe node IAM role must have these AWS managed policies:\n- `AmazonEKSWorkerNodePolicy`\n- `AmazonEC2ContainerRegistryReadOnly`\n- `AmazonEKS_CNI_Policy`\n\nAnd the cluster's `aws-auth` ConfigMap must map the node role (managed node groups handle this automatically, but verify):\n\n```bash\n# Check the node group's role\naws eks describe-nodegroup --cluster-name production --nodegroup-name prod-workers \\\n  --region us-east-1 --query 'nodegroup.nodeRole'\n\n# Verify policies attached\naws iam list-attached-role-policies --role-name <NODE_ROLE_NAME>\n```\n\n## 3. Cluster Security Group Rules\n\n```bash\n# Get cluster SG and node SG, then check rules\naws ec2 describe-security-group-rules --filters \"Name=group-id,Values=<CLUSTER_SG_ID>\" \\\n  --region us-east-1 --query 'SecurityGroupRules[?IsEgress==`false`]'\n```\n\nNodes need inbound from c"
+      },
+      "delta_pass_rate": 0.0
+    },
+    {
+      "eval_id": "2",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "2",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent detects private endpoint configuration (endpointPublicAccess=false)",
+            "passed": true,
+            "evidence": "Output identifies this as a 'private-cluster node join failure' and discusses private endpoint implications, but doesn't show evidence of programmatically detecting endpointPublicAccess=false - it appears to assume/know it's private from user context",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks VPC endpoints exist (NJ16) \u2014 ec2, ecr.api, ecr.dkr, sts, s3",
+            "passed": true,
+            "evidence": "Output explicitly lists all 5 required VPC endpoints (ec2, ecr.api, ecr.dkr, sts, s3) under NJ16 and asks user to confirm which are configured, though it doesn't show evidence of actually querying AWS to verify their existence",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks bootstrap user-data has --apiserver-endpoint, --b64-cluster-ca, --dns-cluster-ip (NJ18)",
+            "passed": true,
+            "evidence": "Output explicitly mentions NJ18 and lists all three required bootstrap args: --apiserver-endpoint, --b64-cluster-ca, --dns-cluster-ip, and asks user whether user-data passes them explicitly",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks VPC DNS support and hostnames enabled (NJ11)",
+            "passed": false,
+            "evidence": "Output makes no mention of VPC DNS support, DNS hostnames, or NJ11 anywhere in the response",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "Agent provides the specific missing VPC endpoint or bootstrap arg",
+            "passed": false,
+            "evidence": "Output lists all potentially missing VPC endpoints and bootstrap args as candidates ranked by likelihood, but does not definitively identify THE specific missing item - it asks follow-up questions to narrow down rather than providing a conclusive answer",
+            "method": "llm",
+            "confidence": 0.6,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.6,
+        "summary": "With skill: 60% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 965,
+            "cache_read_input_tokens": 15466,
+            "cache_creation_input_tokens": 23673
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 23.53329650001251
+        },
+        "raw_output": "This is a classic private-cluster node join failure. Since instances are running but never register, the problem is almost certainly in one of these areas (ordered by likelihood for your exact scenario):\n\n## Most Likely Causes\n\n### 1. Missing bootstrap arguments in user-data (NJ18 \u2014 Critical)\n\nIn a private cluster, nodes cannot call `aws eks describe-cluster` to discover the endpoint/CA. Your launch template user-data **must** pass these directly:\n\n```bash\n/etc/eks/bootstrap.sh private-cluster \\\n  --apiserver-endpoint https://<your-private-endpoint> \\\n  --b64-cluster-ca <base64-encoded-CA> \\\n  --dns-cluster-ip 10.100.0.10\n```\n\nIf your user-data relies on the bootstrap script's auto-discovery, it will silently fail with no network path to the EKS API.\n\n### 2. Missing VPC endpoints (NJ16 \u2014 Critical)\n\nPrivate clusters require these VPC endpoints with security groups allowing inbound 443 from node subnets:\n\n- `com.amazonaws.us-west-2.ec2` (interface)\n- `com.amazonaws.us-west-2.ecr.api` (interface)\n- `com.amazonaws.us-west-2.ecr.dkr` (interface)\n- `com.amazonaws.us-west-2.sts` (interface)\n- `com.amazonaws.us-west-2.s3` (gateway)\n\nWithout these, nodes can't pull images, authenticate, or reach the API server.\n\n### 3. Node role not in auth config (NJ6 \u2014 Critical)\n\nFor self-managed nodes, the IAM role must be explicitly mapped. Check:\n```bash\nkubectl get cm aws-auth -n kube-system -o yaml\n```\nIt must contain your node role (NOT instance profile ARN) in `mapRoles` with groups `system:bootstrappers` and `system:nodes`.\n\n### 4. Security group rules (NJ9-NJ10 \u2014 Critical)\n\nNode SG must allow outbound TCP 443 to the cluster SG, and the cluster SG must allow inbound TCP 443 + 10250 from the node SG.\n\n---\n\n## To narrow it down, can you confirm:\n\n1. Does your user-data pass `--apiserver-endpoint` and `--b64-cluster-ca` explicitly, or does it rely on auto-discovery?\n2. Which VPC endpoints do you have configured?\n3. Is the node IAM role mapped in `aws-auth` (or as an EKS Access Entry)?"
+      },
+      "without_skill": {
+        "eval_id": "2",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent detects private endpoint configuration (endpointPublicAccess=false)",
+            "passed": true,
+            "evidence": "Output addresses 'fully private EKS clusters' and states 'With no public endpoint, nodes can't reach the internet' \u2014 it clearly recognizes the private endpoint configuration, though it doesn't explicitly say 'endpointPublicAccess=false' as a detected setting.",
+            "method": "llm",
+            "confidence": 0.82,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks VPC endpoints exist (NJ16) \u2014 ec2, ecr.api, ecr.dkr, sts, s3",
+            "passed": true,
+            "evidence": "Section 1 explicitly lists all required VPC endpoints in a table: ec2, ecr.api, ecr.dkr, sts, and s3 (Gateway), plus the eks endpoint.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks bootstrap user-data has --apiserver-endpoint, --b64-cluster-ca, --dns-cluster-ip (NJ18)",
+            "passed": true,
+            "evidence": "Section 2 explicitly shows the bootstrap script with --apiserver-endpoint, --b64-cluster-ca, and --dns-cluster-ip, and warns about omitting them in a private cluster.",
+            "method": "llm",
+            "confidence": 0.98,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks VPC DNS support and hostnames enabled (NJ11)",
+            "passed": true,
+            "evidence": "Section 5 explicitly states 'Confirm that enableDnsSupport and enableDnsHostnames are both true on the VPC' and explains why they're needed.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "Agent provides the specific missing VPC endpoint or bootstrap arg",
+            "passed": true,
+            "evidence": "The conclusion specifically calls out 'missing --apiserver-endpoint and --b64-cluster-ca in the bootstrap user data, combined with no eks VPC endpoint' as the most common root cause, providing specific missing items.",
+            "method": "llm",
+            "confidence": 0.92,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "Without skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 1477,
+            "cache_read_input_tokens": 15461,
+            "cache_creation_input_tokens": 11130
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 30.323609667015262
+        },
+        "raw_output": "This is a classic issue with fully private EKS clusters + custom launch templates. The most likely causes, in order of probability:\n\n## 1. Missing VPC Endpoints\n\nWith no public endpoint, nodes can't reach the internet. They need these VPC endpoints in your VPC:\n\n| Endpoint | Why |\n|----------|-----|\n| `com.amazonaws.us-west-2.eks` | API server communication |\n| `com.amazonaws.us-west-2.ecr.api` | Pull kubelet/kube-proxy images |\n| `com.amazonaws.us-west-2.ecr.dkr` | ECR Docker registry |\n| `com.amazonaws.us-west-2.s3` (Gateway) | ECR image layers |\n| `com.amazonaws.us-west-2.sts` | IAM authentication |\n| `com.amazonaws.us-west-2.ec2` | Node registration |\n\nThe security groups on these endpoints must allow inbound HTTPS (443) from your node security group.\n\n## 2. Broken Bootstrap User Data\n\nWith a custom launch template, **you** are responsible for the bootstrap script. It must pass the correct API endpoint and CA cert:\n\n```bash\n#!/bin/bash\n/etc/eks/bootstrap.sh 'private-cluster' \\\n  --apiserver-endpoint 'https://XXXXX.gr7.us-west-2.eks.amazonaws.com' \\\n  --b64-cluster-ca 'LS0tLS1CRUdJTi...' \\\n  --dns-cluster-ip '10.100.0.10'\n```\n\nIf you omit `--apiserver-endpoint` and `--b64-cluster-ca`, the bootstrap script tries to call `eks:DescribeCluster` over the public internet \u2014 which fails in a private cluster with no NAT.\n\n## 3. Node IAM Role Not Mapped\n\nThe node instance profile role must be mapped in `aws-auth` ConfigMap (or EKS access entries):\n\n```yaml\n# kubectl edit configmap aws-auth -n kube-system\nmapRoles:\n  - rolearn: arn:aws:iam::ACCOUNT:role/YourNodeRole\n    username: system:node:{{EC2PrivateDNSName}}\n    groups:\n      - system:bootstrappers\n      - system:nodes\n```\n\nThe role also needs these managed policies attached:\n- `AmazonEKSWorkerNodePolicy`\n- `AmazonEC2ContainerRegistryReadOnly`\n- `AmazonEKS_CNI_Policy`\n\n## 4. Security Group Misconfiguration\n\nThe cluster control plane security group must allow:\n- **Inbound 443** from the node SG (so nodes can register)\n-"
+      },
+      "delta_pass_rate": -0.4
+    },
+    {
+      "eval_id": "3",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "3",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent checks AMI compatibility (NJ22) \u2014 AL2 not supported on 1.33+",
+            "passed": true,
+            "evidence": "Output explicitly states 'Root cause: AL2 AMI is not supported on EKS 1.33+ (check NJ22)' and elaborates that AL2 support was dropped starting with EKS 1.33.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "Agent identifies this as a Critical blocker",
+            "passed": false,
+            "evidence": "Output identifies it as a 'Root cause' but never explicitly labels it as a 'Critical blocker' or uses severity terminology like 'critical'.",
+            "method": "llm",
+            "confidence": 0.82,
+            "uncertain": false
+          },
+          {
+            "text": "Agent recommends AL2023 or Bottlerocket as replacement",
+            "passed": true,
+            "evidence": "Output explicitly recommends both 'Amazon Linux 2023' (AL2023_x86_64_STANDARD or AL2023_ARM_64_STANDARD) and 'Bottlerocket' (BOTTLEROCKET_x86_64 or BOTTLEROCKET_ARM_64) as replacement options.",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "Agent mentions the bootstrap format change (nodeadm for AL2023)",
+            "passed": true,
+            "evidence": "Output explicitly states 'AL2023 uses nodeadm with a MIME multipart user-data format' and contrasts it with AL2's bootstrap.sh mechanism.",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.75,
+        "summary": "With skill: 75% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 657,
+            "cache_read_input_tokens": 15466,
+            "cache_creation_input_tokens": 23654
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 18.59959304201766
+        },
+        "raw_output": "**Root cause: AL2 AMI is not supported on EKS 1.33+** (check NJ22).\n\nAmazon Linux 2 support was dropped starting with EKS 1.33. Your old 1.32 node group still works because it was created before the upgrade and uses an AL2 AMI pinned to the 1.32 kubelet, but new node groups targeting 1.33 cannot use AL2.\n\n**Fix:** Recreate the node group using one of:\n\n- **Amazon Linux 2023** (`AL2023_x86_64_STANDARD` or `AL2023_ARM_64_STANDARD`)\n- **Bottlerocket** (`BOTTLEROCKET_x86_64` or `BOTTLEROCKET_ARM_64`)\n\n**Important migration note for AL2023:** The bootstrap mechanism changed. AL2 used `bootstrap.sh`, but AL2023 uses `nodeadm` with a MIME multipart user-data format. If you have a custom launch template with user-data, you'll need to convert it:\n\n```\nMIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=\"//\"\n\n--//\nContent-Type: application/node.eks.aws\n\n---\napiVersion: node.eks.aws/v1alpha1\nkind: NodeConfig\nspec:\n  cluster:\n    name: <cluster-name>\n    apiServerEndpoint: https://<endpoint>\n    certificateAuthority: <base64-ca>\n    cidr: <service-cidr>\n--//--\n```\n\nIf you're using a managed node group without a custom launch template, just changing the `amiType` parameter to an AL2023 variant should be sufficient \u2014 EKS handles the bootstrap automatically."
+      },
+      "without_skill": {
+        "eval_id": "3",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent checks AMI compatibility (NJ22) \u2014 AL2 not supported on 1.33+",
+            "passed": true,
+            "evidence": "Output clearly identifies AL2 not supported on 1.33+ ('AL2 AMI support was dropped in EKS 1.33'), but does not explicitly reference 'NJ22' as a check identifier",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "Agent identifies this as a Critical blocker",
+            "passed": false,
+            "evidence": "Output implies it's a blocker ('new nodes can't launch') but never explicitly labels it as 'Critical' severity or uses the word 'blocker' as a classification",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "Agent recommends AL2023 or Bottlerocket as replacement",
+            "passed": true,
+            "evidence": "Output explicitly recommends AL2023 as the replacement: 'Migrate your node groups to AL2023 (Amazon Linux 2023), which is the supported replacement'",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "Agent mentions the bootstrap format change (nodeadm for AL2023)",
+            "passed": true,
+            "evidence": "Output explicitly mentions 'nodeadm for bootstrapping instead of the old /etc/eks/bootstrap.sh script' and discusses the nodeadm YAML configuration format change",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.75,
+        "summary": "Without skill: 75% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 399,
+            "cache_read_input_tokens": 15461,
+            "cache_creation_input_tokens": 11119
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 11.189908166998066
+        },
+        "raw_output": "**AL2 AMI support was dropped in EKS 1.33.** Starting with Kubernetes 1.33, AWS no longer publishes Amazon Linux 2 EKS-optimized AMIs. Your old 1.32 node group still works because existing nodes aren't affected, but new nodes can't launch because there's no AL2 AMI available for 1.33.\n\n**Fix:** Migrate your node groups to **AL2023** (Amazon Linux 2023), which is the supported replacement. Key differences to watch for:\n\n- AL2023 uses `systemd`-based networking and `nodeadm` for bootstrapping instead of the old `/etc/eks/bootstrap.sh` script\n- If you have custom `userData` scripts that call `bootstrap.sh`, they need to be rewritten for the `nodeadm` YAML configuration format\n- Security group and IAM role configs carry over unchanged\n\nIf you're using managed node groups with a launch template that specifies an AMI ID, update it to the AL2023 AMI. If you're using a custom AMI built on AL2, you'll need to rebase it on AL2023."
+      },
+      "delta_pass_rate": 0.0
+    },
+    {
+      "eval_id": "4",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "4",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent checks cluster state and Karpenter detection",
+            "passed": false,
+            "evidence": "Agent attempted to check cluster state but failed to connect to the correct cluster. It only found an unrelated 'eks-workshop' cluster and could not verify Karpenter detection on 'analytics-prod'.",
+            "method": "llm",
+            "confidence": 0.85,
+            "uncertain": false
+          },
+          {
+            "text": "Agent evaluates EC2NodeClass subnets match cluster VPC (NJ25)",
+            "passed": false,
+            "evidence": "Agent never evaluated EC2NodeClass subnets. It only mentioned NJ25 as part of a future checklist it would run once access is obtained.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks EC2NodeClass security groups include cluster SG (NJ26)",
+            "passed": false,
+            "evidence": "Agent never checked EC2NodeClass security groups. It only referenced this as part of a planned diagnostic (NJ25-NJ27) contingent on gaining cluster access.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks AMI compatibility in EC2NodeClass (NJ27)",
+            "passed": false,
+            "evidence": "Agent never checked AMI compatibility. It mentioned NJ27 in passing as part of a future checklist but did not execute the check.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks if VPC CNI can schedule on the tainted node (NJ28)",
+            "passed": false,
+            "evidence": "Agent never checked VPC CNI scheduling on tainted nodes. NJ28 was not even explicitly mentioned in the output, and no diagnostic checks were actually performed.",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.0,
+        "summary": "With skill: 0% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 5,
+          "token_counts": {
+            "input_tokens": 5,
+            "output_tokens": 1163,
+            "cache_read_input_tokens": 94598,
+            "cache_creation_input_tokens": 25031
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 31.84957887500059
+        },
+        "raw_output": "I'll start diagnosing the Karpenter node join issue on your `analytics-prod` cluster in `eu-west-1`. Let me gather foundation data first.The CLI isn't connected to your `analytics-prod` cluster \u2014 it's pointing at a different cluster (running v1.36.1). I need access to the correct cluster to proceed with the diagnostic.\n\nBefore we troubleshoot the kubeconfig, a few questions:\n\n1. **When did this start?** Was it working before and broke recently, or is this the first time Karpenter is launching nodes on this cluster?\n2. **Do you have a specific instance ID** of one of the stuck NotReady nodes?\n3. **Can you confirm your kubeconfig context** for `analytics-prod`? (e.g., run `kubectl config get-contexts | grep analytics`)\n\nIn the meantime, I can run API-side checks that don't require kubectl if you can confirm the AWS account ID. Let me check what's available:The current AWS credentials (account `421198816590`) only show an `eks-workshop` cluster in `eu-west-1` \u2014 there's no `analytics-prod` cluster visible from this account/region.\n\nHere's what we need to resolve:\n\n1. **Wrong account** \u2014 Is `analytics-prod` in a different AWS account? If so, you'll need to assume a role into that account or switch credentials.\n2. **Wrong region** \u2014 Could the cluster be in a different region (e.g., `eu-west-2`)?\n3. **Access permissions** \u2014 Does the current IAM user have `eks:DescribeCluster` permission on that cluster?\n\nOnce I can reach the cluster via the AWS API, I'll run the full NJ1\u2013NJ61 diagnostic checklist covering IAM/auth, security groups, VPC/DNS, bootstrap config, AMI compatibility, and Karpenter-specific checks (NJ25\u2013NJ27). \n\nCould you provide the correct account/credentials or kubeconfig context for `analytics-prod`?"
+      },
+      "without_skill": {
+        "eval_id": "4",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent checks cluster state and Karpenter detection",
+            "passed": true,
+            "evidence": "Output checks cluster state with kubectl get nodes/describe node and mentions Karpenter-launched nodes, but doesn't explicitly detect Karpenter resources (NodePools, NodeClaims) or check Karpenter-specific CRDs",
+            "method": "llm",
+            "confidence": 0.5,
+            "uncertain": false
+          },
+          {
+            "text": "Agent evaluates EC2NodeClass subnets match cluster VPC (NJ25)",
+            "passed": false,
+            "evidence": "Output mentions subnets running out of IPs (#5) but never evaluates EC2NodeClass subnet configuration against the cluster VPC - no kubectl get ec2nodeclass or similar check",
+            "method": "llm",
+            "confidence": 0.9,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks EC2NodeClass security groups include cluster SG (NJ26)",
+            "passed": false,
+            "evidence": "Output mentions security group requirements (ports 443, 10250) but does not specifically check the EC2NodeClass resource's securityGroupSelector to verify it includes the cluster security group",
+            "method": "llm",
+            "confidence": 0.75,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks AMI compatibility in EC2NodeClass (NJ27)",
+            "passed": false,
+            "evidence": "Output never mentions AMI compatibility or checking the EC2NodeClass AMI configuration - no reference to amiFamily, amiSelectorTerms, or AMI version matching",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          },
+          {
+            "text": "Agent checks if VPC CNI can schedule on the tainted node (NJ28)",
+            "passed": false,
+            "evidence": "Output checks if aws-node DaemonSet pods are running (#1) but does not specifically investigate whether VPC CNI tolerations allow scheduling on tainted Karpenter nodes",
+            "method": "llm",
+            "confidence": 0.7,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 0.2,
+        "summary": "Without skill: 20% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 841,
+            "cache_read_input_tokens": 15461,
+            "cache_creation_input_tokens": 11132
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 19.944133916986175
+        },
+        "raw_output": "This is a common issue with several likely root causes. Here's how to diagnose, ordered by frequency:\n\n## Most Likely Causes\n\n**1. VPC CNI / aws-node DaemonSet not running on new nodes**\n\n```bash\nkubectl get ds -n kube-system aws-node\nkubectl get pods -n kube-system -l k8s-app=aws-node --field-selector status.phase!=Running\n```\n\nIf `aws-node` pods are crashing on new nodes, the node can't get networking and stays NotReady.\n\n**2. Node can't reach the API server (security group or endpoint issue)**\n\nCheck if the Karpenter-launched nodes' security group allows:\n- Outbound HTTPS (443) to the EKS API endpoint\n- Inbound from the control plane security group on ports 443 and 10250\n\n```bash\n# Check the node's condition messages\nkubectl get nodes -o wide\nkubectl describe node <not-ready-node> | grep -A5 Conditions\n```\n\n**3. Incorrect or missing instance profile / IAM role**\n\nThe node role needs these managed policies:\n- `AmazonEKSWorkerNodePolicy`\n- `AmazonEKS_CNI_Policy`\n- `AmazonEC2ContainerRegistryReadOnly`\n\nAlso verify the role is in the `aws-auth` ConfigMap (or uses EKS access entries on 1.30):\n\n```bash\nkubectl get cm -n kube-system aws-auth -o yaml\n```\n\n**4. UserData / bootstrap not completing**\n\nSSH or SSM into a stuck instance and check:\n\n```bash\n# On the EC2 instance\njournalctl -u kubelet --no-pager | tail -50\ncat /var/log/cloud-init-output.log | tail -100\n```\n\nLook for certificate errors, API server unreachable, or containerd failures.\n\n**5. Subnet has no remaining IPs or lacks route to NAT gateway**\n\nIf the subnet is exhausted or has no outbound route, kubelet can't register.\n\n## Quick Triage\n\n```bash\n# Get a stuck node name\nNODE=$(kubectl get nodes --field-selector spec.unschedulable!=true -o jsonpath='{.items[?(@.status.conditions[?(@.type==\"Ready\")].status==\"False\")].metadata.name}' | awk '{print $1}')\n\n# See why it's NotReady\nkubectl describe node $NODE | grep -A10 \"Conditions:\"\n\n# Check kubelet logs via SSM (if SSM agent is running)\nINSTANCE_ID=$(kubectl get "
+      },
+      "delta_pass_rate": -0.2
+    },
+    {
+      "eval_id": "5",
+      "run_index": 0,
+      "with_skill": {
+        "eval_id": "5",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent identifies the role path issue (NJ7)",
+            "passed": true,
+            "evidence": "Output explicitly states 'This is a known issue \u2014 NJ7 in the diagnostic checklist' in the opening line.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "Agent explains that aws-auth requires the path to be stripped",
+            "passed": true,
+            "evidence": "Output clearly states 'aws-auth requires the path to be stripped' and explains that 'The /teams/platform/ path segment must be removed'.",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "Agent provides the corrected ARN: arn:aws:iam::123456789012:role/eks-node-role",
+            "passed": true,
+            "evidence": "Output provides the corrected ARN 'arn:aws:iam::123456789012:role/eks-node-role' both in the explanation and in the YAML fix example.",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "Agent recommends migrating to EKS Access Entries as the long-term fix",
+            "passed": true,
+            "evidence": "Output has a 'Better Long-Term Fix' section explicitly recommending migration to 'EKS Access Entries (API authentication mode)' with a command example.",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "With skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 525,
+            "cache_read_input_tokens": 15466,
+            "cache_creation_input_tokens": 23678
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 12.902160792000359
+        },
+        "raw_output": "This is a known issue \u2014 **NJ7** in the diagnostic checklist. The `aws-auth` ConfigMap does **not** support IAM role ARNs with paths.\n\n## The Problem\n\nYour role ARN is:\n```\narn:aws:iam::123456789012:role/teams/platform/eks-node-role\n```\n\nBut `aws-auth` requires the path to be **stripped**. It must be entered as:\n```\narn:aws:iam::123456789012:role/eks-node-role\n```\n\nThe `/teams/platform/` path segment must be removed \u2014 only `role/<role-name>` is recognized by the Kubernetes AWS IAM authenticator when parsing the ConfigMap.\n\n## Fix\n\nUpdate your `aws-auth` ConfigMap `mapRoles` entry:\n\n```yaml\nmapRoles: |\n  - rolearn: arn:aws:iam::123456789012:role/eks-node-role\n    username: system:node:{{EC2PrivateDNSName}}\n    groups:\n      - system:bootstrappers\n      - system:nodes\n```\n\n## Better Long-Term Fix\n\nMigrate to **EKS Access Entries** (API authentication mode), which handle paths correctly:\n\n```bash\naws eks create-access-entry \\\n  --cluster-name dev-eks \\\n  --principal-arn arn:aws:iam::123456789012:role/teams/platform/eks-node-role \\\n  --type EC2_LINUX\n```\n\nWith Access Entries you can use the full ARN including the path, and you don't need to manage the `aws-auth` ConfigMap at all.\n\nAfter applying either fix, existing nodes will need to be recycled (terminated and replaced) to re-attempt the join with valid authentication."
+      },
+      "without_skill": {
+        "eval_id": "5",
+        "run_index": 0,
+        "assertion_results": [
+          {
+            "text": "Agent identifies the role path issue (NJ7)",
+            "passed": true,
+            "evidence": "Output explicitly states 'IAM role paths are not supported in the aws-auth ConfigMap' and identifies the /teams/platform/ path as the issue.",
+            "method": "llm",
+            "confidence": 0.97,
+            "uncertain": false
+          },
+          {
+            "text": "Agent explains that aws-auth requires the path to be stripped",
+            "passed": true,
+            "evidence": "Output explains 'The IAM authenticator strips the path when matching, so the ARN in the ConfigMap must also have the path removed.'",
+            "method": "llm",
+            "confidence": 0.98,
+            "uncertain": false
+          },
+          {
+            "text": "Agent provides the corrected ARN: arn:aws:iam::123456789012:role/eks-node-role",
+            "passed": true,
+            "evidence": "Output explicitly shows the corrected ARN 'rolearn: arn:aws:iam::123456789012:role/eks-node-role' in the corrected ConfigMap snippet.",
+            "method": "llm",
+            "confidence": 0.99,
+            "uncertain": false
+          },
+          {
+            "text": "Agent recommends migrating to EKS Access Entries as the long-term fix",
+            "passed": true,
+            "evidence": "Output has an 'Alternative (recommended for new clusters)' section recommending EKS access entries, stating they 'handle pathed role ARNs correctly and are the preferred approach going forward.'",
+            "method": "llm",
+            "confidence": 0.95,
+            "uncertain": false
+          }
+        ],
+        "pass_rate": 1.0,
+        "summary": "Without skill: 100% assertions passed",
+        "execution_metrics": {
+          "tool_calls": 0,
+          "token_counts": {
+            "input_tokens": 3,
+            "output_tokens": 637,
+            "cache_read_input_tokens": 15461,
+            "cache_creation_input_tokens": 11141
+          }
+        },
+        "timing": {
+          "elapsed_seconds": 13.345896665996406
+        },
+        "raw_output": "This is a known EKS/aws-auth ConfigMap limitation: **IAM role paths are not supported** in the `aws-auth` ConfigMap. The IAM authenticator strips the path when matching, so the ARN in the ConfigMap must also have the path removed.\n\n**Your ConfigMap currently has:**\n```yaml\n- rolearn: arn:aws:iam::123456789012:role/teams/platform/eks-node-role\n  username: system:node:{{EC2PrivateDNSName}}\n  groups:\n    - system:bootstrappers\n    - system:nodes\n```\n\n**Change it to (path stripped):**\n```yaml\n- rolearn: arn:aws:iam::123456789012:role/eks-node-role\n  username: system:node:{{EC2PrivateDNSName}}\n  groups:\n    - system:bootstrappers\n    - system:nodes\n```\n\nThe actual IAM role can keep its path (`/teams/platform/`) \u2014 you only need to remove the path from the ARN entry in the ConfigMap.\n\n**Alternative (recommended for new clusters):** If you're on EKS with access entries (available since late 2023), you can use `aws eks create-access-entry` instead of the ConfigMap. Access entries handle pathed role ARNs correctly and are the preferred approach going forward:\n\n```bash\naws eks create-access-entry \\\n  --cluster-name dev-eks \\\n  --principal-arn arn:aws:iam::123456789012:role/teams/platform/eks-node-role \\\n  --type EC2_LINUX \\\n  --region us-east-2\n```"
+      },
+      "delta_pass_rate": 0.0
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "mean_pass_rate": 0.47,
+      "stddev_pass_rate": 0.4522,
+      "mean_tokens": 1049.6,
+      "mean_input_tokens": 3.8,
+      "mean_output_tokens": 1049.6,
+      "mean_total_tokens": 1053.4,
+      "mean_tool_calls": 1.8
+    },
+    "without_skill": {
+      "mean_pass_rate": 0.59,
+      "stddev_pass_rate": 0.4642,
+      "mean_tokens": 915.8,
+      "mean_input_tokens": 3.0,
+      "mean_output_tokens": 915.8,
+      "mean_total_tokens": 918.8,
+      "mean_tool_calls": 0.0
+    },
+    "delta": {
+      "pass_rate": -0.12,
+      "tokens": 133.8,
+      "total_tokens": 134.6,
+      "input_tokens": 0.8,
+      "tool_calls": 1.8
+    },
+    "cost_efficiency": {
+      "quality_delta": -0.12,
+      "cost_delta_pct": 14.6,
+      "classification": "REJECT",
+      "emoji": "\ud83d\udd34",
+      "description": "Skill significantly degrades quality"
+    },
+    "estimated_cost": {
+      "with_skill_per_run": {
+        "input_cost": 1.1e-05,
+        "output_cost": 0.015744,
+        "total_cost": 0.015755,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "without_skill_per_run": {
+        "input_cost": 9e-06,
+        "output_cost": 0.013737,
+        "total_cost": 0.013746,
+        "model": "sonnet",
+        "currency": "USD"
+      },
+      "per_eval_pair": 0.029501,
+      "total_runs": 5,
+      "total_cost": 0.1475,
+      "model": "sonnet",
+      "currency": "USD"
+    }
+  },
+  "scores": {
+    "outcome": 0.47,
+    "process": 1.0,
+    "style": 0.47,
+    "efficiency": 0.8199,
+    "overall": 0.69
+  },
+  "passed": false
+}

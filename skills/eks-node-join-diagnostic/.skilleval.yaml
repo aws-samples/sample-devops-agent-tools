@@ -1,0 +1,6 @@
+name: eks-node-join-diagnostic
+version: "1.0.0"
+zip_command: >-
+  cd skills && zip -r eks-node-join-diagnostic.zip eks-node-join-diagnostic/
+  -i '*.md' '*.txt' '*.json' '*.yaml' '*.yml'
+  -x '*/.claude/*' '*/scripts/*' '*/README.md' '*/.skilleval.yaml' '*/CHANGELOG.md' '*/evals/*'

@@ -1,0 +1,65 @@
+{
+  "skill_name": "eks-node-join-diagnostic",
+  "skill_path": "/Users/mridulch/Downloads/sample-devops-agent-tools/skills/eks-node-join-diagnostic",
+  "timestamp": "2026-08-12T02:39:27Z",
+  "overall_score": 0.64,
+  "overall_grade": "D",
+  "passed": false,
+  "sections": {
+    "audit": {
+      "score": 66,
+      "grade": "D",
+      "passed": true,
+      "normalized": 0.66,
+      "critical": 0,
+      "warning": 1,
+      "info": 12
+    },
+    "functional": {
+      "overall": 0.69,
+      "grade": "D",
+      "passed": false,
+      "scores": {
+        "outcome": 0.47,
+        "process": 1.0,
+        "style": 0.47,
+        "efficiency": 0.8199,
+        "overall": 0.69
+      },
+      "cost_efficiency": {
+        "quality_delta": -0.12,
+        "cost_delta_pct": 14.6,
+        "classification": "REJECT",
+        "emoji": "\ud83d\udd34",
+        "description": "Skill significantly degrades quality"
+      },
+      "estimated_cost": {
+        "with_skill_per_run": {
+          "input_cost": 1.1e-05,
+          "output_cost": 0.015744,
+          "total_cost": 0.015755,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "without_skill_per_run": {
+          "input_cost": 9e-06,
+          "output_cost": 0.013737,
+          "total_cost": 0.013746,
+          "model": "sonnet",
+          "currency": "USD"
+        },
+        "per_eval_pair": 0.029501,
+        "total_runs": 5,
+        "total_cost": 0.1475,
+        "model": "sonnet",
+        "currency": "USD"
+      }
+    },
+    "trigger": {
+      "pass_rate": 0.5,
+      "grade": "F",
+      "passed": false,
+      "total_queries": 20
+    }
+  }
+}

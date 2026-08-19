@@ -1,0 +1,82 @@
+[
+  {
+    "query": "My EKS managed node group in us-east-1 shows 'Instances failed to join the kubernetes cluster'. The node group is in Create failed state. Can you diagnose what's wrong?",
+    "should_trigger": true
+  },
+  {
+    "query": "I launched self-managed nodes for my EKS cluster but they don't appear in kubectl get nodes. The EC2 instances are running. What's preventing them from registering?",
+    "should_trigger": true
+  },
+  {
+    "query": "Getting TLS handshake timeout when my worker nodes try to connect to the EKS API server. Cluster is private endpoint only.",
+    "should_trigger": true
+  },
+  {
+    "query": "Karpenter is provisioning nodes on my EKS cluster but they stay NotReady. The instances launch fine but never register with the cluster.",
+    "should_trigger": true
+  },
+  {
+    "query": "After upgrading to EKS 1.33, my new node group with AL2 AMI won't start. Getting NodeCreationFailure.",
+    "should_trigger": true
+  },
+  {
+    "query": "kubelet logs on my EKS node show 'Unauthorized' and 'Unable to register node'. I've added the role to aws-auth but it's not working.",
+    "should_trigger": true
+  },
+  {
+    "query": "My EKS node group shows health issue Ec2SecurityGroupNotFound. The node group is in Degraded state.",
+    "should_trigger": true
+  },
+  {
+    "query": "InvalidClientTokenId error when my nodes try to join the EKS cluster in ap-southeast-1. What's wrong?",
+    "should_trigger": true
+  },
+  {
+    "query": "Nodes show 'Container runtime network not ready: cni config uninitialized' and never become Ready.",
+    "should_trigger": true
+  },
+  {
+    "query": "I need to set up a fully private EKS cluster with nodes in isolated subnets. What VPC endpoints do I need to make sure nodes can join?",
+    "should_trigger": true
+  },
+  {
+    "query": "My EKS cluster API server is slow. kubectl get pods takes 5 seconds. I'm seeing 429 throttling errors.",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you review the security posture of my EKS cluster? Check RBAC, pod security, and network policies.",
+    "should_trigger": false
+  },
+  {
+    "query": "I want to upgrade my EKS cluster from 1.29 to 1.30. Can you check if we're ready?",
+    "should_trigger": false
+  },
+  {
+    "query": "My pods keep getting OOMKilled on EKS. Memory utilization is high. How do I right-size?",
+    "should_trigger": false
+  },
+  {
+    "query": "Help me set up Karpenter from scratch on my new EKS cluster with Spot and On-Demand instances.",
+    "should_trigger": false
+  },
+  {
+    "query": "I need to create an EKS cluster using Terraform with managed node groups and VPC CNI.",
+    "should_trigger": false
+  },
+  {
+    "query": "My ECS tasks are failing health checks behind an ALB. The targets keep going unhealthy.",
+    "should_trigger": false
+  },
+  {
+    "query": "Can you generate a cost report for my EKS cluster? I want to know where we're spending the most.",
+    "should_trigger": false
+  },
+  {
+    "query": "My EKS nodes keep getting terminated by Karpenter consolidation. How do I prevent that?",
+    "should_trigger": false
+  },
+  {
+    "query": "I'm trying to expose my Kubernetes service through an NLB but it's not getting an external IP.",
+    "should_trigger": false
+  }
+]

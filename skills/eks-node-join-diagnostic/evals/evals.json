@@ -1,0 +1,66 @@
+[
+  {
+    "id": "1",
+    "prompt": "My managed node group 'prod-workers' in EKS cluster 'production' in us-east-1 shows 'Create failed' with the error 'Instances failed to join the kubernetes cluster'. The node group was created 30 minutes ago and the instances launched but never registered. Help me figure out why.",
+    "expected_output": "Agent runs NJ1-NJ28 checks, identifies the specific blocker (likely IAM auth mapping or security group issue), and provides the exact fix",
+    "files": [],
+    "assertions": [
+      "Agent calls eks:DescribeCluster and eks:DescribeNodegroup",
+      "Agent checks IAM role policies (NJ5)",
+      "Agent checks authentication mapping — access entries or aws-auth (NJ6)",
+      "Agent checks security group rules (NJ9-NJ10)",
+      "Agent produces a diagnostic report with pass/fail per check",
+      "Agent provides specific remediation steps for the identified blocker"
+    ]
+  },
+  {
+    "id": "2",
+    "prompt": "I have a fully private EKS cluster (no public endpoint) in us-west-2 called 'private-cluster'. I'm trying to add a self-managed node group using a custom launch template but the nodes never appear in kubectl get nodes. The instances are running in EC2 but not registering. What's wrong?",
+    "expected_output": "Agent diagnoses private cluster prerequisites — VPC endpoints, bootstrap user-data args, DNS settings, and security groups",
+    "files": [],
+    "assertions": [
+      "Agent detects private endpoint configuration (endpointPublicAccess=false)",
+      "Agent checks VPC endpoints exist (NJ16) — ec2, ecr.api, ecr.dkr, sts, s3",
+      "Agent checks bootstrap user-data has --apiserver-endpoint, --b64-cluster-ca, --dns-cluster-ip (NJ18)",
+      "Agent checks VPC DNS support and hostnames enabled (NJ11)",
+      "Agent provides the specific missing VPC endpoint or bootstrap arg"
+    ]
+  },
+  {
+    "id": "3",
+    "prompt": "After upgrading our EKS cluster from 1.32 to 1.33, the new node group we created won't start. The old node group on 1.32 still works fine. We're using AL2 AMI. What happened?",
+    "expected_output": "Agent identifies that AL2 AMI is not available for EKS 1.33+ and recommends migrating to AL2023 or Bottlerocket",
+    "files": [],
+    "assertions": [
+      "Agent checks AMI compatibility (NJ22) — AL2 not supported on 1.33+",
+      "Agent identifies this as a Critical blocker",
+      "Agent recommends AL2023 or Bottlerocket as replacement",
+      "Agent mentions the bootstrap format change (nodeadm for AL2023)"
+    ]
+  },
+  {
+    "id": "4",
+    "prompt": "We use Karpenter v0.37 on our EKS 1.30 cluster. Karpenter is launching instances but they stay in NotReady state. The EC2 instances are running but never appear as Ready nodes. Cluster is 'analytics-prod' in eu-west-1.",
+    "expected_output": "Agent checks Karpenter-specific configuration — EC2NodeClass subnets, security groups, and AMI selectors against the cluster requirements",
+    "files": [],
+    "assertions": [
+      "Agent checks cluster state and Karpenter detection",
+      "Agent evaluates EC2NodeClass subnets match cluster VPC (NJ25)",
+      "Agent checks EC2NodeClass security groups include cluster SG (NJ26)",
+      "Agent checks AMI compatibility in EC2NodeClass (NJ27)",
+      "Agent checks if VPC CNI can schedule on the tainted node (NJ28)"
+    ]
+  },
+  {
+    "id": "5",
+    "prompt": "I'm getting 'Unauthorized' errors when my nodes try to join cluster 'dev-eks' in us-east-2. I created the node role with a path: arn:aws:iam::123456789012:role/teams/platform/eks-node-role. I added this ARN to the aws-auth ConfigMap but nodes still show Unauthorized.",
+    "expected_output": "Agent identifies the IAM role path issue in aws-auth ConfigMap and recommends stripping the path or migrating to EKS Access Entries",
+    "files": [],
+    "assertions": [
+      "Agent identifies the role path issue (NJ7)",
+      "Agent explains that aws-auth requires the path to be stripped",
+      "Agent provides the corrected ARN: arn:aws:iam::123456789012:role/eks-node-role",
+      "Agent recommends migrating to EKS Access Entries as the long-term fix"
+    ]
+  }
+]
