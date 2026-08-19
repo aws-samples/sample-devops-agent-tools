@@ -1,0 +1,73 @@
+[
+  {
+    "id": "ecs-review-smoke-test",
+    "prompt": "Read service-context.json. List the ECS service names, clusters, regions, and accounts. No analysis needed.",
+    "expected_output": "Lists every service from files/service-context.json with its name, cluster, region, and account exactly as defined in the file.",
+    "files": ["files/service-context.json"],
+    "assertions": [
+      "matches regex /[a-z]{2}-[a-z]+-\\d/",
+      "contains 'name' or contains 'service'",
+      "contains 'cluster'",
+      "contains 'region'",
+      "contains 'account'"
+    ]
+  },
+  {
+    "id": "ecs-review-arn-validation",
+    "prompt": "According to the skill, what is the first thing to validate about an ECS service ARN before collecting data, and what happens if the ARN region does not match the region parameter? No AWS access required.",
+    "expected_output": "States the ARN must match arn:aws*:ecs:*:*:service/*/*, cluster and service names are extracted, and the workflow halts if the ARN region does not match the region parameter.",
+    "files": [],
+    "assertions": [
+      "contains 'arn' or contains 'ARN'",
+      "contains 'region'",
+      "contains 'halt' or contains 'stop' or contains 'does not match'"
+    ]
+  },
+  {
+    "id": "ecs-review-six-pillars",
+    "prompt": "List the pillars the skill grades during a full ECS operations review. No AWS access required.",
+    "expected_output": "Mentions Resiliency & HA, Observability, Security, Operations, Performance, and Additional Analysis.",
+    "files": [],
+    "assertions": [
+      "contains 'Resiliency' or contains 'resiliency' or contains 'Resilience'",
+      "contains 'Observability' or contains 'observability'",
+      "contains 'Security' or contains 'security'",
+      "contains 'Operations' or contains 'operations'",
+      "contains 'Performance' or contains 'performance'",
+      "contains 'Additional' or contains 'additional'"
+    ]
+  },
+  {
+    "id": "ecs-review-read-only-contract",
+    "prompt": "Is this skill allowed to modify ECS resources? Name the kind of AWS API operations it is restricted to. No AWS access required.",
+    "expected_output": "States the skill is strictly read-only and uses only describe/list/get AWS API operations, never a mutating call.",
+    "files": [],
+    "assertions": [
+      "contains 'read-only' or contains 'read only'",
+      "contains 'describe' or contains 'list' or contains 'get'",
+      "contains 'no' or contains 'never' or contains 'not'"
+    ]
+  },
+  {
+    "id": "ecs-review-tier-1-foundation",
+    "prompt": "Which AWS API call must succeed before any other data collection in the ECS review, and what happens to dependent checks on non-Tier-1 access errors? No AWS access required.",
+    "expected_output": "States ecs.describeServices is the Tier 1 foundation that must complete first, and that non-Tier-1 access errors mark dependent checks N/A and continue.",
+    "files": [],
+    "assertions": [
+      "contains 'describeServices' or contains 'describe-services' or contains 'describeservices'",
+      "contains 'Tier 1' or contains 'tier 1' or contains 'foundation' or contains 'first'",
+      "contains 'N/A' or contains 'continue' or contains 'dependent'"
+    ]
+  },
+  {
+    "id": "ecs-review-coverage-gate",
+    "prompt": "Before finalizing the ECS report, what must the coverage gate verify? No AWS access required.",
+    "expected_output": "States every check ID across all 6 pillars must appear in a scorecard as pass/fail/N/A (including passes, no pillar dropped), the recommended-alarms table must be present, every fail needs a detailed finding block, and the review-common baseline must be accounted for.",
+    "files": [],
+    "assertions": [
+      "contains 'every check' or contains 'all 6' or contains 'all six' or contains 'coverage'",
+      "contains 'alarm'",
+      "contains 'pass' or contains 'N/A' or contains 'scorecard'"
+    ]
+  }
+]
