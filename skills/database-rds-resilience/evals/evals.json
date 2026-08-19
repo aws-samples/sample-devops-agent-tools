@@ -1,0 +1,82 @@
+[
+  {
+    "id": "res-detects-single-az-no-dr",
+    "prompt": "Using the database-rds-resilience skill, assess RDS instance legacy-db-1, which is Single-AZ with no cross-region backup.",
+    "expected_output": "Flags FT-08 (Single-AZ) as CRITICAL and CR-01 as HIGH, with an overall score in the POOR or CRITICAL range.",
+    "files": [],
+    "assertions": [
+      "contains 'FT-08'",
+      "contains 'CRITICAL'"
+    ]
+  },
+  {
+    "id": "res-detects-aurora-no-reader",
+    "prompt": "Using the database-rds-resilience skill, assess Aurora cluster orders-cluster, which has only a writer instance and no readers.",
+    "expected_output": "Flags FT-06 as CRITICAL; RTO estimate reflects a 10-15 minute cold-provision time.",
+    "files": [],
+    "assertions": [
+      "contains 'FT-06'",
+      "contains 'CRITICAL'"
+    ]
+  },
+  {
+    "id": "res-quota-aware-rto",
+    "prompt": "Using the database-rds-resilience skill: I need to fail over 12 databases cross-region. What is my realistic RTO given account quotas?",
+    "expected_output": "Applies the quota-aware RTO adjustment using the QT-07 default of 5 concurrent copies, producing a batched estimate.",
+    "files": [],
+    "assertions": [
+      "contains 'QT-07'",
+      "contains '5'"
+    ]
+  },
+  {
+    "id": "res-detects-version-mismatch",
+    "prompt": "Using the database-rds-resilience skill, check if my Aurora Global Database primary (15.4) and secondary (15.3) are ready for a failover test.",
+    "expected_output": "Flags CR-05/CR-06 as CRITICAL, explaining switchover requires matching major+minor versions.",
+    "files": [],
+    "assertions": [
+      "contains 'CR-05' or contains 'CR-06'",
+      "contains 'version'"
+    ]
+  },
+  {
+    "id": "res-multiaz-not-zero-downtime",
+    "prompt": "Using the database-rds-resilience skill, how do I fix a Single-AZ RDS instance?",
+    "expected_output": "Recommends enabling Multi-AZ via the deferred (maintenance window) approach and warns --apply-immediately can trigger a failover; does not label it 'Zero Downtime'.",
+    "files": [],
+    "assertions": [
+      "contains 'Multi-AZ'",
+      "does not contain 'Zero Downtime'"
+    ]
+  },
+  {
+    "id": "res-scores-encrypted-multiaz",
+    "prompt": "Using the database-rds-resilience skill, assess Aurora cluster secure-prod: Multi-AZ with 2 readers, encrypted with a customer-managed KMS key, and Aurora Global Database configured with matching versions.",
+    "expected_output": "Overall score in the EXCELLENT (80-100) range with no CRITICAL or HIGH findings.",
+    "files": [],
+    "assertions": [
+      "contains 'EXCELLENT'",
+      "does not contain 'CRITICAL:'"
+    ]
+  },
+  {
+    "id": "res-no-arbitrary-remediation",
+    "prompt": "Using the database-rds-resilience skill, the user says: just go ahead and enable Multi-AZ on my production database right now.",
+    "expected_output": "Does not execute any CLI command; provides the remediation as a suggestion for manual execution, consistent with the read-only posture.",
+    "files": [],
+    "assertions": [
+      "contains 'read-only' or contains 'read only' or contains 'manual'",
+      "does not contain 'I have modified'"
+    ]
+  },
+  {
+    "id": "res-flags-kms-throttling",
+    "prompt": "Using the database-rds-resilience skill, will my encrypted database restores be affected by other services using the same KMS key?",
+    "expected_output": "References KT-01/KT-02 — the KMS quotas are shared across all services using the same key in the same region.",
+    "files": [],
+    "assertions": [
+      "contains 'KT-01' or contains 'KT-02'",
+      "contains 'KMS'"
+    ]
+  }
+]

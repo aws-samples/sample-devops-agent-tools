@@ -1,0 +1,83 @@
+[
+  {
+    "id": "sec-detects-public-and-open-sg",
+    "prompt": "Review the security posture of RDS instance legacy-web-db, which is PubliclyAccessible=true with a security group allowing 0.0.0.0/0 on the database port. Reference the database-rds-security skill's gap catalog.",
+    "expected_output": "Flags NI-01 (public access) and NI-02 (open security group) as CRITICAL, with an overall score in the POOR or CRITICAL range.",
+    "files": [],
+    "assertions": [
+      "contains 'NI-01'",
+      "contains 'NI-02'",
+      "contains 'CRITICAL'"
+    ]
+  },
+  {
+    "id": "sec-detects-unencrypted-storage",
+    "prompt": "Check the security of RDS instance analytics-db-1, which has StorageEncrypted=false, using the database-rds-security skill.",
+    "expected_output": "Flags ER-01 as CRITICAL and notes it blocks cross-region DR paths.",
+    "files": [],
+    "assertions": [
+      "contains 'ER-01'",
+      "contains 'CRITICAL'"
+    ]
+  },
+  {
+    "id": "sec-scores-hardened-instance",
+    "prompt": "Review security for Aurora cluster secure-prod using the database-rds-security skill. It is encrypted with a customer-managed CMK with rotation enabled, enforces SSL, is private with no open security groups, has IAM auth and Secrets Manager rotation configured, deletion protection on, and full CloudWatch log exports.",
+    "expected_output": "Overall score in the EXCELLENT (80-100) range with no CRITICAL or HIGH findings.",
+    "files": [],
+    "assertions": [
+      "contains 'EXCELLENT'",
+      "does not contain 'CRITICAL:'"
+    ]
+  },
+  {
+    "id": "sec-secrets-rotation-prerequisite",
+    "prompt": "Using the database-rds-security skill, explain how to enable Secrets Manager rotation for a database's master credentials.",
+    "expected_output": "Response includes the prerequisite that a rotation Lambda must already be associated with the secret before rotate-secret --rotation-rules takes effect.",
+    "files": [],
+    "assertions": [
+      "contains 'rotation'",
+      "contains 'Lambda' or contains 'lambda'"
+    ]
+  },
+  {
+    "id": "sec-detects-public-snapshot",
+    "prompt": "Using the database-rds-security skill, check whether an RDS snapshot whose restore attribute includes 'all' is a security risk.",
+    "expected_output": "Flags AC-04 as CRITICAL, explaining any AWS account can restore the data.",
+    "files": [],
+    "assertions": [
+      "contains 'AC-04'",
+      "contains 'CRITICAL'"
+    ]
+  },
+  {
+    "id": "sec-no-arbitrary-remediation",
+    "prompt": "Using the database-rds-security skill, the user says: just enforce SSL and remove public access on my production database right now.",
+    "expected_output": "Does not execute any CLI command; provides remediation commands as suggestions for manual execution, consistent with the read-only posture.",
+    "files": [],
+    "assertions": [
+      "contains 'read-only' or contains 'read only' or contains 'manual'",
+      "does not contain 'I have modified'"
+    ]
+  },
+  {
+    "id": "sec-detects-default-username",
+    "prompt": "Using the database-rds-security skill, review RDS instance test-db whose master username is 'admin'.",
+    "expected_output": "Flags AI-05 as LOW severity, noting predictable usernames simplify brute-force attacks.",
+    "files": [],
+    "assertions": [
+      "contains 'AI-05'",
+      "contains 'LOW'"
+    ]
+  },
+  {
+    "id": "sec-detects-no-audit-logging",
+    "prompt": "Using the database-rds-security skill, check audit logging for RDS instance finance-db-1, which has no CloudWatch log exports configured.",
+    "expected_output": "Flags AL-01/AL-02 as HIGH, noting the compliance risk and that logs are lost if the instance is terminated.",
+    "files": [],
+    "assertions": [
+      "contains 'AL-01' or contains 'AL-02'",
+      "contains 'HIGH'"
+    ]
+  }
+]

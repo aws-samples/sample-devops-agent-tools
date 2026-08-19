@@ -1,0 +1,12 @@
+[
+  {"query": "Review the security posture of my RDS instance prod-orders-1", "should_trigger": true},
+  {"query": "Is my database publicly accessible?", "should_trigger": true},
+  {"query": "Check if my database credentials are rotating", "should_trigger": true},
+  {"query": "Am I compliant with PCI-DSS on this database?", "should_trigger": true},
+  {"query": "What security gaps exist on my Aurora cluster?", "should_trigger": true},
+  {"query": "Check if my RDS instance enforces SSL connections", "should_trigger": true},
+  {"query": "Has this database's snapshot been shared publicly?", "should_trigger": true},
+  {"query": "Write me a Python function to reverse a string", "should_trigger": false},
+  {"query": "What's the weather in Seattle today?", "should_trigger": false},
+  {"query": "Translate this paragraph to French", "should_trigger": false}
+]
