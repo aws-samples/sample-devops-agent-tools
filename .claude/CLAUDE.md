@@ -11,7 +11,7 @@ This repository consolidates AWS DevOps Agent skills. Follow these conventions w
 ## Repository Structure
 
 ```
-sample-devops-agent-tools/
+tools-for-devops-agent/
 ├── README.md                 # Project overview with skills table
 ├── .gitignore                # Root-level ignores
 ├── skills/
@@ -126,7 +126,7 @@ Only these extensions are permitted inside skill directories (enforced by `skill
 6. Test the skill with DevOps Agent before submitting.
 7. Update the root `README.md` skills table with the new skill's name, agent types, author, and docs link.
 8. Update the `llms.txt` file at the repo root — add the new skill to the "Available Skills" section following the existing format: `- [Skill Name](skills/<name>/SKILL.md): One-line description`.
-9. If the skill requires IAM permissions beyond the `AIDevOpsAgentAccessPolicy` managed policy, add a new parameter, condition, and inline policy resource to `cloudformation/devops-agent-skill-policies.yaml`, and update the `SkillPolicySummary` output.
+9. If the skill requires IAM permissions beyond the `AIDevOpsAgentAccessPolicy` managed policy, add a new parameter, condition, and inline policy resource to `cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`, and update the `SkillPolicySummary` output.
 
 ## Zipping for Upload
 

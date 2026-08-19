@@ -43,13 +43,13 @@ Most permissions are already covered by the AWS managed policy [`AIDevOpsAgentAc
 
 ```bash
 aws cloudformation deploy \
-  --template-file cloudformation/devops-agent-skill-policies.yaml \
+  --template-file cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml \
   --stack-name devops-agent-skill-policies \
   --parameter-overrides ExistingRoleName=<YOUR-DEVOPS-AGENT-ROLE-NAME> \
   --capabilities CAPABILITY_NAMED_IAM
 ```
 
-The template supports enabling/disabling policies per skill, optional region restrictions, and can either attach to an existing role or create a new one. See [`cloudformation/devops-agent-skill-policies.yaml`](cloudformation/devops-agent-skill-policies.yaml) for details.
+The template supports enabling/disabling policies per skill, optional region restrictions, and can either attach to an existing role or create a new one. See [`cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml`](cloudformation/devops-agent-skill-policies/devops-agent-skill-policies.yaml) for details.
 
 ## Contributing
 

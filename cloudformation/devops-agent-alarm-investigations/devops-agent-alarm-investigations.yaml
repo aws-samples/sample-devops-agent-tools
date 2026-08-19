@@ -1,0 +1,220 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Forwards a single Amazon CloudWatch alarm to an AWS DevOps Agent webhook so that
+  alarm opens an investigation. One stack = one alarm: it creates an Amazon
+  EventBridge rule scoped to that alarm's ARN, an EventBridge connection holding the
+  webhook API key, an EventBridge API destination pointing at the webhook, and a role
+  that lets the rule invoke it. No AWS Lambda function is involved.
+
+  Prerequisite: create the Agent Space and its generic webhook with API key
+  authentication first (console — no API), then pass the webhook URL, the API key,
+  and the alarm ARN to this stack.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: AWS DevOps Agent Webhook
+        Parameters:
+          - WebhookUrl
+          - WebhookApiKey
+          - AgentName
+      - Label:
+          default: Alarm
+        Parameters:
+          - AlarmArn
+      - Label:
+          default: Delivery Tuning (optional)
+        Parameters:
+          - InvocationRateLimitPerSecond
+    ParameterLabels:
+      WebhookUrl:
+        default: DevOps Agent generic (API key) webhook URL
+      WebhookApiKey:
+        default: Webhook API key (bearer token)
+      AgentName:
+        default: Target DevOps Agent name (used to tag created resources)
+      AlarmArn:
+        default: ARN of the single CloudWatch alarm to forward
+      InvocationRateLimitPerSecond:
+        default: Max webhook invocations per second
+
+Parameters:
+  WebhookUrl:
+    Type: String
+    Description: >
+      HTTPS URL of the AWS DevOps Agent generic webhook, created in the Agent Space
+      console with API key authentication.
+    AllowedPattern: '^https://[A-Za-z0-9.-]+(:[0-9]+)?(/.*)?$'
+    ConstraintDescription: Must be an HTTPS URL.
+
+  WebhookApiKey:
+    Type: String
+    NoEcho: true
+    Description: >
+      The API key (bearer token) shown once when you created the webhook. It is stored
+      in an AWS Secrets Manager secret that EventBridge creates and owns for the
+      connection. To keep the key in a secret you own instead, see the README.
+    MinLength: 1
+    ConstraintDescription: Must not be empty.
+
+  AgentName:
+    Type: String
+    Description: >
+      Name/label of the AWS DevOps Agent this integration targets. Used only to tag
+      the taggable resources this stack creates (EventBridge rule, IAM role) with
+      DevOpsAgent=<name> for identification and cost allocation; it does not affect
+      routing (routing is determined by the webhook URL).
+    MinLength: 1
+    MaxLength: 256
+    AllowedPattern: "^[A-Za-z0-9 _.:/=+@-]{1,256}$"
+    ConstraintDescription: >
+      1-256 characters using letters, numbers, spaces, and _ . : / = + - @
+      (the AWS tag-value character set).
+
+  AlarmArn:
+    Type: String
+    Description: >
+      ARN of the single Amazon CloudWatch alarm this stack forwards. Only ALARM
+      state changes for this exact alarm are sent to the webhook.
+    AllowedPattern: '^arn:aws[a-zA-Z-]*:cloudwatch:[a-z0-9-]+:[0-9]{12}:alarm:.+'
+    ConstraintDescription: Must be a CloudWatch alarm ARN.
+
+  InvocationRateLimitPerSecond:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 300
+    Description: >
+      (Optional) Maximum webhook invocations per second for the API destination. The
+      default of 1 suits a single low-frequency alarm. Raise it only if one stack must
+      absorb a burst; events above the limit are queued and retried inside the retry
+      window.
+
+Resources:
+  # Holds the bearer token. EventBridge stores it in a Secrets Manager secret it
+  # creates and owns for this connection, and adds the header on every invocation.
+  WebhookConnection:
+    Type: AWS::Events::Connection
+    Properties:
+      Description: !Sub 'API key for the AWS DevOps Agent webhook (${AgentName}).'
+      AuthorizationType: API_KEY
+      AuthParameters:
+        ApiKeyAuthParameters:
+          # The DevOps Agent webhook expects the token as a bearer token, so the
+          # header name is Authorization and the value carries the Bearer prefix.
+          ApiKeyName: Authorization
+          ApiKeyValue: !Sub 'Bearer ${WebhookApiKey}'
+
+  WebhookApiDestination:
+    Type: AWS::Events::ApiDestination
+    Properties:
+      Description: !Sub 'AWS DevOps Agent webhook (${AgentName}).'
+      ConnectionArn: !GetAtt WebhookConnection.Arn
+      InvocationEndpoint: !Ref WebhookUrl
+      HttpMethod: POST
+      InvocationRateLimitPerSecond: !Ref InvocationRateLimitPerSecond
+
+  # An API destination target requires a role granting events:InvokeApiDestination.
+  InvokeWebhookRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref 'AWS::AccountId'
+      Policies:
+        - PolicyName: invoke-devops-agent-webhook
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: InvokeWebhookApiDestination
+                Effect: Allow
+                Action: events:InvokeApiDestination
+                Resource: !GetAtt WebhookApiDestination.Arn
+      Tags:
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: DevOpsAgent
+          Value: !Ref AgentName
+
+  # Rule scoped to exactly one alarm ARN — the rule itself is the filter, so no
+  # code is needed to decide whether an event should be forwarded.
+  AlarmStateChangeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub 'Forwards ALARM-state changes for ${AlarmArn} to the DevOps Agent webhook.'
+      EventPattern:
+        source:
+          - aws.cloudwatch
+        detail-type:
+          - CloudWatch Alarm State Change
+        resources:
+          - !Ref AlarmArn
+        detail:
+          state:
+            value:
+              - ALARM
+      State: ENABLED
+      Targets:
+        - Id: DevOpsAgentWebhook
+          Arn: !GetAtt WebhookApiDestination.Arn
+          RoleArn: !GetAtt InvokeWebhookRole.Arn
+          HttpParameters:
+            HeaderParameters:
+              Content-Type: application/json
+          # incidentId is the EventBridge event id, which is constant across
+          # retries, so DevOps Agent deduplicates redeliveries of the same event
+          # instead of opening a new investigation for each attempt.
+          InputTransformer:
+            InputPathsMap:
+              eventId: $.id
+              eventTime: $.time
+              alarmArn: $.resources[0]
+            InputTemplate: |
+              {
+                "eventType": "incident",
+                "incidentId": "<eventId>",
+                "action": "created",
+                "priority": "HIGH",
+                "title": "CloudWatch alarm in ALARM state",
+                "description": "CloudWatch alarm <alarmArn> entered ALARM state.",
+                "timestamp": "<eventTime>",
+                "data": {
+                  "metadata": {
+                    "alarmArn": "<alarmArn>",
+                    "state": "ALARM"
+                  }
+                }
+              }
+          RetryPolicy:
+            MaximumRetryAttempts: 32
+            MaximumEventAgeInSeconds: 28800
+      Tags:
+        - Key: ManagedBy
+          Value: CloudFormation
+        - Key: DevOpsAgent
+          Value: !Ref AgentName
+
+Outputs:
+  ApiDestinationArn:
+    Description: ARN of the API destination that posts to the webhook.
+    Value: !GetAtt WebhookApiDestination.Arn
+
+  ConnectionArn:
+    Description: ARN of the EventBridge connection holding the webhook API key.
+    Value: !GetAtt WebhookConnection.Arn
+
+  EventRuleArn:
+    Description: ARN of the EventBridge rule scoped to the alarm.
+    Value: !GetAtt AlarmStateChangeRule.Arn
+
+  ForwardedAlarmArn:
+    Description: The CloudWatch alarm this stack forwards.
+    Value: !Ref AlarmArn
