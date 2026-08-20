@@ -1,0 +1,475 @@
+# EKS Upgrade Readiness — Required Check Registry
+# Version: 2.0.0
+# Purpose: Defines all checks for the upgrade readiness assessment.
+#          Evidence Completeness = checks_performed / total_applicable_checks
+#
+# Fields:
+#   id            - Unique identifier
+#   description   - What the check verifies
+#   category      - pre_flight | node_assessment | addon_assessment |
+#                   workload_assessment | infrastructure | networking |
+#                   karpenter | pre_drain | rollback
+#   required      - always | if_kubectl | if_helm | if_karpenter |
+#                   if_fargate | if_encrypted | if_custom_ami |
+#                   if_self_managed_nodes | if_auto_mode | if_post_upgrade
+#   api           - Primary API or method used
+#   severity      - critical | high | medium | low (if check fails)
+
+checks:
+
+  # ── PRE-FLIGHT ────────────────────────────────────────────────────────────
+
+  - id: PF-01
+    description: "Cluster status is ACTIVE"
+    category: pre_flight
+    required: always
+    api: "eks:DescribeCluster → status"
+    severity: critical
+
+  - id: PF-02
+    description: "Cluster version identified, target determined"
+    category: pre_flight
+    required: always
+    api: "eks:DescribeCluster → version"
+    severity: critical
+
+  - id: PF-03
+    description: "Cluster not mid-upgrade (no pending platform update)"
+    category: pre_flight
+    required: always
+    api: "eks:ListUpdates"
+    severity: high
+
+  - id: PF-04
+    description: "Control plane logging enabled (audit + authenticator)"
+    category: pre_flight
+    required: always
+    api: "eks:DescribeCluster → logging"
+    severity: medium
+
+  - id: PF-05
+    description: "EKS Upgrade Insights queried (primary signal)"
+    category: pre_flight
+    required: always
+    api: "eks:ListInsights, eks:DescribeInsight"
+    severity: critical
+
+  - id: PF-06
+    description: "Cluster IAM role valid with correct trust policy"
+    category: pre_flight
+    required: always
+    api: "iam:GetRole, iam:ListAttachedRolePolicies"
+    severity: critical
+
+  - id: PF-07
+    description: "KMS key valid and accessible (if encryption enabled)"
+    category: pre_flight
+    required: if_encrypted
+    api: "eks:DescribeCluster → encryptionConfig"
+    severity: critical
+
+  - id: PF-08
+    description: "All nodes Ready, no pending CSRs, no crash-looping system pods"
+    category: pre_flight
+    required: if_kubectl
+    api: "kubectl get nodes, kubectl get csr, kubectl get pods -n kube-system"
+    severity: high
+
+  - id: PF-09
+    description: "DNS resolution working (CoreDNS healthy)"
+    category: pre_flight
+    required: if_kubectl
+    api: "kubectl get pods -n kube-system -l k8s-app=kube-dns"
+    severity: high
+
+  - id: PF-10
+    description: "Metrics server responding"
+    category: pre_flight
+    required: if_kubectl
+    api: "kubectl top nodes"
+    severity: low
+
+  - id: PF-11
+    description: "Version skew lower-bound gate — kubelets meet target N-3 (1.28+) or N-2 (<1.28)"
+    category: pre_flight
+    required: always
+    api: "eks:DescribeNodegroup (version), kubectl get nodes"
+    severity: critical
+
+  - id: PF-12
+    description: "Current-state upper-bound gate — no kubelet is newer than the current control plane"
+    category: pre_flight
+    required: always
+    api: "eks:DescribeCluster → version, kubectl get nodes → status.nodeInfo.kubeletVersion"
+    severity: critical
+
+  - id: PF-13
+    description: "Management plane detected (self-managed/ACK/KRO/GitOps/unknown)"
+    category: pre_flight
+    required: always
+    api: "eks:DescribeCluster → tags, kubectl get crd clusters.eks.services.k8s.aws"
+    severity: medium
+
+  # ── INFRASTRUCTURE ────────────────────────────────────────────────────────
+
+  - id: INFRA-01
+    description: "Subnet and VPC CNI mode-specific surge capacity (node/pod subnets, prefixes, or branch ENIs)"
+    category: infrastructure
+    required: always
+    api: "ec2:DescribeSubnets, aws-node env/config, kubectl get eniconfig"
+    severity: critical
+
+  - id: INFRA-02
+    description: "EC2 vCPU quota headroom for surge nodes"
+    category: infrastructure
+    required: always
+    api: "servicequotas:GetServiceQuota (L-1216C47A)"
+    severity: high
+
+  - id: INFRA-03
+    description: "EBS volume quota headroom"
+    category: infrastructure
+    required: always
+    api: "servicequotas:GetServiceQuota (L-7A658000)"
+    severity: high
+
+  - id: INFRA-04
+    description: "VPC CNI mode detected (standard/prefix-delegation/custom-networking/IPv6/SGP)"
+    category: networking
+    required: always
+    api: "eks:DescribeAddon (vpc-cni), kubectl get ds aws-node env vars"
+    severity: medium
+
+  - id: INFRA-06
+    description: "Mode-specific VPC CNI capacity calculation (prefix /28, ENIConfig pod subnet, or branch-ENI limit)"
+    category: networking
+    required: if_kubectl
+    api: "ec2:DescribeSubnets, kubectl get eniconfig, ec2:DescribeNetworkInterfaces"
+    severity: critical
+
+  - id: INFRA-05
+    description: "Security groups allow required control-plane to node communication"
+    category: networking
+    required: always
+    api: "ec2:DescribeSecurityGroups"
+    severity: high
+
+  # ── NODE ASSESSMENT ───────────────────────────────────────────────────────
+
+  - id: NODE-01
+    description: "Managed node group inventory (all MNGs described)"
+    category: node_assessment
+    required: always
+    api: "eks:ListNodegroups, eks:DescribeNodegroup"
+    severity: critical
+
+  - id: NODE-02
+    description: "Self-managed ASG inventory"
+    category: node_assessment
+    required: if_self_managed_nodes
+    api: "autoscaling:DescribeAutoScalingGroups (filtered by cluster tag)"
+    severity: high
+
+  - id: NODE-03
+    description: "AMI family detection (AL2, AL2023, Bottlerocket, Windows, Custom)"
+    category: node_assessment
+    required: always
+    api: "eks:DescribeNodegroup → amiType"
+    severity: critical
+
+  - id: NODE-04
+    description: "AL2 hard gate check (AL2 unavailable for target >= 1.33)"
+    category: node_assessment
+    required: always
+    api: "eks:DescribeNodegroup → amiType vs target version"
+    severity: critical
+
+  - id: NODE-05
+    description: "Custom launch template AMI detection"
+    category: node_assessment
+    required: always
+    api: "ec2:DescribeLaunchTemplateVersions → ImageId"
+    severity: high
+
+  - id: NODE-06
+    description: "Fargate profile inventory"
+    category: node_assessment
+    required: if_fargate
+    api: "eks:ListFargateProfiles, eks:DescribeFargateProfile"
+    severity: medium
+
+  - id: NODE-07
+    description: "Auto Mode detection and config"
+    category: node_assessment
+    required: if_auto_mode
+    api: "eks:DescribeCluster → computeConfig"
+    severity: medium
+
+  - id: NODE-08
+    description: "Custom AMI bootstrap method (bootstrap.sh vs nodeadm)"
+    category: node_assessment
+    required: if_custom_ami
+    api: "ec2:DescribeLaunchTemplateVersions → UserData"
+    severity: high
+
+  # ── ADDON ASSESSMENT ──────────────────────────────────────────────────────
+
+  - id: ADDON-01
+    description: "EKS managed addon inventory with current versions"
+    category: addon_assessment
+    required: always
+    api: "eks:ListAddons, eks:DescribeAddon"
+    severity: critical
+
+  - id: ADDON-02
+    description: "Addon compatibility verified against target via live API"
+    category: addon_assessment
+    required: always
+    api: "eks:DescribeAddonVersions"
+    severity: critical
+
+  - id: ADDON-03
+    description: "Self-managed addon detection including core VPC CNI, CoreDNS, and kube-proxy images/config"
+    category: addon_assessment
+    required: if_kubectl
+    api: "kubectl get daemonset aws-node,kube-proxy; deployment coredns; configmaps"
+    severity: high
+
+  - id: ADDON-04
+    description: "Addon upgrade order calculated (dependency chain)"
+    category: addon_assessment
+    required: always
+    api: "derived from ADDON-01 + ADDON-02"
+    severity: medium
+
+  - id: ADDON-05
+    description: "Third-party controller compatibility (LBC, cert-manager, external-dns, etc.)"
+    category: addon_assessment
+    required: if_kubectl
+    api: "kubectl get deploy (image tags) vs compatibility matrix"
+    severity: high
+
+  # ── WORKLOAD ASSESSMENT ───────────────────────────────────────────────────
+
+  - id: WKLD-01
+    description: "Deprecated API scan (live resources)"
+    category: workload_assessment
+    required: if_kubectl
+    api: "kubectl, kubent, pluto"
+    severity: high
+
+  - id: WKLD-02
+    description: "Helm stored manifest API scan (deployed revision only)"
+    category: workload_assessment
+    required: if_helm
+    api: "kubectl get secrets -l owner=helm,status=deployed"
+    severity: critical
+
+  - id: WKLD-03
+    description: "Third-party CRD API deprecation check (vendor/version-aware)"
+    category: workload_assessment
+    required: if_kubectl
+    api: "kubectl get crds, kubectl get deploy (controller versions)"
+    severity: high
+
+  - id: WKLD-04
+    description: "PDB blocking analysis (maxUnavailable=0 or minAvailable=replicas)"
+    category: workload_assessment
+    required: if_kubectl
+    api: "kubectl get pdb -A"
+    severity: high
+
+  - id: WKLD-05
+    description: "Admission webhook compatibility (failurePolicy=Fail on broad groups)"
+    category: workload_assessment
+    required: if_kubectl
+    api: "kubectl get validatingwebhookconfigurations, mutatingwebhookconfigurations"
+    severity: high
+
+  - id: WKLD-06
+    description: "StatefulSet safety (grace period, PVC retention, single-replica)"
+    category: workload_assessment
+    required: if_kubectl
+    api: "kubectl get statefulsets -A"
+    severity: medium
+
+  - id: WKLD-07
+    description: "Scaled-to-zero workload detection"
+    category: workload_assessment
+    required: if_kubectl
+    api: "kubectl get deploy,sts (replicas=0)"
+    severity: low
+
+  - id: WKLD-08
+    description: "TopologySpreadConstraints on critical workloads"
+    category: workload_assessment
+    required: if_kubectl
+    api: "kubectl get deploy -A (check spec)"
+    severity: low
+
+  - id: WKLD-09
+    description: "Service mesh detection (Istio, App Mesh, Linkerd)"
+    category: workload_assessment
+    required: if_kubectl
+    api: "kubectl get deploy, kubectl get crd"
+    severity: medium
+
+  # ── KARPENTER ─────────────────────────────────────────────────────────────
+
+  - id: KARP-01
+    description: "Karpenter version compatibility with target K8s version"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get deploy karpenter -n kube-system (image tag)"
+    severity: critical
+
+  - id: KARP-02
+    description: "Drift feature gate enabled (default on v0.33+)"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get deploy karpenter env FEATURE_GATES"
+    severity: high
+
+  - id: KARP-03
+    description: "expireAfter not set to Never on any NodePool"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get nodepools"
+    severity: high
+
+  - id: KARP-04
+    description: "Disruption budgets allow at least 1 node disruption"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get nodepools (spec.disruption.budgets)"
+    severity: high
+
+  - id: KARP-05
+    description: "EC2NodeClass amiSelectorTerms not pinned to specific AMI ID"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get ec2nodeclasses"
+    severity: high
+
+  - id: KARP-06
+    description: "EC2NodeClass amiFamily not AL2 when target >= 1.33"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get ec2nodeclasses (spec.amiFamily)"
+    severity: critical
+
+  - id: KARP-07
+    description: "Karpenter controller not self-hosted on Karpenter-managed nodes"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get pods -n kube-system -l app.kubernetes.io/name=karpenter (nodeSelector)"
+    severity: critical
+
+  - id: KARP-08
+    description: "NodePool nodeClassRef points to existing EC2NodeClass"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get nodepools, kubectl get ec2nodeclasses"
+    severity: high
+
+  - id: KARP-09
+    description: "Consolidation interference check (short consolidateAfter + drift)"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get nodepools (spec.disruption)"
+    severity: medium
+
+  - id: KARP-10
+    description: "Disruption budget schedule does not conflict with upgrade window"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get nodepools (spec.disruption.budgets[].schedule)"
+    severity: medium
+
+  - id: KARP-11
+    description: "NodeClaim expireAfter won't trigger during upgrade window"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get nodeclaims"
+    severity: medium
+
+  - id: KARP-12
+    description: "Drift throughput estimation (time to replace all nodes)"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get nodes (karpenter-managed count) + budget rate"
+    severity: low
+
+  - id: KARP-13
+    description: "Karpenter controller health (all replicas ready, no crash-loop)"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get deploy karpenter -n kube-system"
+    severity: critical
+
+  - id: KARP-14
+    description: "v1alpha5 Provisioner orphan detection (incomplete migration)"
+    category: karpenter
+    required: if_karpenter
+    api: "kubectl get crd provisioners.karpenter.sh"
+    severity: medium
+
+  # ── PRE-DRAIN SAFETY ──────────────────────────────────────────────────────
+
+  - id: DRAIN-01
+    description: "Bare pods (no ownerReferences) on nodes — not rescheduled after eviction"
+    category: pre_drain
+    required: if_kubectl
+    api: "kubectl get pods -A (filter no ownerReferences)"
+    severity: high
+
+  - id: DRAIN-02
+    description: "Pods with emptyDir volumes — data lost on drain"
+    category: pre_drain
+    required: if_kubectl
+    api: "kubectl get pods -A (volume type emptyDir)"
+    severity: medium
+
+  - id: DRAIN-03
+    description: "Pods with custom finalizers — can hang eviction indefinitely"
+    category: pre_drain
+    required: if_kubectl
+    api: "kubectl get pods -A (metadata.finalizers)"
+    severity: medium
+
+  - id: DRAIN-04
+    description: "EBS AZ-pinned PVCs — cross-AZ reschedule strands the volume"
+    category: pre_drain
+    required: if_kubectl
+    api: "kubectl get pvc,pv + ec2:DescribeSubnets (AZ match)"
+    severity: critical
+
+  - id: DRAIN-05
+    description: "Fail-closed webhooks on drain-target nodes — eviction deadlock"
+    category: pre_drain
+    required: if_kubectl
+    api: "kubectl get webhookconfigs + kubectl get endpoints"
+    severity: critical
+
+  - id: DRAIN-06
+    description: "CoreDNS SPOF — all replicas on same drain batch"
+    category: pre_drain
+    required: if_kubectl
+    api: "kubectl get pods -n kube-system -l k8s-app=kube-dns (node distribution)"
+    severity: critical
+
+  # ── ROLLBACK ──────────────────────────────────────────────────────────────
+
+  - id: ROLL-01
+    description: "Pre-upgrade rollback advisory (eligibility conditions and 7-day window documented; not yet verifiable)"
+    category: rollback
+    required: always
+    api: "advisory from upgrade plan"
+    severity: medium
+
+  - id: ROLL-02
+    description: "Post-upgrade ROLLBACK_READINESS insights are complete, fresh, and passing"
+    category: rollback
+    required: if_post_upgrade
+    api: "eks:ListInsights --filter categories=ROLLBACK_READINESS; eks:DescribeInsight"
+    severity: high

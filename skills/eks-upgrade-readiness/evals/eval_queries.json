@@ -1,0 +1,66 @@
+[
+  {
+    "query": "Which skill would help me assess if my EKS cluster is ready to upgrade? Just name it; do not run it.",
+    "should_trigger": true
+  },
+  {
+    "query": "Is there a skill available for planning an EKS Kubernetes version upgrade? Answer yes or no with the skill name; do not execute it.",
+    "should_trigger": true
+  },
+  {
+    "query": "Name the skill that covers EKS deprecated API detection before upgrading. Do not run any checks.",
+    "should_trigger": true
+  },
+  {
+    "query": "Which skill checks EKS addon compatibility with a target Kubernetes version? Just name it.",
+    "should_trigger": true
+  },
+  {
+    "query": "Is there a skill for validating Pod Disruption Budgets before an EKS node group upgrade? Name only.",
+    "should_trigger": true
+  },
+  {
+    "query": "Name the skill that helps with capacity planning for EKS cluster upgrades. Do not execute.",
+    "should_trigger": true
+  },
+  {
+    "query": "Which skill detects AL2 to AL2023 migration issues before an EKS upgrade? Name only.",
+    "should_trigger": true
+  },
+  {
+    "query": "Is there a skill that checks kubelet version skew policy before upgrading EKS? Just name it.",
+    "should_trigger": true
+  },
+  {
+    "query": "Which skill helps troubleshoot RDS Aurora database performance issues? Name only.",
+    "should_trigger": false
+  },
+  {
+    "query": "Is there a skill for setting up new ECS Fargate services? Just name it.",
+    "should_trigger": false
+  },
+  {
+    "query": "Name the skill that handles S3 bucket security configuration audits. Do not run it.",
+    "should_trigger": false
+  },
+  {
+    "query": "Which skill investigates Lambda function timeout issues? Name only.",
+    "should_trigger": false
+  },
+  {
+    "query": "Is there a skill for VPC networking and subnet configuration? Answer with skill name only.",
+    "should_trigger": false
+  },
+  {
+    "query": "Name the skill that covers MSK Kafka consumer lag troubleshooting. Do not execute.",
+    "should_trigger": false
+  },
+  {
+    "query": "Which skill helps set up Karpenter from scratch on a new cluster? Name only.",
+    "should_trigger": false
+  },
+  {
+    "query": "Is there a skill for EKS pod OOM troubleshooting and memory right-sizing? Just name it.",
+    "should_trigger": false
+  }
+]

@@ -1,0 +1,282 @@
+[
+  {
+    "name": "basic_upgrade_readiness_check",
+    "prompt": "Check if my EKS cluster prod-cluster in us-east-1 is ready to upgrade to version 1.31",
+    "assertions": [
+      "should call eks describe-cluster or equivalent API",
+      "should check EKS upgrade insights (ListInsights) as primary signal",
+      "should produce a readiness verdict (READY, NOT READY, READY WITH WARNINGS, or CANNOT DETERMINE)",
+      "should mention addon compatibility check via DescribeAddonVersions",
+      "should inventory all node populations (MNG, self-managed, Karpenter, Fargate)",
+      "should check kubelet version skew"
+    ]
+  },
+  {
+    "name": "deprecated_api_investigation",
+    "prompt": "What deprecated Kubernetes APIs would break if I upgrade my EKS cluster from 1.30 to 1.31?",
+    "assertions": [
+      "should reference the API deprecation schedule",
+      "should identify specific APIs removed in 1.31",
+      "should suggest replacement APIs",
+      "should recommend checking EKS upgrade insights first",
+      "should mention Helm stored manifest scanning for deployed revisions",
+      "should mention third-party CRD deprecation checks"
+    ]
+  },
+  {
+    "name": "addon_compatibility_check",
+    "prompt": "Are my EKS addons compatible with Kubernetes 1.31? My cluster is running vpc-cni v1.16.0, coredns v1.10.1, and kube-proxy v1.29.0",
+    "assertions": [
+      "should use DescribeAddonVersions API to check each addon against target",
+      "should identify kube-proxy version mismatch (1.29 vs target 1.31)",
+      "should recommend upgrade order (control plane first, then addons)",
+      "should mention using describe-addon-versions for live verification",
+      "should detect self-managed addons not in EKS addon list"
+    ]
+  },
+  {
+    "name": "capacity_planning_large_cluster",
+    "prompt": "I need to upgrade a 50-node EKS cluster across 3 AZs with m6g.2xlarge instances. What capacity do I need?",
+    "assertions": [
+      "should calculate surge node requirements based on maxUnavailable",
+      "should mention capacity reservation options (ODCR or FDCR)",
+      "should discuss instance type availability",
+      "should recommend an upgrade strategy appropriate for cluster size",
+      "should mention pausing Karpenter consolidation or CA scale-down during rotation"
+    ]
+  },
+  {
+    "name": "pdb_validation",
+    "prompt": "Will my Pod Disruption Budgets block the EKS node group upgrade? I have PDBs with maxUnavailable: 0 on critical services",
+    "assertions": [
+      "should identify maxUnavailable: 0 as a blocker for node drains",
+      "should recommend adjusting PDBs before upgrade",
+      "should suggest at least maxUnavailable: 1 during upgrade window",
+      "should place PDB mutation in remediation section (not inline)",
+      "should warn this is a read-only assessment, operator must approve changes"
+    ]
+  },
+  {
+    "name": "full_upgrade_plan",
+    "prompt": "Create a complete upgrade plan for my EKS cluster from 1.29 to 1.30 including control plane, addons, and node groups",
+    "assertions": [
+      "should produce a step-by-step ordered plan",
+      "should list pre-upgrade alignment steps (Karpenter/CA if needed)",
+      "should include autoscaler pause before node rotation",
+      "should specify addon upgrade order after control plane",
+      "should include node group upgrade after addons",
+      "should include post-upgrade validation smoke tests",
+      "should include rollback gates between steps",
+      "should include a pre-upgrade checklist"
+    ]
+  },
+  {
+    "name": "n2_version_skew_mixed_fleet",
+    "prompt": "My EKS cluster is on 1.27 with kubelet versions ranging from 1.25 to 1.27 across nodes. Some are managed node groups, some are self-managed ASGs with custom AMIs. Can I upgrade to 1.28?",
+    "assertions": [
+      "should identify that 1.27 uses N-2 skew policy (kubelet >= 1.25 required)",
+      "should confirm 1.25 kubelet is within tolerance for current 1.27 CP",
+      "should warn that after upgrade to 1.28, N-3 policy applies but 1.25 nodes become N-3 (borderline)",
+      "should inventory both managed and self-managed node populations",
+      "should flag custom AMIs as requiring manual launch template update",
+      "should NOT mark missing data as PASS"
+    ]
+  },
+  {
+    "name": "n3_version_skew_violation",
+    "prompt": "My cluster is on 1.30 and I want to go to 1.31. I have some nodes still running kubelet 1.27. Is that okay?",
+    "assertions": [
+      "should identify version skew violation (1.27 kubelet with 1.31 CP = N-4, exceeds N-3)",
+      "should mark this as FAIL/BLOCKER",
+      "should recommend upgrading those nodes before control plane upgrade",
+      "should distinguish between MNG and self-managed remediation paths",
+      "should NOT produce READY verdict while this violation exists"
+    ]
+  },
+  {
+    "name": "missing_insights_unknown_verdict",
+    "prompt": "Check upgrade readiness for my cluster staging-app. I don't have eks:ListInsights permission.",
+    "assertions": [
+      "should mark Insights gate as UNKNOWN (not PASS, not N/A)",
+      "should continue with remaining checks despite missing Insights",
+      "should produce CANNOT DETERMINE overall verdict (not READY)",
+      "should list the missing permission and recommend granting it",
+      "should still check infrastructure prerequisites, addons, node groups"
+    ]
+  },
+  {
+    "name": "custom_bootstrap_al2_to_al2023",
+    "prompt": "We use AL2 with custom bootstrap scripts (kubelet-extra-args, custom yum packages, cgroup v1 assumptions). Target is 1.33. Assess readiness.",
+    "assertions": [
+      "should identify AL2 as CRITICAL blocker for 1.33+ (AMIs unavailable)",
+      "should flag bootstrap.sh to nodeadm migration requirement",
+      "should identify kubelet-extra-args needing conversion to NodeConfig YAML",
+      "should flag yum to dnf change",
+      "should mention cgroup v2 compatibility concerns",
+      "should mention IMDSv2 default on AL2023",
+      "should route remediation through launch template update"
+    ]
+  },
+  {
+    "name": "pagination_and_access_denied",
+    "prompt": "I have a cluster with 200 node groups and 50 addons. Check if it's ready to upgrade. Note: I don't have permission to describe subnets.",
+    "assertions": [
+      "should paginate ListNodegroups results (not stop at first page)",
+      "should paginate ListAddons results",
+      "should mark subnet IP check as UNKNOWN due to AccessDenied",
+      "should NOT mark subnet check as PASS or N/A",
+      "should produce CANNOT DETERMINE overall verdict (UNKNOWN gate exists)",
+      "should note which specific permission is missing"
+    ]
+  },
+  {
+    "name": "karpenter_drift_disabled",
+    "prompt": "My cluster runs Karpenter v0.32 with Drift feature gate disabled and expireAfter set to Never on all NodePools. Planning to upgrade from 1.30 to 1.31.",
+    "assertions": [
+      "should flag Drift disabled as a problem (nodes won't auto-replace)",
+      "should flag expireAfter Never as a problem (nodes stay on old AMI forever)",
+      "should check Karpenter version compatibility with target (v0.32 may not support 1.31)",
+      "should recommend upgrading Karpenter before control plane (pre-upgrade alignment)",
+      "should place mutation commands in remediation section only",
+      "should check disruption budgets"
+    ]
+  },
+  {
+    "name": "gitops_iac_detection",
+    "prompt": "My cluster is managed by Terraform and ArgoCD deploys all workloads. Check upgrade readiness and tell me how to proceed.",
+    "assertions": [
+      "should detect Terraform ownership from cluster tags",
+      "should detect ArgoCD from addon labels or deployments",
+      "should route control plane upgrade through terraform apply (not direct aws CLI)",
+      "should route workload changes through ArgoCD Git source",
+      "should warn against direct aws eks update-cluster-version (causes drift)",
+      "should still perform all readiness checks regardless of IaC tool"
+    ]
+  },
+  {
+    "name": "post_upgrade_validation",
+    "prompt": "We just finished upgrading our cluster to 1.31. What should we validate?",
+    "assertions": [
+      "should include DNS resolution test",
+      "should include metrics-server check",
+      "should include pod scheduling test",
+      "should include load balancer health check",
+      "should include IRSA or Pod Identity validation",
+      "should recommend comparing against pre-upgrade baseline",
+      "should check for new CrashLoopBackOff pods"
+    ]
+  },
+  {
+    "name": "self_managed_addon_detection",
+    "prompt": "My cluster shows only vpc-cni and kube-proxy in EKS managed addons, but I know we have AWS Load Balancer Controller, external-dns, and cert-manager installed via Helm. Check addon compatibility for 1.31.",
+    "assertions": [
+      "should use describe-addon-versions for managed addons",
+      "should detect self-managed addons by scanning deployments/Helm releases",
+      "should check AWS LBC, external-dns, cert-manager versions against target compatibility",
+      "should recommend migrating self-managed to EKS managed where possible",
+      "should flag any self-managed addon with unknown K8s version support"
+    ]
+  },
+  {
+    "name": "pre_upgrade_health_failure",
+    "prompt": "Before upgrading, I ran kubectl get nodes and two nodes show NotReady. Also, coredns pods are in CrashLoopBackOff. Should I proceed with the upgrade?",
+    "assertions": [
+      "should FAIL the pre-upgrade health baseline gate",
+      "should recommend investigating NotReady nodes before upgrade",
+      "should flag CrashLoopBackOff coredns as critical (DNS will break)",
+      "should produce NOT READY verdict",
+      "should NOT recommend proceeding with the upgrade",
+      "should suggest remediation for each issue before retrying assessment"
+    ]
+  },
+  {
+    "name": "cli_tooling_skew_check",
+    "prompt": "My local kubectl is v1.26 and I'm upgrading a cluster from 1.30 to 1.31. I also use eksctl and an old Terraform AWS provider pinned to 4.x. Anything I should fix first?",
+    "assertions": [
+      "should flag kubectl v1.26 as outside the +/-1 minor skew window for a v1.31 target (WARN, not a blocker)",
+      "should recommend upgrading kubectl before running further commands against the upgraded cluster",
+      "should note eksctl version should be checked against target EKS version support",
+      "should flag the Terraform AWS provider as likely too old to support target-version-specific attributes",
+      "should NOT hardcode a specific 'minimum' version number as gospel — should recommend checking current release notes/changelog",
+      "should NOT block the overall assessment on tooling skew alone (WARN-level only)"
+    ]
+  },
+  {
+    "name": "pod_identity_blue_green_migration",
+    "prompt": "We use EKS Pod Identity (not IRSA) for most workloads and are considering a blue-green cluster migration. What identity work is needed?",
+    "assertions": [
+      "should explain that Pod Identity IAM role trust policies do NOT need to change (cluster-agnostic principal)",
+      "should explain that Pod Identity associations are scoped per-cluster and must be explicitly recreated with create-pod-identity-association on the new cluster",
+      "should contrast this with IRSA, where existing role trust policies must be updated to trust the new cluster's OIDC provider",
+      "should recommend inventorying existing associations via list-pod-identity-associations before cutover",
+      "should place the recreate-associations step in the Remediation Playbook (mutation, operator approval), not execute it automatically",
+      "should check the eks-pod-identity-agent addon version via DescribeAddonVersions if Pod Identity Agent add-on is in use"
+    ]
+  },
+  {
+    "name": "machine_readable_output_request",
+    "prompt": "Check upgrade readiness for cluster ci-cluster and give me the result as JSON so I can gate our pipeline on it.",
+    "assertions": [
+      "should produce the standard markdown report AND a structured JSON verdict block",
+      "should include gate-level entries in the JSON, each with an id matching required-check-registry.yaml prefixes (PF-, INFRA-, NODE-, ADDON-, WKLD-, KARP-, DRAIN-, ROLL-)",
+      "should include an overallVerdict field using the same READY/NOT_READY/READY_WITH_WARNINGS/CANNOT_DETERMINE values as the markdown report",
+      "should NOT set overallVerdict to READY if any gate status is UNKNOWN",
+      "should include confidence and evidence fields per gate, not just a boolean pass/fail"
+    ]
+  },
+  {
+    "name": "current_control_plane_upper_skew_violation",
+    "prompt": "My EKS control plane is 1.31 and I plan to upgrade to 1.32. One self-managed node reports kubelet 1.32 already. Is that okay because 1.32 is my target?",
+    "assertions": [
+      "should identify kubelet 1.32 as newer than the current 1.31 control plane and therefore an existing version-skew violation",
+      "should mark the current-state upper-bound gate as FAIL",
+      "should explain that the planned target does not make an already-invalid current state acceptable",
+      "should recommend correcting the node version before proceeding with the control-plane upgrade",
+      "should produce NOT READY"
+    ]
+  },
+  {
+    "name": "stale_upgrade_insights_unknown",
+    "prompt": "Assess upgrade readiness for a cluster targeting 1.32. ListInsights returned PASSING entries, but their lastRefreshTime is 36 hours old and the VPC CNI was updated yesterday.",
+    "assertions": [
+      "should mark the Upgrade Insights gate UNKNOWN because lastRefreshTime is older than the skill's 24-hour freshness threshold and predates a relevant addon change",
+      "should NOT treat stale PASSING insights as proof that the upgrade is safe",
+      "should recommend an operator-triggered insights refresh followed by a rerun, rather than invoking StartInsightsRefresh during this read-only assessment",
+      "should produce CANNOT DETERMINE if no independent gate has failed"
+    ]
+  },
+  {
+    "name": "custom_coredns_corefile_and_self_managed_core_addons",
+    "prompt": "Our cluster has no managed CoreDNS, kube-proxy, or VPC CNI addons in ListAddons. aws-node and kube-proxy are DaemonSets, CoreDNS is a Deployment, and the Corefile has custom rewrite and forward rules. Can we upgrade to 1.32?",
+    "assertions": [
+      "should identify aws-node, kube-proxy, and CoreDNS as self-managed or custom core addons rather than assuming ListAddons is complete",
+      "should inspect their deployed image versions, arguments, and configuration",
+      "should require a Corefile migration/compatibility check for the custom Corefile",
+      "should mark compatibility UNKNOWN rather than PASS if target-version support cannot be established from the self-managed components' documentation",
+      "should NOT recommend an unreviewed OVERWRITE of the custom CoreDNS configuration"
+    ]
+  },
+  {
+    "name": "vpc_cni_custom_networking_prefix_and_pod_sg_capacity",
+    "prompt": "Our EKS 1.31 cluster is moving to 1.32. aws-node has ENABLE_PREFIX_DELEGATION=true, AWS_VPC_K8S_CNI_CUSTOM_NETWORK_CFG=true, and ENABLE_POD_ENI=true. We use ENIConfigs in two AZs and need a 6-node surge. Validate network capacity.",
+    "assertions": [
+      "should enumerate ENIConfig resources and evaluate the alternate pod subnets per AZ, not only the cluster subnets",
+      "should calculate prefix delegation capacity using /28 prefixes and 16 IPv4 addresses per prefix",
+      "should check instance-type-specific branch-ENI limits for Security Groups for Pods rather than using generic ENI limits",
+      "should include the surge-node and additional pod-IP demand in the capacity calculation",
+      "should mark the capacity gate UNKNOWN if required subnet, branch-ENI, or warm-prefix inputs are unavailable"
+    ]
+  },
+  {
+    "name": "managed_addon_configuration_conflict",
+    "prompt": "DescribeAddon shows our VPC CNI has custom configurationValues, and the target add-on update reports ConfigurationConflict. Should I use PRESERVE or OVERWRITE?",
+    "assertions": [
+      "should state that this is an operator-approved mutation and must not be executed by the read-only assessment",
+      "should require capturing the current DescribeAddon output and configurationValues before selecting a resolution",
+      "should recommend PRESERVE first when the custom configuration is intentional and target-compatible",
+      "should explain that OVERWRITE replaces conflicting customer configuration with EKS defaults and can discard custom behavior",
+      "should require a reviewed backup and rollback plan before recommending OVERWRITE",
+      "should not present OVERWRITE as the only or default resolution"
+    ]
+  }
+]

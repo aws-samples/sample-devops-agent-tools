@@ -1,0 +1,199 @@
+# EKS Upgrade Readiness — Pre-Flight Checks
+# Version: 2.0.0
+# Purpose: Defines blocking vs warning checks with timeouts and soak periods.
+#          Blocking checks halt the assessment. Warning checks flag but continue.
+
+blocking_checks:
+  - id: cluster_active
+    description: "Cluster status MUST be ACTIVE"
+    api: "eks:DescribeCluster → status"
+    failure_action: "STOP — do not proceed with any assessment"
+
+  - id: cluster_not_mid_upgrade
+    description: "Cluster MUST NOT have a pending platform update in progress"
+    api: "eks:ListUpdates (filter status=InProgress)"
+    failure_action: "STOP — wait for current update to complete"
+
+  - id: version_hop_valid
+    description: "Target version MUST be exactly current + 1 minor version"
+    api: "eks:DescribeCluster → version comparison"
+    failure_action: "STOP — EKS requires sequential minor version upgrades"
+
+  - id: version_skew_gate
+    description: "No kubelet is newer than the current control plane, and all kubelets meet the target lower bound (N-3 for >=1.28, N-2 for <1.28)"
+    api: "eks:DescribeCluster, eks:DescribeNodegroup (version), kubectl get nodes"
+    failure_action: "STOP — upgrade or correct node groups first to meet both skew predicates"
+
+  - id: ami_hard_gate
+    description: "No AL2 AMI usage when target >= 1.33"
+    api: "eks:DescribeNodegroup → amiType, kubectl get ec2nodeclasses"
+    failure_action: "STOP — migrate to AL2023 or Bottlerocket before upgrading"
+
+  - id: subnet_minimum_ips
+    description: "Cluster subnets MUST have at least 5 available IPs"
+    api: "ec2:DescribeSubnets"
+    failure_action: "STOP — insufficient IP capacity for control plane upgrade"
+
+  - id: iam_cluster_role_valid
+    description: "Cluster IAM role MUST exist with correct trust policy"
+    api: "iam:GetRole for cluster role ARN"
+    failure_action: "STOP — cluster role missing or insufficient permissions"
+
+  - id: kms_key_valid
+    description: "If encryption enabled, KMS key MUST exist and be enabled"
+    api: "eks:DescribeCluster → encryptionConfig"
+    condition: "Only if cluster has encryptionConfig"
+    failure_action: "STOP — KMS key invalid, upgrade will fail silently"
+
+  - id: karpenter_controller_healthy
+    description: "Karpenter controller deployment healthy (if Karpenter detected)"
+    api: "kubectl get deploy karpenter -n kube-system"
+    condition: "Only if Karpenter detected"
+    failure_action: "STOP — unhealthy Karpenter cannot replace nodes post-upgrade"
+
+  - id: karpenter_not_self_hosted
+    description: "Karpenter pods NOT on Karpenter-managed nodes"
+    api: "kubectl get pods karpenter + node labels"
+    condition: "Only if Karpenter detected"
+    failure_action: "STOP — self-hosted Karpenter may evict itself during drift"
+
+warning_checks:
+  - id: insights_warnings
+    description: "EKS Insights show warnings (not errors) for target version"
+    api: "eks:ListInsights"
+    warning_action: "Present findings, recommend remediation before proceeding"
+
+  - id: pdb_blocking
+    description: "PDBs with zero allowed disruptions detected"
+    api: "kubectl get pdb -A"
+    condition: "Only if kubectl available"
+    warning_action: "Present specific PDBs, recommend adjustment"
+
+  - id: deprecated_apis
+    description: "Deprecated API usage detected for target version"
+    api: "eks:ListInsights (primary) or kubectl"
+    warning_action: "Present API migration requirements"
+
+  - id: self_managed_addons
+    description: "Self-managed add-ons detected (not via EKS add-on API)"
+    api: "kubectl get deploy vs eks:ListAddons"
+    condition: "Only if kubectl available"
+    warning_action: "Flag for manual version verification"
+
+  - id: webhooks_fail_policy
+    description: "Webhooks with failurePolicy=Fail targeting broad API groups"
+    api: "kubectl get validating/mutatingwebhookconfigurations"
+    condition: "Only if kubectl available"
+    warning_action: "Present webhook details, assess compatibility"
+
+  - id: control_plane_logging_disabled
+    description: "Control plane audit logging not enabled"
+    api: "eks:DescribeCluster → logging"
+    warning_action: "Recommend enabling before upgrade for debugging"
+
+  - id: helm_stored_deprecated_apis
+    description: "Helm stored manifests contain deprecated APIs for target"
+    api: "kubectl get secrets -l owner=helm,status=deployed"
+    condition: "Only if kubectl + helm available"
+    warning_action: "Recommend running helm mapkubeapis before upgrade"
+
+  - id: bare_pods_detected
+    description: "Pods without ownerReferences found on cluster"
+    api: "kubectl get pods -A"
+    condition: "Only if kubectl available"
+    warning_action: "Flag — these pods won't be rescheduled after drain"
+
+  - id: ebs_az_pinning
+    description: "EBS PVCs zone-pinned with multi-AZ node groups"
+    api: "kubectl get pvc,pv + ec2:DescribeSubnets"
+    condition: "Only if kubectl available"
+    warning_action: "Flag — cross-AZ reschedule will strand these volumes"
+
+  - id: karpenter_consolidation_active
+    description: "Karpenter consolidation may race with drift during upgrade"
+    api: "kubectl get nodepools (consolidateAfter)"
+    condition: "Only if Karpenter detected"
+    warning_action: "Recommend pausing consolidation during upgrade window"
+
+  - id: management_plane_unknown
+    description: "Cannot determine cluster management plane (manual/IaC/ACK/KRO)"
+    api: "eks:DescribeCluster → tags, kubectl get crd"
+    warning_action: "Ask operator to confirm management approach"
+
+# Timeout and soak period guidance for upgrade execution
+timeouts:
+  control_plane_upgrade:
+    expected_minutes: 25
+    alert_at_minutes: 40
+    escalate_at_minutes: 60
+    note: "CRD-heavy clusters (>200 CRDs) may take 60-90 min"
+
+  node_group_upgrade:
+    per_node_estimate_seconds: 120
+    default_minutes: 60
+    note: "Based on node count × per-node-time × (1/maxUnavailable)"
+
+  addon_update:
+    default_minutes: 15
+    verification_wait_seconds: 30
+
+  node_bootstrap:
+    default_seconds: 900
+    gpu_instance_seconds: 1200
+    windows_instance_seconds: 1200
+
+soak_periods:
+  post_control_plane_minutes: 15
+  post_first_nodegroup_minutes: 30
+  between_nodegroup_batches_minutes: 10
+  post_addon_update_seconds: 30
+  post_all_upgrades_minutes: 60
+  note: "Soak periods allow detection of delayed failure modes (OOM, connection exhaustion, cert expiry)"
+
+# Rollback awareness
+rollback:
+  control_plane:
+    available_since: "July 2026"
+    window_days: 7
+    conditions:
+      - "Cluster was upgraded to current version (not created at it)"
+      - "Within 7 days of upgrade completion"
+      - "Single version rollback only (N → N-1)"
+      - "Target rollback version still supported by EKS"
+      - "Cluster status is ACTIVE"
+      - "No features enabled at current version incompatible with N-1"
+    what_rolls_back:
+      - "API server and control plane components"
+      - "Platform version"
+      - "Auto Mode nodes (automatically)"
+    what_does_not_roll_back:
+      - "etcd data"
+      - "Workloads and their configs"
+      - "Add-ons (manual downgrade required)"
+      - "Persistent volumes"
+      - "Managed node groups (manual)"
+      - "Self-managed nodes (manual)"
+      - "Fargate pods (must delete/recreate)"
+    post_upgrade_check: "eks:ListInsights --filter categories=ROLLBACK_READINESS"
+    initiate_command: "aws eks update-cluster-version --name <cluster> --kubernetes-version <N-1>"
+    force_flag: "--force (bypasses insight checks but NOT prerequisite validations)"
+
+  addons:
+    reversibility: "full"
+    method: "aws eks update-addon --addon-version <previous-version>"
+    window: "indefinite"
+
+  managed_node_groups:
+    reversibility: "partial"
+    note: "Can halt mid-upgrade; completed nodes stay at new version"
+    method: "Cannot downgrade — must recreate node group at old version if needed"
+
+  karpenter_nodes:
+    reversibility: "full"
+    method: "Revert EC2NodeClass amiSelectorTerms, delete drifted NodeClaims"
+    window: "indefinite"
+
+  self_managed_nodes:
+    reversibility: "full"
+    method: "Revert launch template version, terminate new nodes"
+    window: "indefinite"
