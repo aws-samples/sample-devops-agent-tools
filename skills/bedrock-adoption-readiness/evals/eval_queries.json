@@ -1,0 +1,62 @@
+{
+  "skill_name": "bedrock-adoption-readiness",
+  "version": "1.0.0",
+  "trigger_queries": [
+    {
+      "query": "Review my Bedrock readiness for production",
+      "should_trigger": true
+    },
+    {
+      "query": "Assess my Bedrock IAM permissions and ZDR setup",
+      "should_trigger": true
+    },
+    {
+      "query": "Check if my Bedrock quotas can handle growth",
+      "should_trigger": true
+    },
+    {
+      "query": "Am I ready to scale Bedrock?",
+      "should_trigger": true
+    },
+    {
+      "query": "Bedrock operational review",
+      "should_trigger": true
+    },
+    {
+      "query": "Audit my Bedrock security posture",
+      "should_trigger": true
+    },
+    {
+      "query": "Help me deploy a Lambda function",
+      "should_trigger": false
+    },
+    {
+      "query": "Review my EKS cluster configuration",
+      "should_trigger": false
+    },
+    {
+      "query": "What is Amazon Bedrock?",
+      "should_trigger": false
+    },
+    {
+      "query": "Help me write a prompt for Claude",
+      "should_trigger": false
+    },
+    {
+      "query": "Check my S3 bucket permissions",
+      "should_trigger": false
+    },
+    {
+      "query": "Troubleshoot my RDS connection timeout",
+      "should_trigger": false
+    },
+    {
+      "query": "How do I enable Bedrock in a new region?",
+      "should_trigger": false
+    },
+    {
+      "query": "Review my EC2 cost optimization opportunities",
+      "should_trigger": false
+    }
+  ]
+}

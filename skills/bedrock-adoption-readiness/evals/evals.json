@@ -1,0 +1,71 @@
+{
+  "skill_name": "bedrock-adoption-readiness",
+  "version": "1.0.0",
+  "evals": [
+    {
+      "id": "full-assessment",
+      "description": "User requests a complete Bedrock readiness review",
+      "prompt": "I'm preparing to move our Bedrock usage to production. Can you review our readiness?",
+      "assertions": [
+        "Asks which account and region to assess",
+        "Checks IAM permissions for Bedrock",
+        "Evaluates data retention / ZDR configuration",
+        "Checks quota utilization against limits",
+        "Reviews CloudWatch alarms for Bedrock",
+        "Produces findings with severity ratings",
+        "Generates a structured report"
+      ]
+    },
+    {
+      "id": "quota-focused",
+      "description": "User specifically asks about quota headroom",
+      "prompt": "We're getting throttled on Bedrock. Can you check our quota situation and tell me what to do?",
+      "assertions": [
+        "Checks current TPM and RPM quotas",
+        "Pulls 7-day CloudWatch throttling metrics",
+        "Checks max_tokens configuration pattern",
+        "Evaluates CRIS enablement",
+        "Recommends right-sizing max_tokens if overconsumption detected",
+        "Recommends quota increase if utilization >70%"
+      ]
+    },
+    {
+      "id": "security-focused",
+      "description": "User asks about Bedrock security and data handling",
+      "prompt": "We're in healthcare and need to make sure our Bedrock setup meets compliance requirements. Can you check our ZDR and IAM configuration?",
+      "assertions": [
+        "Checks inference profile ZDR mode",
+        "Flags if provider_data_share is enabled without awareness",
+        "Reviews IAM policies for wildcarded Bedrock permissions",
+        "Checks for SCP enforcement at org level",
+        "Flags regulated industry context in severity assessment",
+        "Recommends ZDR mode 'none' for regulated workloads"
+      ]
+    },
+    {
+      "id": "cost-optimization",
+      "description": "User asks about Bedrock cost optimization",
+      "prompt": "Our Bedrock bill is growing fast. What can we optimize?",
+      "assertions": [
+        "Pulls 30-day Cost Explorer data for Bedrock",
+        "Identifies daily spend trend",
+        "Checks model selection fitness (expensive models for simple tasks)",
+        "Evaluates prompt caching eligibility",
+        "Checks batch inference opportunity",
+        "Recommends Savings Plan if spend threshold met"
+      ]
+    },
+    {
+      "id": "observability-check",
+      "description": "User asks about monitoring setup",
+      "prompt": "How do I know if something goes wrong with our Bedrock usage? Do we have proper monitoring?",
+      "assertions": [
+        "Checks existing CloudWatch alarms for Bedrock metrics",
+        "Verifies model invocation logging status",
+        "Checks CloudTrail Bedrock event configuration",
+        "Recommends specific alarm set if gaps found",
+        "Flags if no throttle monitoring exists"
+      ]
+    }
+  ]
+}
