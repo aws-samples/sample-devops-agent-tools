@@ -110,6 +110,21 @@ Even if AWS launches a new service tomorrow, the heuristic rules will correctly 
 
 ```
 
+### Regional Rate Resolution
+
+Rates vary by AWS Region. `references/pricing-reference.md` lets the skill resolve the rate for the workload's Region rather than applying the us-east-1 baselines listed in Layer 2.
+
+| Step | What happens |
+| --- | --- |
+| 1. Region | Derived from the resource ARN |
+| 2. Lookup | `pricing:GetProducts`, with the workload Region passed as a `regionCode` filter value |
+| 3. Cache | Keyed on `(service, operation, region)` — one lookup per service and Region per investigation |
+| 4. Fallback | Published baseline rate, if the lookup is unavailable |
+
+The reference also maps `usagetype` Region prefixes and their exceptions, S3 Tier1/Tier2 requests, cross-Region transfer rates, and the operations that are free and need no lookup.
+
+It loads once, on the first operation classified as PAID, and is reused for the rest of the investigation. Investigations that touch only metadata or third-party tools do not load it. Baseline rates are indicative; the live API is authoritative.
+
 ### Layer 3: Response Validation (Self-Learning)
 
 After execution, the skill checks response fields for metered indicators:
@@ -286,6 +301,28 @@ Add the skill to your Agent Space and adjust the threshold to match your organiz
 **Option A:** Fork or copy the skill into your own GitHub repository and import it directly into your Agent Space via the GitHub integration. This lets you version and customize the skill independently.
 
 **Option B:** Download the `.zip` directly from the [repository](https://github.com/aws/tools-for-devops-agent/tree/main/skills/investigation-cost-guardrail) and upload it as a skill in your Agent Space.
+
+### Required IAM Permissions
+
+The skill calls the AWS Price List Query API to resolve per-Region rates. Grant the role your Agent Space assumes:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "pricing:GetProducts",
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+`Resource` is `*` because the Price List API returns public pricing data. The API is free and read-only.
+
+Your Agent Space tool policy must also permit the call. If the lookup is unavailable, the skill uses the published baseline rates in `references/pricing-reference.md` and flags the estimate.
+
 
 ## Known Limitations
 

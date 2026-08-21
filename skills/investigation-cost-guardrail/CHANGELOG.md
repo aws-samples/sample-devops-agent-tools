@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.0
+
+  - Add `references/pricing-reference.md` to resolve the per-region rate for a paid operation at estimation time.
+  - It ships Price List Query API lookup templates for the operations the skill estimates most often (CloudWatch Logs Insights, `GetMetricData`, Contributor Insights, X-Ray, Athena, S3 requests).
+  - `SKILL.md` loads it on the first operation Layer 2 classifies as PAID and reuses it for the rest of the investigation; baseline rates are indicative only.
+
+
 ## 2.0.0
 
 - Expand the scope from a fixed CloudWatch/X-Ray/CloudTrail set to all AWS service with the agent's own tools; `aws-services` metadata changes to `All`.

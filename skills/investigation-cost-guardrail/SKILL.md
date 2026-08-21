@@ -3,12 +3,11 @@ name: investigation-cost-guardrail
 description: Cost guardrail for AWS DevOps Agent that covers ALL AWS services and native agent tools. Before the agent makes any paid API call, this skill estimates cost, enforces budgets per investigation, detects expensive operations across all services (Athena queries, S3 scans, DynamoDB scans, SageMaker inference, PromQL, etc.), enforces time window requirements, monitors cumulative call volume, and cancels if thresholds are exceeded. This skill applies to ALL investigations regardless of which services are involved.
 metadata:
   author: tqquresh, inesttia
-  version: "2.0.0"
+  version: "2.1.0"
   aws-devops-agent-skills.agent-types: "Incident RCA"
   aws-devops-agent-skills.aws-services: "All"
   aws-devops-agent-skills.technical-domains: "Cost Optimization, Operations"
 ---
-
 # Investigation Cost Guardrail Skill
 
 ## Overview
@@ -26,6 +25,14 @@ Rather than listing every free/paid operation across 200+ AWS services, this ski
 ## Activation
 
 This skill MUST be ALWAYS ACTIVE during investigations. It does NOT require user invocation.
+
+## Fetch Live Rate Before Estimating
+
+The **first time** an operation is classified **PAID** by Layer 2, fetch the live rate **before** estimating cost.
+
+For **AWS operations**: read `references/pricing-reference.md` for the exact Pricing API call patterns, exceptions, caching rules, and failure handling.
+
+For **non-AWS tools** (Splunk, Datadog, Grafana, etc.): use the cost model from Layer 0 directly — no live lookup available.
 
 ---
 
@@ -133,33 +140,31 @@ If an operation doesn't clearly fit Rules 1–3:
 
 ## Layer 2: Known-Paid Registry
 
-These operations have **confirmed pricing** with estimation formulas. This list is extensible — operators can add entries.
+These operations have **confirmed pricing**. Always fetch the live rate via the Pricing API (see `references/pricing-reference.md`) before estimating. If the Pricing API call fails, halt — do not estimate from memory.
 
 ### Confirmed Paid Operations
 
-| Service | Operation | Cost Formula | Estimation Method |
+| ServiceCode | Operation | Cost Formula | Estimation Method |
 |---|---|---|---|
-| CloudWatch Logs | `StartQuery` | $0.005/GB scanned | Query `IncomingBytes` metric for time window |
-| CloudWatch Logs | `StartLiveTail` | $0.01/minute | Duration-based |
-| CloudWatch | `GetMetricData` | $0.01/1,000 metrics×periods | Count metrics and periods |
-| CloudWatch | `get_prometheus_metrics` | $0.01/1,000 metrics×periods | Count series × (range/step) |
-| X-Ray | `GetTraceSummaries` | $0.50/1M traces | Paginate or sample to estimate count |
-| X-Ray | `BatchGetTraces` | $0.50/1M traces | Count trace IDs in request |
-| Athena | `StartQueryExecution` | $5.00/TB scanned | Check table metadata; require `WHERE` clause |
-| DynamoDB | `Scan` | RCU consumed (~$0.25/1M RCU) | Check `TableSizeBytes`; BLOCK unless user approves |
-| DynamoDB | `Query` (broad) | RCU consumed | Check `ItemCount`; warn if > 10K items |
-| S3 | `GetObject` | $0.0004/1,000 requests + $0.09/GB transfer | Count requests; flag if cross-region or >100MB |
-| S3 | `ListObjectsV2`, `ListObjects` | $0.005/1,000 requests | Count calls; warn if paginating heavily |
-| S3 | `PutObject`, `CopyObject` | $0.005/1,000 requests | Count calls |
-| S3 | `SelectObjectContent` | $0.002/GB scanned + $0.0007/GB returned | Check object size |
-| Resource Explorer | `Search` | $0.01/query (after 1000 free/month) | Count calls |
-| SageMaker | `InvokeEndpoint` | Instance-dependent | BLOCK — require explicit approval |
-| Kinesis | `GetRecords` | $0.015/1M records | Estimate from shard count × duration |
-| CloudWatch | Contributor Insights | $0.02/rule/1K events | Count rules and event volume |
-| SQS | All operations | $0.40/1M requests (first 1M free/month) | Count total SQS calls; usually negligible |
-| Lambda | `Invoke` | $0.20/1M requests + compute ($0.0000166667/GB-sec) | BLOCK unless user explicitly requests function execution |
-
-> ℹ️ **Rates are baseline published figures and may vary by region.** The regional rate may be higher, so a rate-based estimate is a lower bound. Treat any estimate within 20% of the remaining budget as exceeding it.
+| `AmazonCloudWatch` | `StartQuery` | `scan_gb × rate` | Query `IncomingBytes` metric for time window |
+| `AmazonCloudWatch` | `StartLiveTail` | Duration-based | Duration-based |
+| `AmazonCloudWatch` | `GetMetricData` | `(metrics × periods) / 1K × rate` | Count metrics and periods |
+| `AmazonCloudWatch` | `get_prometheus_metrics` | `(series × datapoints) / 1K × rate` | Count series × (range/step) |
+| `AmazonCloudWatch` | `GetInsightRuleReport` | `rules × (events / 1K) × rate` | Count rules and event volume |
+| `AWSXRay` | `GetTraceSummaries` | `traces / 1M × rate` | Paginate or sample to estimate count |
+| `AWSXRay` | `BatchGetTraces` | `traces / 1M × rate` | Count trace IDs in request |
+| `AmazonAthena` | `StartQueryExecution` | `scan_tb × rate`; min 10MB | Check table metadata; require `WHERE` clause |
+| `AmazonDynamoDB` | `Scan` | RCU consumed | Check `TableSizeBytes`; BLOCK unless user approves |
+| `AmazonDynamoDB` | `Query` | RCU consumed | Check `ItemCount`; warn if > 10K items |
+| `AmazonS3` | `GetObject` | See pricing-reference.md | Count requests; flag if cross-region or >100MB |
+| `AmazonS3` | `ListObjectsV2`, `ListObjects` | See pricing-reference.md | Count calls; warn if paginating heavily |
+| `AmazonS3` | `PutObject`, `CopyObject` | See pricing-reference.md | Count calls |
+| `AmazonS3` | `SelectObjectContent` | `scan_gb × rate` | Check object size |
+| `AWSResourceExplorer2` | `Search` | Per query | Count calls |
+| `AmazonSageMaker` | `InvokeEndpoint` | — | BLOCK — require explicit user approval |
+| `AmazonKinesis` | `GetRecords` | `records / 1M × rate` | Estimate from shard count × duration |
+| `AmazonSQS` | All operations | Per request | Count total SQS calls; usually negligible |
+| `AWSLambda` | `Invoke` | Per request + compute | BLOCK unless user explicitly requests function execution |
 
 ---
 
@@ -173,9 +178,9 @@ After ANY operation executes, check the response for metered fields:
 |---|---|---|
 | `BytesScanned`, `DataScanned` | Data scanning charge | Record GB scanned, add to running cost |
 | `RecordsProcessed`, `ItemCount` | Record processing | Record count, estimate RCU/cost |
-| `QueryExecutionId` + `DataScannedInBytes` | Athena scan | Add to cost at $5/TB |
-| `TracesProcessedCount` | X-Ray processing | Add to cost at $0.50/1M |
-| `ConsumedCapacity` | DynamoDB RCU/WCU | Add to cost at $0.25/1M RCU |
+| `QueryExecutionId` + `DataScannedInBytes` | Athena scan | Add to cost at live rate |
+| `TracesProcessedCount` | X-Ray processing | Add to cost at live rate |
+| `ConsumedCapacity` | DynamoDB RCU/WCU | Add to cost at live rate |
 | `ContentLength` > 100MB | Large object fetch | Flag for transfer cost |
 | `NextToken` after 10+ pages | Pagination runaway | Trigger volume guardrail |
 | `warnings` containing "500 series" | PromQL truncation | Flag max-cost query, suggest narrowing |
@@ -184,7 +189,7 @@ If a previously-unclassified operation returns metered fields:
 
 1. Log it as a paid operation for this session
 2. Add the cost to the running total
-3. Warn the user: `⚠️ Discovered paid operation: <service>:<operation> cost $X.XX`
+3. Warn the user: `⚠️ Discovered paid operation: <servicecode>:<operation> cost $X.XX`
 
 ---
 
@@ -212,14 +217,14 @@ else:
     proceed
     # After execution:
     running_cost += actual_cost (from response fields or estimation)
-    call_counts[service] += 1
+    call_counts[servicecode] += 1
 ```
 
 **Volume guardrails:**
 
 ```text
-if call_counts[any_service] > 200: ⚠️ WARN
-if call_counts[any_service] > 500: 🚫 HALT
+if call_counts[any_servicecode] > 200: ⚠️ WARN
+if call_counts[any_servicecode] > 500: 🚫 HALT
 if sum(all_call_counts) > 1000: 🚫 HALT
 ```
 
@@ -229,12 +234,12 @@ if sum(all_call_counts) > 1000: 🚫 HALT
 
 ```text
 📋 INVESTIGATION BUDGET STATUS
-═══════════════════════════════════════════════════════════
+════════════════════════════════════════════════════════════
 Budget:      $10.00
 Spent:       $X.XX (Y paid operations)
 Free calls:  Z operations (no cost)
 PromQL:      X,XXX metrics×periods consumed ($X.XX)
-Next op:     <service>:<operation> — estimated $X.XX
+Next op:     <servicecode>:<operation> — estimated $X.XX
 Projected:   $X.XX (exceeds budget by $X.XX)
 
 🚫 HALTED — would exceed $10.00 budget.
@@ -269,8 +274,10 @@ For EVERY paid operation:
 
 ```text
 if target_region ≠ agent_space_region:
+    fetch transfer_rate = transfer_rate_cache[target_region]
+                       ?? live lookup (see references/pricing-reference.md)
     estimated_return_size = estimate_return_bytes(operation_type)
-    transfer_cost = estimated_return_size × $0.02/GB
+    transfer_cost = estimated_return_size × transfer_rate
     total_estimate += transfer_cost
     flag: "⚠️ Cross-region transfer: <target> → <agent_space>"
 ```
@@ -315,5 +322,3 @@ When halting or warning, ALWAYS suggest free or cheaper alternatives:
 | `athena:StartQueryExecution` (full) | Add partition filter in `WHERE` | 90%+ |
 | `xray:GetTraceSummaries` (broad) | Narrow time + add filter expression | 90%+ |
 | `s3:GetObject` (large) | `s3:SelectObjectContent` with SQL | Variable |
-
----
