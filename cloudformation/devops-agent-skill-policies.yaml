@@ -27,6 +27,7 @@ Metadata:
           - EnableMskOperations
           - EnableServiceQuotaCheck
           - EnableDmsOperationReview
+          - EnableEosCostAnalysis
       - Label:
           default: Optional Resource Scoping
         Parameters:
@@ -111,6 +112,14 @@ Parameters:
     AllowedValues: ['true', 'false']
     Default: 'true'
 
+  EnableEosCostAnalysis:
+    Type: String
+    Description: >
+      EOS Cost Analysis skill (read-only discovery across EKS/RDS/Lambda/ElastiCache/OpenSearch
+      + AWS Pricing API for live Extended Support pricing).
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+
 Conditions:
   CreateNewRole: !Equals [!Ref ExistingRoleName, '']
   SkillAwsHealthEvents: !Equals [!Ref EnableAwsHealthEvents, 'true']
@@ -120,6 +129,7 @@ Conditions:
   SkillMskOperations: !Equals [!Ref EnableMskOperations, 'true']
   SkillServiceQuotaCheck: !Equals [!Ref EnableServiceQuotaCheck, 'true']
   SkillDmsOperationReview: !Equals [!Ref EnableDmsOperationReview, 'true']
+  SkillEosCostAnalysis: !Equals [!Ref EnableEosCostAnalysis, 'true']
   HasRegionRestriction: !Not [!Equals [!Join ['', !Ref AllowedRegions], '']]
 
 Resources:
@@ -302,6 +312,40 @@ Resources:
               - dms:TestConnection
             Resource: '*'
 
+  # eos-cost-analysis: read-only discovery + AWS Pricing API for live Extended Support pricing
+  PolicyEosCostAnalysis:
+    Type: AWS::IAM::Policy
+    Condition: SkillEosCostAnalysis
+    Properties:
+      PolicyName: DevOpsAgentSkill-EosCostAnalysis
+      Roles:
+        - !If [CreateNewRole, !Ref DevOpsAgentRole, !Ref ExistingRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EosResourceDiscovery
+            Effect: Allow
+            Action:
+              - eks:ListClusters
+              - eks:DescribeCluster
+              - rds:DescribeDBInstances
+              - rds:DescribeDBClusters
+              - lambda:ListFunctions
+              - elasticache:DescribeCacheClusters
+              - elasticache:DescribeReplicationGroups
+              - elasticache:DescribeServerlessCaches
+              - es:ListDomainNames
+              - es:DescribeDomain
+              - es:DescribeDomains
+            Resource: '*'
+          - Sid: EosPricingApi
+            Effect: Allow
+            Action:
+              - pricing:GetProducts
+              - pricing:GetAttributeValues
+              - pricing:DescribeServices
+            Resource: '*'
+
   # Optional: restrict agent to specific regions
   PolicyRegionalRestriction:
     Type: AWS::IAM::Policy
@@ -349,6 +393,7 @@ Outputs:
         - msk-operations: ${EnableMskOperations} (kafka:GetBootstrapBrokers)
         - service-quota-check: ${EnableServiceQuotaCheck} (servicequotas:*, cloudwatch:GetMetricData/GetMetricStatistics)
         - database-migration-service-expertise: ${EnableDmsOperationReview} (dms:TestConnection)
+        - eos-cost-analysis: ${EnableEosCostAnalysis} (eks/rds/lambda/elasticache/es read-only + pricing:GetProducts/GetAttributeValues/DescribeServices)
       Skills covered by AIDevOpsAgentAccessPolicy (no extra policy needed):
         - eks-operation-review, enrich-with-aws-security-agent, crm-production-investigation-guidelines
       No IAM required:
