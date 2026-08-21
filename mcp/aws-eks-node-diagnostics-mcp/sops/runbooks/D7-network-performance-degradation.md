@@ -69,10 +69,10 @@ MUST:
 - Use `correlate` tool with instanceId and pivotEvent set to the most prominent error pattern (e.g., `retransmit` or `rx_errors`) to build a timeline
 
 SHOULD:
-- Manually capture live traffic on the node (via SSM Session Manager) if the issue is intermittent and log evidence is insufficient
-  - For latency: capture on the affected pod interface or eth0, e.g. `sudo tcpdump -i eth0 -nn -w /tmp/cap.pcap`
-  - For packet loss: capture with a filter matching the affected traffic flow, e.g. `sudo tcpdump -i eth0 -nn 'tcp' -w /tmp/cap.pcap`
-  - Review the capture manually with `sudo tcpdump -nn -r /tmp/cap.pcap` for retransmissions, resets, and latency patterns
+- Use `tcpdump_capture` tool with instanceId to capture live traffic if the issue is intermittent and log evidence is insufficient
+  - For latency: capture on the affected pod interface or eth0
+  - For packet loss: capture with a filter matching the affected traffic flow
+- Use `tcpdump_analyze` tool to analyze the capture for retransmissions, resets, and latency patterns
 - Use `search` tool with query=`nf_conntrack_count|nf_conntrack_max` to rule out conntrack pressure (even if not full, high utilization can cause slowness)
 
 MAY:
@@ -113,7 +113,8 @@ escalation_conditions:
 
 safety_ratings:
   - "Log collection (collect), search, errors, network_diagnostics, correlate: GREEN (read-only)"
-  - "Manual tcpdump on the node (via SSM Session Manager): YELLOW — operator action, not available via MCP tools"
+  - "tcpdump_capture: YELLOW — human-approved packet capture (pauses at a native SSM aws:approve step until a designated approver approves in the Systems Manager console)"
+  - "tcpdump_analyze: GREEN (read-only analysis of completed captures)"
   - "Modify TCP sysctl parameters: YELLOW — operator action, not available via MCP tools"
   - "Modify security groups / NACLs: YELLOW — operator action, not available via MCP tools"
   - "Replace instance (hardware errors): RED — operator action, requires approval"
@@ -125,7 +126,7 @@ safety_ratings:
   resolution: "Operator action: update ENA driver to latest. If errors persist, replace instance (possible hardware issue)."
 
 - symptoms: "search returns high TCPRetransSegs or TCPTimeouts from /proc/net/snmp"
-  diagnosis: "TCP retransmissions indicate packet loss in the network path. Manually run tcpdump on the node to identify where loss occurs."
+  diagnosis: "TCP retransmissions indicate packet loss in the network path. Use tcpdump_capture to identify where loss occurs."
   resolution: "If loss is on-node: check iptables DROP rules via network_diagnostics. If loss is off-node: escalate as VPC/upstream issue."
 
 - symptoms: "network_diagnostics iptables section shows DROP rules on FORWARD chain"
@@ -144,7 +145,7 @@ safety_ratings:
   diagnosis: "Routing issue — traffic to certain pod CIDRs has no valid next hop."
   resolution: "Operator action: check VPC route tables and CNI routing. May need to restart aws-node DaemonSet."
 
-- symptoms: "a manual tcpdump capture shows retransmissions only for traffic leaving the VPC (cross-AZ or internet)"
+- symptoms: "tcpdump_analyze shows retransmissions only for traffic leaving the VPC (cross-AZ or internet)"
   diagnosis: "Loss in the upstream path, not on the node. Node-level fixes will not help."
   resolution: "Escalate: check VPC peering, TGW, NAT gateway, or internet gateway health."
 
@@ -178,9 +179,9 @@ search(instanceId="i-0abc123def456", query="DROP.*INPUT|DROP.*FORWARD|REJECT")
 # Step 7: Check IRQ distribution
 search(instanceId="i-0abc123def456", query="softirq.*NET_RX|ksoftirqd|irqbalance")
 
-# Step 8: Capture traffic manually on the node if still inconclusive (via SSM Session Manager)
-#   sudo tcpdump -i eth0 -nn -c 5000 -w /tmp/cap.pcap
-#   sudo tcpdump -nn -r /tmp/cap.pcap   # review retransmissions / resets
+# Step 8: Capture traffic if still inconclusive
+tcpdump_capture(instanceId="i-0abc123def456", interface="eth0", duration=30, filter="tcp")
+tcpdump_analyze(instanceId="i-0abc123def456", commandId="<commandId-from-step-8>")
 
 # Step 9: Correlate timeline
 correlate(instanceId="i-0abc123def456", pivotEvent="retransmit", timeWindow=300)
@@ -199,8 +200,8 @@ evidence:
     content: "<interface stats, route table, iptables rules>"
   - type: search
     content: "<specific counter values — rx_errors, TCPRetransSegs, DROP rules>"
-  - type: manual_tcpdump
-    content: "<retransmission count, reset count, latency distribution from a manual node capture>"
+  - type: tcpdump_analyze
+    content: "<retransmission count, reset count, latency distribution>"
   - type: correlate
     content: "<timeline showing onset of degradation>"
 severity: HIGH

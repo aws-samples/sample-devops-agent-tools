@@ -378,6 +378,46 @@ if [ -z "$ALLOWED_CLUSTER_NAMES" ]; then
   export ALLOWED_CLUSTER_NAMES
 fi
 
+# --- APPROVAL_APPROVER_ARNS: required when collection approval is on (default) ---
+# collect/batch_collect pause at a native SSM aws:approve step until one of these
+# IAM principals approves in the Systems Manager console. Default: the IAM
+# principal running this deploy (assumed-role sessions map to the role ARN).
+if [ "${REQUIRE_COLLECTION_APPROVAL:-true}" != "false" ] && [ -z "$APPROVAL_APPROVER_ARNS" ]; then
+  CALLER_ARN=$(aws sts get-caller-identity --query Arn --output text 2>/dev/null || echo "")
+  case "$CALLER_ARN" in
+    arn:*:sts::*:assumed-role/*)
+      CALLER_ACCOUNT="${CALLER_ARN#arn:*:sts::}"; CALLER_ACCOUNT="${CALLER_ACCOUNT%%:*}"
+      ROLE_NAME="${CALLER_ARN#*:assumed-role/}"; ROLE_NAME="${ROLE_NAME%%/*}"
+      APPROVAL_APPROVER_ARNS="arn:aws:iam::${CALLER_ACCOUNT}:role/${ROLE_NAME}"
+      ;;
+    arn:*)
+      APPROVAL_APPROVER_ARNS="$CALLER_ARN"
+      ;;
+  esac
+  if [ -z "$APPROVAL_APPROVER_ARNS" ]; then
+    echo "ERROR: Collection approval is enabled but APPROVAL_APPROVER_ARNS is not set"
+    echo "and the caller identity could not be detected. Set APPROVAL_APPROVER_ARNS"
+    echo "to the IAM user/role ARN(s) allowed to approve collections, or set"
+    echo "REQUIRE_COLLECTION_APPROVAL=false for a supervised/test deployment."
+    exit 1
+  fi
+  echo "Collection approvers (defaulted to deploying principal): $APPROVAL_APPROVER_ARNS"
+  export APPROVAL_APPROVER_ARNS
+elif [ -n "$APPROVAL_APPROVER_ARNS" ]; then
+  echo "Collection approvers: $APPROVAL_APPROVER_ARNS"
+  export APPROVAL_APPROVER_ARNS
+fi
+
+# --- ENABLED_RESTRICTED_TOOLS: opt-in network packet capture tools ---
+# tcpdump_capture/tcpdump_analyze are absent from the MCP tool surface unless
+# listed here. tcpdump_capture is ADDITIONALLY approval-gated: every capture
+# pauses at a native SSM aws:approve step until an approver approves it in the
+# Systems Manager console (same approvers as collection).
+if [ -n "${ENABLED_RESTRICTED_TOOLS:-}" ]; then
+  echo "Restricted tools enabled: $ENABLED_RESTRICTED_TOOLS (tcpdump_capture requires human approval per capture)"
+  export ENABLED_RESTRICTED_TOOLS
+fi
+
 echo ""
 echo "Deploying CDK stack..."
 npx cdk deploy "$STACK_NAME" --require-approval never --outputs-file cdk-outputs.json

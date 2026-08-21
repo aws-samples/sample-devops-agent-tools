@@ -29,7 +29,13 @@ function synthesize(props: {
   const stack = new cdk.Stack(app, 'TestStack', { env: { region: 'us-east-1', account: '123456789012' } });
   // allowAnyClusterName: tests rely on the wildcard cluster scope, so opt in
   // to keep them deterministic. Production deploys should set allowedClusterNames.
-  new SsmAutomationGatewayV2Construct(stack, 'Gateway', { ...props, allowAnyClusterName: true });
+  // approvalApproverArns: required when approval is on (the default) — synth
+  // fails closed without designated approvers.
+  new SsmAutomationGatewayV2Construct(stack, 'Gateway', {
+    ...props,
+    allowAnyClusterName: true,
+    approvalApproverArns: ['arn:aws:iam::123456789012:role/CollectionApprover'],
+  });
   return Template.fromStack(stack);
 }
 

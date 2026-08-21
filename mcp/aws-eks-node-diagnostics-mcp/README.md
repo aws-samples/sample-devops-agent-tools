@@ -180,10 +180,14 @@ EKS_NODE_ROLE_ARNS=arn:aws:iam::123456789012:role/eks-node-role \
 PRESIGNED_URL_EXPIRATION=120 \
 PER_CALLER_RATE_LIMIT_PER_MINUTE=30 \
 TOOL_AUTHORIZATION="collect:client-soc;batch_collect:client-emergency" \
+APPROVAL_APPROVER_ARNS=arn:aws:iam::123456789012:role/OnCallOperator \
+APPROVAL_NOTIFICATION_EMAILS=oncall@example.com \
 MCP_VPC_ID=vpc-0123456789abcdef0 \
 MCP_VPC_SUBNET_IDS=subnet-aaa,subnet-bbb \
 ./deploy.sh
 ```
+
+> `APPROVAL_APPROVER_ARNS` defaults to the IAM principal running `deploy.sh` when unset. Approvers need `ssm:SendAutomationSignal` (plus Systems Manager console access) to click Approve/Deny.
 
 | Env var | What it restricts | Default |
 |---------|-------------------|---------|
@@ -194,9 +198,10 @@ MCP_VPC_SUBNET_IDS=subnet-aaa,subnet-bbb \
 | `EKS_NODE_ROLE_ARNS` | S3 PutObject + KMS Encrypt principals | Account root |
 | `PRESIGNED_URL_EXPIRATION` | Log artifact presigned URL lifetime (max 900 s) | 300 s |
 | `ALLOW_SELF_MANAGED_NODES` | Accept nodes with only the user-settable `kubernetes.io/cluster/*` tag (cross-checked via EKS API) | `false` |
-| `REQUIRE_COLLECTION_APPROVAL` | Require human approval before `collect`/`batch_collect` run SSM | `true` |
+| `REQUIRE_COLLECTION_APPROVAL` | Require human approval (native SSM `aws:approve`) before `collect`/`batch_collect` run | `true` |
+| `APPROVAL_APPROVER_ARNS` | IAM users/roles allowed to approve collections (**required** when approval is on — synth fails without it) | (none — fail-closed) |
 | `APPROVAL_NOTIFICATION_EMAILS` | Comma-separated emails subscribed to the approval SNS topic | Empty |
-| `APPROVAL_TTL_SECONDS` | How long a pending approval stays valid | `900` |
+| `APPROVAL_TTL_SECONDS` | How long the `aws:approve` step waits for a decision before timing out | `900` |
 | `TOOL_AUTHORIZATION` | Per-tool client-id ACL (`tool:client_a,client_b;…`) | Empty (open) |
 | `PER_CALLER_RATE_LIMIT_PER_MINUTE` | Rate limit per caller (`0` disables) | 60 |
 | `MCP_VPC_ID` / `MCP_VPC_SUBNET_IDS` | Run Lambda in VPC + create S3/KMS endpoints | None |
@@ -210,9 +215,8 @@ MCP_VPC_SUBNET_IDS=subnet-aaa,subnet-bbb \
 | Lambda (SSM Automation) | Handles all 19 MCP tool invocations |
 | Lambda (Unzip) | Auto-extracts uploaded archives |
 | Lambda (Findings Indexer) | Pre-indexes errors for fast retrieval |
-| Lambda (Collection Approval) + Function URL | Human approve/deny endpoint for `collect`/`batch_collect` |
-| DynamoDB Table | Stores pending/approved collection requests (TTL-expired) |
-| SNS Topic | Notifies approvers with the approve/deny link |
+| SSM Documents (approval wrappers) | `aws:approve`-gated wrappers for `collect` (single) and `batch_collect` (fan-out) |
+| SNS Topic | Notifies approvers with the SSM console approval link |
 | SSM Automation Role | Runs log collection on EC2 instances |
 | Cognito User Pool | OAuth2 authentication for MCP Gateway |
 | BedrockAgentCore Gateway | MCP protocol endpoint |
@@ -231,7 +235,7 @@ All security controls are enforced by default. The construct fails synth unless 
 | **Region restriction** | Stack region only | `ALLOWED_REGIONS` env var |
 | **Cluster restriction** | **Fail-closed** — must set `ALLOWED_CLUSTER_NAMES` or `ALLOW_ANY_CLUSTER_NAME=true` | `ALLOWED_CLUSTER_NAMES`, `ALLOW_ANY_CLUSTER_NAME` |
 | **SSM document restriction** | `AWS-RunShellScript` only | `ALLOWED_SSM_DOCUMENTS` env var |
-| **Collection approval (human-in-the-loop)** | `collect`/`batch_collect` require out-of-band human approval before SSM runs | `REQUIRE_COLLECTION_APPROVAL` env var |
+| **Collection approval (human-in-the-loop)** | `collect`/`batch_collect` pause at a native SSM `aws:approve` step until a designated approver approves in the Systems Manager console | `REQUIRE_COLLECTION_APPROVAL`, `APPROVAL_APPROVER_ARNS` env vars |
 | **`batch_collect` dry-run** | Defaults to dry-run; real execution needs explicit `dryRun=false` | tool parameter |
 | **Cluster allowlist (Lambda)** | Enforced when `ALLOWED_CLUSTER_NAMES` is set | `ALLOWED_CLUSTER_NAMES` env var |
 | **Presigned URL expiry (logs)** | 300 s, max 900 s | `PRESIGNED_URL_EXPIRATION` env var |
@@ -281,13 +285,13 @@ Every tool that targets an instance validates that it belongs to an EKS cluster 
 
 ### Collection Approval (Human-in-the-Loop)
 
-`collect` and `batch_collect` are the only tools that *mutate* — they start SSM Automation (the AWS-managed `AWSSupport-CollectEKSInstanceLogs` document) on nodes. To stop a compromised/poisoned agent from triggering collection on its own, these tools are gated by an out-of-band human approval (on by default; disable with `REQUIRE_COLLECTION_APPROVAL=false`):
+`collect` and `batch_collect` are the only tools that *mutate* — they start SSM Automation (the AWS-managed `AWSSupport-CollectEKSInstanceLogs` document) on nodes. To stop a compromised/poisoned agent from triggering collection on its own, these tools use SSM's **native `aws:approve` action** (on by default; disable with `REQUIRE_COLLECTION_APPROVAL=false`):
 
-1. The agent calls `collect` (or `batch_collect` with `dryRun=false`). The Lambda does **not** call SSM. It writes a `PENDING` record to a DynamoDB table, publishes an approve/deny link to an SNS topic, and returns `status: "pending_approval"` with an `approvalId`.
-2. A human opens the link (delivered via SNS to the subscribed approvers) and approves or denies. The link is a **capability URL** carrying a one-time, high-entropy secret token; only the SHA-256 of the token is stored server-side, and the token is **never** returned to the agent — so the agent cannot approve its own request.
-3. The agent re-calls `collect` with the same `instanceId` plus the `approvalId`. The Lambda verifies the record is `APPROVED`, atomically marks it `CONSUMED` (single-use), and only then starts the SSM Automation.
+1. The agent calls `collect` (or `batch_collect` with `dryRun=false`). The Lambda starts a **wrapper Automation document** whose first step is `aws:approve` — the execution immediately pauses inside SSM. The response is `status: "pending_approval"` with an `approvalConsoleUrl` deep link.
+2. A designated approver (an IAM principal listed in `APPROVAL_APPROVER_ARNS`) opens the link — the Systems Manager console execution page — reviews the request, and clicks **Approve** or **Deny**. Approvers are also notified via SNS. The decision is IAM-authenticated and CloudTrail-audited; no secret tokens or custom endpoints are involved.
+3. On approval, the document proceeds to the collection step **automatically** — the agent never re-calls `collect`; it just polls `status(executionId)`, which reports the approval state (`pending` / `approved` / `denied_or_expired`) and then the collection progress.
 
-The approval endpoint is a separate Lambda (Function URL) with **no** SSM or collection permissions — approving only flips a DynamoDB flag. Requests auto-expire via DynamoDB TTL (`APPROVAL_TTL_SECONDS`, default 15 min). For a batch, one approval authorizes the whole batch; the per-node collections it fans out to are covered by that single approval.
+The agent cannot approve its own request: the MCP Lambda has **no** `ssm:SendAutomationSignal` permission, and the approver list is fixed at deploy time (it is not a tool parameter). Pending requests time out after `APPROVAL_TTL_SECONDS` (default 15 min). For a batch, a single approval authorizes the whole batch — the wrapper document's fan-out step then starts one collection per sampled node. Note: because the wrapper documents are regional SSM documents deployed with the stack, approval-gated collection runs in the stack region only.
 
 ### Response Redaction
 
@@ -382,12 +386,12 @@ For a detailed walkthrough of the architecture, data flows, tool design, cross-r
 | 3 — Cluster | `cluster_health`, `compare_nodes`, `batch_collect`†, `batch_status`, `network_diagnostics`, `storage_diagnostics` | Multi-node operations |
 | 4 — SOPs | `list_sops`, `get_sop` | 41 structured runbooks |
 
-† `collect` and `batch_collect` are **mutating** (they start SSM Automation on nodes). By default they require **human-in-the-loop approval**: the first call returns `status: "pending_approval"` with an `approvalId`, a human approves via the SNS link, and the agent re-calls with the same arguments plus that `approvalId`. See [Security Model](#security-model).
+† `collect` and `batch_collect` are **mutating** (they start SSM Automation on nodes). By default they require **human-in-the-loop approval** via SSM's native `aws:approve` action: the call returns `status: "pending_approval"` with an `approvalConsoleUrl`, a designated approver clicks Approve in the Systems Manager console, and collection proceeds automatically — the agent just keeps polling `status`. See [Security Model](#security-model).
 
 ### Agent Workflow
 
 ```
-collect → (human approves) → collect(approvalId) → status (poll) → validate → errors → search → correlate → read → summarize
+collect → (human approves in SSM console) → status (poll) → validate → errors → search → correlate → read → summarize
 ```
 
 > Set `REQUIRE_COLLECTION_APPROVAL=false` for a fully supervised/test deployment to skip the approval step.
@@ -455,6 +459,10 @@ general triage, and follow whichever runbook matches.
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | `cdk synth` fails with "must set either `allowedClusterNames` …" | Cluster scope wasn't chosen | Set `ALLOWED_CLUSTER_NAMES=…` (preferred) or `ALLOW_ANY_CLUSTER_NAME=true` and re-run `./deploy.sh` |
+| `cdk synth` fails with "`approvalApproverArns` is empty" | Approval is on but no approvers were designated | Set `APPROVAL_APPROVER_ARNS=…` (deploy.sh defaults it to the deploying principal) or `REQUIRE_COLLECTION_APPROVAL=false` for test deployments |
+| `collect` stuck in `pending_approval` | No approver has acted in the SSM console | Open the `approvalConsoleUrl` from the response as a designated approver and click Approve; the request times out after `APPROVAL_TTL_SECONDS` |
+| Approve button fails in the console | The signed-in principal isn't in `APPROVAL_APPROVER_ARNS` or lacks `ssm:SendAutomationSignal` | Sign in as a designated approver, or add the principal and redeploy |
+| `status` shows `humanApproval: denied_or_expired` | Approver denied the request, or it timed out | Re-call `collect` to request a fresh approval if still needed |
 | Tool returns 403 "Caller is not permitted to invoke '…'" | Per-tool ACL doesn't include this client | Add the client to the matching `TOOL_AUTHORIZATION` entry |
 | Tool returns 429 "Rate limit exceeded" | Caller exceeded `PER_CALLER_RATE_LIMIT_PER_MINUTE` | Wait the `retryAfterSeconds` in the response, or raise the limit |
 | `collect` returns "document not found" | SSM document not in target region | Use a supported region or pass `region` explicitly |

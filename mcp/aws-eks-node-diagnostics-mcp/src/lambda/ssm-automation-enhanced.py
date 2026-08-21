@@ -19,8 +19,6 @@ import os
 import re
 import hashlib
 import time
-import uuid
-import secrets
 import signal
 import threading
 from contextlib import contextmanager
@@ -45,7 +43,6 @@ s3_client = boto3.client('s3', config=Config(signature_version='s3v4'))
 ec2_client = boto3.client('ec2')
 cloudwatch_client = boto3.client('cloudwatch')
 sns_client = boto3.client('sns')
-dynamodb_client = boto3.client('dynamodb')
 
 # Regional client cache to avoid re-creating clients per invocation
 _regional_clients: Dict[str, Dict[str, Any]] = {}
@@ -59,20 +56,29 @@ STACK_NAME = os.environ.get('STACK_NAME', 'EksNodeLogMcp')
 # ── Human-in-the-loop approval for mutating collection tools (M1/M2) ──
 # collect/batch_collect start SSM Automation on nodes. Rather than let an
 # autonomous (potentially poisoned) agent trigger that directly, the Lambda
-# creates a pending approval, notifies humans via SNS, and only runs the SSM
-# call after a human approves out-of-band. The approval is NOT a tool parameter
-# the agent can set — approval requires a secret token delivered only to humans.
-APPROVAL_TABLE_NAME = os.environ.get('APPROVAL_TABLE_NAME', '')
+# starts a wrapper SSM Automation document whose FIRST step is the native
+# `aws:approve` action. The execution pauses there until a designated human
+# approves it in the AWS Systems Manager console (or via
+# `ssm:SendAutomationSignal`) — only then does the document proceed to run the
+# actual log collection. Approval is NOT a tool parameter the agent can set:
+# the Lambda has no ssm:SendAutomationSignal permission, and the approvers are
+# fixed IAM principals baked in at deploy time.
 APPROVAL_TOPIC_ARN = os.environ.get('APPROVAL_TOPIC_ARN', '')
-APPROVAL_BASE_URL = os.environ.get('APPROVAL_BASE_URL', '')  # approve Function URL (opt-in; empty in CLI mode)
-APPROVAL_FUNCTION_NAME = os.environ.get('APPROVAL_FUNCTION_NAME', '')  # approval handler for direct IAM-auth invoke
+COLLECT_APPROVAL_DOCUMENT = os.environ.get('COLLECT_APPROVAL_DOCUMENT', '')
+BATCH_APPROVAL_DOCUMENT = os.environ.get('BATCH_APPROVAL_DOCUMENT', '')
+TCPDUMP_APPROVAL_DOCUMENT = os.environ.get('TCPDUMP_APPROVAL_DOCUMENT', '')
+APPROVAL_APPROVERS = [
+    a.strip() for a in os.environ.get('APPROVAL_APPROVERS', '').split(',') if a.strip()
+]
+# True only when email subscriptions were created at deploy time — used to
+# phrase the pending-approval message honestly (an SNS publish to a topic with
+# zero subscribers "succeeds" but nobody is notified).
+APPROVAL_EMAILS_CONFIGURED = os.environ.get(
+    'APPROVAL_EMAILS_CONFIGURED', ''
+).strip().lower() in ('1', 'true', 'yes')
 REQUIRE_COLLECTION_APPROVAL = os.environ.get(
     'REQUIRE_COLLECTION_APPROVAL', 'true'
 ).strip().lower() in ('1', 'true', 'yes')
-try:
-    APPROVAL_TTL_SECONDS = int(os.environ.get('APPROVAL_TTL_SECONDS', '900'))
-except (ValueError, TypeError):
-    APPROVAL_TTL_SECONDS = 900
 
 
 def emit_metric(metric_name: str, value: float = 1.0, unit: str = 'Count',
@@ -208,6 +214,40 @@ def _parse_presigned_url_expiration() -> int:
 PRESIGNED_URL_EXPIRATION = _parse_presigned_url_expiration()
 
 
+def _parse_pcap_presigned_url_expiration() -> int:
+    """
+    Parse PCAP_PRESIGNED_URL_EXPIRATION_SECONDS env var. Network captures may
+    contain credentials in transit and other sensitive payloads — they get a
+    much shorter window than ordinary log artifacts. Default 60s, max 300s.
+    """
+    raw = os.environ.get('PCAP_PRESIGNED_URL_EXPIRATION_SECONDS', '')
+    try:
+        val = int(raw)
+        if val > 0:
+            return min(val, 300)
+    except (ValueError, TypeError):
+        pass
+    return 60
+
+
+PCAP_PRESIGNED_URL_EXPIRATION = _parse_pcap_presigned_url_expiration()
+
+
+def _parse_max_pcap_bytes() -> int:
+    """Cap at which a pcap upload is flagged as oversized."""
+    raw = os.environ.get('MAX_PCAP_BYTES', '')
+    try:
+        val = int(raw)
+        if val > 0:
+            return val
+    except (ValueError, TypeError):
+        pass
+    return 200 * 1024 * 1024  # 200 MiB
+
+
+MAX_PCAP_BYTES = _parse_max_pcap_bytes()
+
+
 # =============================================================================
 # ALLOWED REGIONS — configurable via env var (T9, T11 mitigation)
 # =============================================================================
@@ -247,12 +287,19 @@ def resolve_and_validate_region(arguments: Dict, instance_id: str = None) -> tup
 
 # EKS clusters this deployment is permitted to act on. Populated from the
 # ALLOWED_CLUSTER_NAMES env var (the CDK also enforces it at the IAM layer).
-# When empty, no cluster-name allowlist is enforced at the Lambda layer —
-# region and EKS-tag validation still apply.
 ALLOWED_CLUSTER_NAMES = set(
     c.strip() for c in os.environ.get('ALLOWED_CLUSTER_NAMES', '').split(',')
     if c.strip()
 )
+
+# Fail-closed companion to ALLOWED_CLUSTER_NAMES (E2): an empty allowlist only
+# permits all clusters when the operator explicitly acknowledged the broader
+# scope at deploy time (the CDK `allowAnyClusterName: true` flag). Without the
+# acknowledgment, an empty allowlist rejects every cluster instead of allowing
+# every cluster.
+ALLOW_ANY_CLUSTER_NAME = os.environ.get(
+    'ALLOW_ANY_CLUSTER_NAME', ''
+).strip().lower() in ('1', 'true', 'yes')
 
 # Whether to accept nodes that carry ONLY the user-settable
 # kubernetes.io/cluster/* tag (self-managed node groups). The EKS-managed
@@ -267,12 +314,13 @@ ALLOW_SELF_MANAGED_NODES = os.environ.get(
 
 def cluster_name_allowed(cluster_name: Optional[str]) -> bool:
     """
-    True if the cluster is permitted by the Lambda-level allowlist. When the
-    allowlist is empty, all clusters are permitted (region + tag validation
-    still apply).
+    True if the cluster is permitted by the Lambda-level allowlist (E2).
+    Fail-closed: an empty allowlist permits clusters only when the operator
+    explicitly acknowledged any-cluster scope at deploy time
+    (ALLOW_ANY_CLUSTER_NAME=true). Region + tag validation always still apply.
     """
     if not ALLOWED_CLUSTER_NAMES:
-        return True
+        return ALLOW_ANY_CLUSTER_NAME
     return bool(cluster_name) and cluster_name in ALLOWED_CLUSTER_NAMES
 
 
@@ -282,10 +330,14 @@ def validate_cluster_name(cluster_name: str) -> Optional[Dict]:
     (E2 mitigation). Returns None if allowed, or an error_response dict.
     """
     if not cluster_name_allowed(cluster_name):
+        allowed = ', '.join(sorted(ALLOWED_CLUSTER_NAMES)) or (
+            'none — deployment has no cluster allowlist and any-cluster scope '
+            'was not acknowledged (ALLOW_ANY_CLUSTER_NAME)'
+        )
         return error_response(
             403,
             f"Cluster '{cluster_name}' is not permitted by this deployment. "
-            f"Allowed clusters: {', '.join(sorted(ALLOWED_CLUSTER_NAMES))}"
+            f"Allowed clusters: {allowed}"
         )
     return None
 
@@ -400,10 +452,13 @@ def regex_time_limit(seconds: int = REGEX_FILE_TIMEOUT_SECONDS):
 # =============================================================================
 
 # Tools that require explicit opt-in via the ENABLED_RESTRICTED_TOOLS env var.
-# No restricted tools are currently defined — the invasive tcpdump capture/analyze
-# tools were removed entirely. This set is retained so the authorization gate
-# below (and any future restricted tool) keeps working without further changes.
-RESTRICTED_TOOLS: set = set()
+# These tools perform invasive operations (network captures, namespace entry)
+# and are completely removed from the routing table by default. They do not
+# appear in available_tools and cannot be invoked unless enabled.
+RESTRICTED_TOOLS = {
+    'tcpdump_capture',
+    'tcpdump_analyze',
+}
 
 # Parse enabled restricted tools from env var
 ENABLED_RESTRICTED_TOOLS = set(
@@ -411,9 +466,12 @@ ENABLED_RESTRICTED_TOOLS = set(
     if t.strip()
 )
 
-# NOTE: collect/batch_collect (mutating tools) are gated at runtime by the
-# human-in-the-loop approval workflow (see enforce_collection_approval), not by
-# hiding them from the tool surface.
+# NOTE: mutating tools are gated at runtime by the human-in-the-loop approval
+# workflow (a native SSM aws:approve step), not only by hiding them from the
+# tool surface: collect/batch_collect are always visible but approval-gated;
+# tcpdump_capture is BOTH opt-in (ENABLED_RESTRICTED_TOOLS) and approval-gated
+# — every capture pauses at aws:approve until a designated human approves it
+# in the Systems Manager console.
 
 
 def _parse_tool_authorization() -> Dict[str, set]:
@@ -534,7 +592,7 @@ def validate_tool_authorization(tool_name: str, caller: Optional[Dict] = None) -
       (a) Restricted-tool opt-in (ENABLED_RESTRICTED_TOOLS).
       (b) Per-tool ACL keyed on Cognito client_id (TOOL_AUTHORIZATION).
     Mutating tools (collect/batch_collect) are gated separately at runtime by the
-    human approval workflow (enforce_collection_approval), not here.
+    human approval workflow (a native SSM aws:approve step), not here.
     Returns None if authorized, or an error_response dict if denied.
     """
     if tool_name in RESTRICTED_TOOLS and tool_name not in ENABLED_RESTRICTED_TOOLS:
@@ -558,6 +616,123 @@ def validate_tool_authorization(tool_name: str, caller: Optional[Dict] = None) -
                 f"Caller is not permitted to invoke '{tool_name}'.",
                 {'requiredClients': sorted(allowed)},
             )
+    return None
+
+
+# =============================================================================
+# BPF FILTER VALIDATION — allowlist-based (T1 mitigation)
+# =============================================================================
+
+# Allowlist of safe BPF filter tokens. This is intentionally restrictive.
+# BPF filters are a mini-language; we only allow known-safe primitives.
+_BPF_ALLOWED_KEYWORDS = frozenset({
+    # Protocols
+    'tcp', 'udp', 'icmp', 'arp', 'ip', 'ip6', 'ether', 'vlan', 'stp',
+    # Directions
+    'src', 'dst',
+    # Qualifiers
+    'host', 'net', 'port', 'portrange', 'proto',
+    # Logical operators
+    'and', 'or', 'not',
+    # TCP flags (used in bracket expressions)
+    'tcp-syn', 'tcp-ack', 'tcp-fin', 'tcp-rst', 'tcp-push', 'tcp-urg',
+    # Misc
+    'greater', 'less', 'len',
+})
+
+# Pattern for valid BPF tokens: keywords, IPs, CIDRs, numbers, and bracket expressions
+_BPF_TOKEN_PATTERN = re.compile(
+    r'^('
+    r'\d{1,5}'                     # port numbers
+    r'|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(/\d{1,2})?'  # IPv4 addresses and CIDRs
+    r'|[0-9a-f:]+(/\d{1,3})?'      # IPv6 addresses and CIDRs
+    r'|\d+-\d+'                     # port ranges (e.g., 80-443)
+    r')$',
+    re.IGNORECASE
+)
+
+# Bracket expressions like tcp[tcpflags], tcp[13], udp[0:2]
+_BPF_BRACKET_PATTERN = re.compile(
+    r'^(tcp|udp|icmp|ip|ip6|ether)\['
+    r'[a-z0-9:]+\]'
+    r'(\s*[&|!=<>]+\s*'
+    r'(\(?(tcp-syn|tcp-ack|tcp-fin|tcp-rst|tcp-push|tcp-urg|0x[0-9a-f]+|\d+)\)?)'
+    r')?$',
+    re.IGNORECASE
+)
+
+
+def validate_bpf_filter(bpf_filter: str) -> Optional[str]:
+    """
+    Validate a BPF filter expression using allowlist-based validation.
+    
+    Returns None if valid, or an error message string if invalid.
+    
+    Security: This replaces the previous denylist approach which missed
+    backticks, newlines, and other injection vectors. The allowlist approach
+    only permits known-safe BPF primitives.
+    """
+    if not bpf_filter:
+        return None
+    
+    # Hard reject: any control characters, backticks, or shell metacharacters
+    # This catches \n, \r, \t, backticks, $, etc.
+    if re.search(r'[\x00-\x1f\x7f`$\\;{}<>!~^]', bpf_filter):
+        return 'BPF filter contains forbidden characters (control chars, backticks, shell metacharacters)'
+    
+    # Reject excessively long filters
+    if len(bpf_filter) > 256:
+        return 'BPF filter too long (max 256 characters)'
+    
+    # Reject parentheses used for subshells — BPF uses them for grouping but
+    # we handle them carefully
+    # Allow balanced parentheses only
+    depth = 0
+    for ch in bpf_filter:
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth -= 1
+        if depth < 0:
+            return 'BPF filter has unbalanced parentheses'
+    if depth != 0:
+        return 'BPF filter has unbalanced parentheses'
+    
+    # Strip parentheses for token validation (BPF uses them for grouping)
+    stripped = bpf_filter.replace('(', ' ').replace(')', ' ')
+    
+    # Tokenize and validate each token
+    tokens = stripped.split()
+    if not tokens:
+        return 'BPF filter is empty after parsing'
+    
+    for token in tokens:
+        token_lower = token.lower().strip()
+        if not token_lower:
+            continue
+        
+        # Check against known keywords
+        if token_lower in _BPF_ALLOWED_KEYWORDS:
+            continue
+        
+        # Check against token pattern (IPs, ports, numbers)
+        if _BPF_TOKEN_PATTERN.match(token_lower):
+            continue
+        
+        # Check bracket expressions (e.g., tcp[tcpflags])
+        if _BPF_BRACKET_PATTERN.match(token_lower):
+            continue
+        
+        # Comparison operators
+        if token_lower in ('!=', '==', '>=', '<=', '>', '<', '=', '&'):
+            continue
+        
+        # Hex values (used in flag comparisons)
+        if re.match(r'^0x[0-9a-f]+$', token_lower):
+            continue
+        
+        return f"BPF filter contains disallowed token: '{token}'. Only standard BPF primitives are permitted."
+    
     return None
 
 
@@ -1914,9 +2089,15 @@ def find_execution_by_idempotency_token(instance_id: str, token: str) -> Optiona
                 response = regional_ssm.get_automation_execution(
                     AutomationExecutionId=execution_id
                 )
+                execution = response['AutomationExecution']
                 return {
                     'executionId': execution_id,
-                    'status': response['AutomationExecution']['AutomationExecutionStatus']
+                    'status': execution['AutomationExecutionStatus'],
+                    'documentName': execution.get('DocumentName', ''),
+                    'region': exec_region,
+                    # Full execution snapshot so the idempotent-replay path can
+                    # run the same wrapper-status augmentation status() uses.
+                    '_execution': execution,
                 }
             except Exception:
                 return None
@@ -3452,7 +3633,7 @@ def lambda_handler(event: Dict, context: Any) -> Dict:
 
     # Tool routing. collect/batch_collect are mutating (they start SSM Automation
     # on nodes); rather than hide them, they are gated at runtime by a human
-    # approval (M1/M2) — see enforce_collection_approval. Read/analysis tools run
+    # approval (M1/M2) — a native SSM aws:approve step. Read/analysis tools run
     # directly.
     tools = {
         # Core Operations (Tier 1)
@@ -3481,19 +3662,23 @@ def lambda_handler(event: Dict, context: Any) -> Dict:
         'get_sop': get_sop,
     }
 
-    # Strip any caller-supplied server-only fields (approval bypass, injected
-    # caller identity) so an agent cannot forge them, then inject the trusted
-    # caller identity extracted from the JWT for use by the approval workflow.
+    # Strip any caller-supplied server-only fields (injected caller identity)
+    # so an agent cannot forge them, then inject the trusted caller identity
+    # extracted from the JWT for use by the approval notifications.
     if isinstance(event, dict):
         for _k in [k for k in list(event.keys()) if isinstance(k, str) and k.startswith('_')]:
             event.pop(_k, None)
         event['_caller_client_id'] = caller.get('client_id')
         event['_caller_sub'] = caller.get('sub')
 
-    # Restricted tools are only registered when explicitly enabled. There are
-    # currently no restricted tools defined — the invasive tcpdump capture/analyze
-    # tools were removed. New restricted tools can be added to this map.
-    _restricted_tool_map: Dict = {}
+    # Restricted tools are only registered when explicitly enabled
+    # (ENABLED_RESTRICTED_TOOLS). tcpdump_capture is ADDITIONALLY gated by the
+    # human-in-the-loop approval workflow — enabling it here only exposes the
+    # tool; every capture still pauses at a native SSM aws:approve step.
+    _restricted_tool_map: Dict = {
+        'tcpdump_capture': tcpdump_capture,
+        'tcpdump_analyze': tcpdump_analyze,
+    }
     for rt_name, rt_func in _restricted_tool_map.items():
         if rt_name in ENABLED_RESTRICTED_TOOLS:
             tools[rt_name] = rt_func
@@ -3628,203 +3813,306 @@ def error_response(status_code: int, message: str, details: Dict = None) -> Dict
 
 
 def _approval_configured() -> bool:
-    """True when the approval workflow infrastructure is wired up."""
-    return bool(APPROVAL_TABLE_NAME)
+    """True when the SSM-native approval workflow is wired up."""
+    return bool(COLLECT_APPROVAL_DOCUMENT and APPROVAL_APPROVERS)
 
 
-def create_collection_approval(tool_name: str, target: str, region: str, arguments: Dict) -> Dict:
+def console_automation_url(region: str, execution_id: str) -> str:
+    """Deep link to the SSM console page where approvers Approve/Deny an execution."""
+    return (
+        f'https://{region}.console.aws.amazon.com/systems-manager/automation/'
+        f'execution/{execution_id}?region={region}'
+    )
+
+
+def notify_approvers(tool_name: str, target: str, region: str, execution_id: str,
+                     arguments: Dict) -> None:
     """
-    Create a PENDING approval, notify approvers via SNS, and return a
-    'pending_approval' response for the agent. The approve/deny link carries a
-    one-time secret token that is delivered ONLY to humans (via SNS) — it is
-    never returned to the caller, so the agent cannot approve its own request.
+    Publish a rich notification with the SSM console deep link. This complements
+    the bare-bones notification the `aws:approve` step itself sends to the same
+    topic. Best-effort — the console approval card exists regardless.
     """
-    approval_id = uuid.uuid4().hex
-    token = secrets.token_urlsafe(32)
-    token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
-    now = int(time.time())
-    ttl = now + APPROVAL_TTL_SECONDS
+    if not APPROVAL_TOPIC_ARN:
+        return
     requested_by = str(
         arguments.get('_caller_client_id')
         or arguments.get('_caller_sub')
         or 'unknown'
     )
-
-    dynamodb_client.put_item(
-        TableName=APPROVAL_TABLE_NAME,
-        Item={
-            'approvalId': {'S': approval_id},
-            'tokenHash': {'S': token_hash},
-            'tool': {'S': tool_name},
-            'target': {'S': target},
-            'region': {'S': region},
-            'status': {'S': 'PENDING'},
-            'requestedBy': {'S': requested_by},
-            'createdAt': {'N': str(now)},
-            'ttl': {'N': str(ttl)},
-        },
-    )
-
-    # Two delivery modes for the approve/deny action. The public Function URL
-    # is opt-in only: account guardrails can strip public Lambda policies and
-    # silently break the links, so the default is an IAM-authenticated direct
-    # invoke of the approval handler — no public endpoint involved.
-    if APPROVAL_BASE_URL:
-        base = APPROVAL_BASE_URL.rstrip('/')
-        approve_action = f"{base}/?approvalId={approval_id}&token={token}&decision=approve"
-        deny_action = f"{base}/?approvalId={approval_id}&token={token}&decision=deny"
-        action_hint = "The link contains a one-time secret — do not forward it."
-    elif APPROVAL_FUNCTION_NAME:
-        def _invoke_cmd(decision: str) -> str:
-            payload = json.dumps({
-                'approvalId': approval_id, 'token': token, 'decision': decision,
-            })
-            return (
-                f"aws lambda invoke --function-name {APPROVAL_FUNCTION_NAME} "
-                f"--region {DEFAULT_REGION} --cli-binary-format raw-in-base64-out "
-                f"--payload '{payload}' /dev/stdout"
-            )
-        approve_action = _invoke_cmd('approve')
-        deny_action = _invoke_cmd('deny')
-        action_hint = (
-            "Run the command with YOUR AWS credentials (requires lambda:InvokeFunction "
-            "on the approval handler). The payload contains a one-time secret — do not forward it."
+    try:
+        sns_client.publish(
+            TopicArn=APPROVAL_TOPIC_ARN,
+            Subject=f'[EKS Diag MCP] Approval needed: {tool_name} on {target}'[:100],
+            Message=(
+                f"An agent requested '{tool_name}', which starts SSM log collection on "
+                f"{target} (region {region}).\n\n"
+                f"Requested by client: {requested_by}\n"
+                f"Execution ID: {execution_id}\n\n"
+                f"Approve or deny in the AWS Systems Manager console:\n"
+                f"{console_automation_url(region, execution_id)}\n\n"
+                f"(You must be signed in as one of the designated approvers and have "
+                f"ssm:SendAutomationSignal permission. The execution stays paused at the "
+                f"approval step until you decide; it times out if nobody responds.)"
+            ),
         )
+    except Exception as e:
+        logger.error(f'Failed to publish approval notification: {e}')
+
+
+def _pending_approval_response(tool_name: str, target: str, region: str,
+                               execution_id: str, extra: Optional[Dict] = None) -> Dict:
+    """Standard 'pending human approval' response for approval-gated executions."""
+    url = console_automation_url(region, execution_id)
+    if APPROVAL_EMAILS_CONFIGURED:
+        notify_note = 'Approvers were also notified by email via SNS.'
     else:
-        approve_action = deny_action = '(approval endpoint not configured)'
-        action_hint = ''
-
-    if APPROVAL_TOPIC_ARN:
-        try:
-            sns_client.publish(
-                TopicArn=APPROVAL_TOPIC_ARN,
-                Subject=f'[EKS Diag MCP] Approval needed: {tool_name} on {target}'[:100],
-                Message=(
-                    f"An agent requested '{tool_name}', which starts SSM log collection on "
-                    f"{target} (region {region}).\n\n"
-                    f"Requested by client: {requested_by}\n"
-                    f"Approval ID: {approval_id}\n\n"
-                    f"APPROVE:\n{approve_action}\n\n"
-                    f"DENY:\n{deny_action}\n\n"
-                    f"This request expires in {APPROVAL_TTL_SECONDS // 60} minutes. "
-                    f"{action_hint}"
-                ),
-            )
-        except Exception as e:
-            logger.error(f'Failed to publish approval notification: {e}')
-
-    return success_response({
+        notify_note = (
+            'No email subscriptions are configured on the approval SNS topic, so '
+            'nobody is notified automatically — share the console link with an '
+            'approver directly.'
+        )
+    payload = {
         'status': 'pending_approval',
-        'approvalId': approval_id,
+        'executionId': execution_id,
         'tool': tool_name,
         'target': target,
         'region': region,
+        'approvalConsoleUrl': url,
         'message': (
-            f"'{tool_name}' requires human approval before it runs SSM on {target}. "
-            f"An approval request was sent to the operators. Once a human approves it, "
-            f"re-call {tool_name} with the SAME arguments plus approvalId=\"{approval_id}\"."
+            f"'{tool_name}' requires human approval before SSM log collection runs on "
+            f"{target}. The SSM Automation execution has started and is PAUSED at a "
+            f"native aws:approve step. A designated approver must approve it in the "
+            f"AWS Systems Manager console: {url} — {notify_note} "
+            f"Once approved, collection proceeds automatically."
         ),
-        'expiresInSeconds': APPROVAL_TTL_SECONDS,
+        'humanApproval': {
+            'state': 'pending',
+            'consoleUrl': url,
+            'howToApprove': (
+                'Open the console link, review the request, and choose Approve or Deny '
+                'on the waitForHumanApproval step (or run: aws ssm send-automation-signal '
+                f'--automation-execution-id {execution_id} --signal-type Approve '
+                f'--region {region}).'
+            ),
+        },
+        'suggestedPollIntervalSeconds': 30,
+        'polling': {
+            'intervalSeconds': 30,
+            'maxAttempts': 10,
+            'serverSideWaitSeconds': APPROVAL_WAIT_SECONDS,
+            'onExhausted': 'stop polling and ask the user to get the request approved',
+        },
         'nextStep': (
-            f'Wait for a human to approve, then call {tool_name}(..., '
-            f'approvalId="{approval_id}"). Re-calling before approval returns pending.'
+            f'Share the console link with an approver, then call '
+            f'status(executionId="{execution_id}") repeatedly, up to 10 times. Each call '
+            f'waits up to {APPROVAL_WAIT_SECONDS}s server-side while approval is pending, '
+            f'so just call again immediately after each response — do NOT stop and wait '
+            f'for the user to confirm approval. Collection continues automatically once '
+            f'approved (no re-call of {tool_name} is needed). If humanApproval.state is '
+            f'still "pending" after 10 calls, stop and ask the user to get it approved.'
         ),
-    })
+        'task': {
+            'taskId': execution_id,
+            'state': 'running',
+            'message': 'Waiting for human approval in the AWS Systems Manager console',
+            'progress': 0,
+        },
+    }
+    if extra:
+        payload.update(extra)
+    return success_response(payload)
 
 
-def consume_collection_approval(approval_id: str, tool_name: str, target: str) -> Optional[Dict]:
+def enforce_approval_preconditions(target_region: str) -> Optional[Dict]:
     """
-    Validate and atomically consume an approval. Returns None when the request
-    is approved and may proceed, otherwise a response dict (pending / denied /
-    expired / mismatched / already-used) to return to the caller.
+    Fail-closed checks for the approval-gated path (M1/M2). Returns None when the
+    wrapper document can be started, or an error response.
     """
-    try:
-        resp = dynamodb_client.get_item(
-            TableName=APPROVAL_TABLE_NAME,
-            Key={'approvalId': {'S': approval_id}},
-        )
-    except Exception as e:
-        return error_response(500, f'Failed to look up approval: {e}')
-
-    item = resp.get('Item')
-    if not item:
-        return error_response(
-            403,
-            f'Unknown or expired approvalId. Request a new approval by calling '
-            f'{tool_name} without an approvalId.',
-        )
-
-    if item.get('tool', {}).get('S') != tool_name or item.get('target', {}).get('S') != target:
-        return error_response(
-            403,
-            'approvalId does not match this tool and target. Request a fresh approval.',
-        )
-
-    now = int(time.time())
-    ttl = int(item.get('ttl', {}).get('N', '0') or 0)
-    if ttl and now > ttl:
-        return error_response(403, 'This approval has expired. Request a new one.')
-
-    status = item.get('status', {}).get('S', '')
-    if status == 'PENDING':
-        return success_response({
-            'status': 'pending_approval',
-            'approvalId': approval_id,
-            'message': 'Approval is still pending. Ask an approver to use the link, then retry.',
-            'nextStep': f'Retry {tool_name}(..., approvalId="{approval_id}") after approval.',
-        })
-    if status == 'DENIED':
-        return error_response(403, 'This request was denied by an approver.')
-    if status == 'CONSUMED':
-        return error_response(403, 'This approval was already used (approvals are single-use). Request a new one.')
-    if status != 'APPROVED':
-        return error_response(403, f'Approval is not usable (status={status}).')
-
-    # Atomically flip APPROVED -> CONSUMED so an approval can be used only once.
-    try:
-        dynamodb_client.update_item(
-            TableName=APPROVAL_TABLE_NAME,
-            Key={'approvalId': {'S': approval_id}},
-            UpdateExpression='SET #s = :consumed',
-            ConditionExpression='#s = :approved',
-            ExpressionAttributeNames={'#s': 'status'},
-            ExpressionAttributeValues={
-                ':consumed': {'S': 'CONSUMED'},
-                ':approved': {'S': 'APPROVED'},
-            },
-        )
-    except dynamodb_client.exceptions.ConditionalCheckFailedException:
-        return error_response(403, 'This approval was already used or changed state. Request a new one.')
-    except Exception as e:
-        return error_response(500, f'Failed to consume approval: {e}')
-
-    return None  # approved and consumed — caller may proceed
-
-
-def enforce_collection_approval(tool_name: str, target: str, region: str, arguments: Dict) -> Optional[Dict]:
-    """
-    Approval gate for mutating collection tools (M1/M2). Returns None when the
-    call may proceed (approval disabled, or a valid approval was consumed), or a
-    response dict (pending / denied / error) that the caller must return as-is.
-    """
-    # Internal bypass: set ONLY by server-side code (e.g. batch_collect after it
-    # obtained one approval for the whole batch). Caller-supplied '_'-prefixed
-    # keys are stripped by the handler, so an agent cannot forge this.
-    if arguments.get('_approval_bypass') is True:
-        return None
-    if not REQUIRE_COLLECTION_APPROVAL:
-        return None
     if not _approval_configured():
-        # Fail closed: approval is required but the workflow isn't configured.
         return error_response(
             503,
             'Human approval is required for collection, but the approval workflow is not '
-            'configured (APPROVAL_TABLE_NAME/APPROVAL_TOPIC_ARN unset). Contact the operator.',
+            'configured (COLLECT_APPROVAL_DOCUMENT/APPROVAL_APPROVERS unset). '
+            'Contact the operator.',
         )
-    approval_id = arguments.get('approvalId')
-    if not approval_id:
-        return create_collection_approval(tool_name, target, region, arguments)
-    return consume_collection_approval(approval_id, tool_name, target)
+    if target_region != DEFAULT_REGION:
+        return error_response(
+            400,
+            f'Approval-gated collection is only available in {DEFAULT_REGION}: the '
+            f'approval wrapper document is a regional SSM document deployed with this '
+            f'stack. Requested region: {target_region}. Deploy the stack in that region, '
+            f'or (test deployments only) set REQUIRE_COLLECTION_APPROVAL=false.',
+        )
+    return None
+
+
+def start_collection_with_approval(instance_id: str, target_region: str,
+                                   arguments: Dict) -> Dict:
+    """
+    Start the approval-gated wrapper automation for a single instance. The
+    wrapper pauses at aws:approve until a human approves in the SSM console,
+    then runs AWSSupport-CollectEKSInstanceLogs automatically.
+    """
+    regional_ssm = get_regional_client('ssm', target_region)
+    try:
+        response = regional_ssm.start_automation_execution(
+            DocumentName=COLLECT_APPROVAL_DOCUMENT,
+            Parameters={
+                'EKSInstanceId': [instance_id],
+                'LogDestination': [LOGS_BUCKET],
+                'AutomationAssumeRole': [SSM_AUTOMATION_ROLE_ARN],
+                'Approvers': APPROVAL_APPROVERS,
+                'SNSTopicArn': [APPROVAL_TOPIC_ARN],
+            },
+        )
+    except Exception as e:
+        return error_response(500, f'Failed to start approval-gated collection: {str(e)}')
+
+    execution_id = response['AutomationExecutionId']
+
+    idempotency_token = arguments.get('idempotencyToken')
+    if idempotency_token:
+        store_idempotency_mapping(instance_id, idempotency_token, execution_id)
+    store_execution_region(execution_id, target_region)
+
+    notify_approvers('collect', instance_id, target_region, execution_id, arguments)
+    return _pending_approval_response(
+        'collect', instance_id, target_region, execution_id,
+        extra={'instanceId': instance_id, 's3Bucket': LOGS_BUCKET},
+    )
+
+
+# ── Wrapper-execution status helpers (used by status/batch_status) ──
+
+APPROVAL_STEP_NAME = 'waitForHumanApproval'
+
+# Server-side long-poll budget while an approval is pending. Agents generally
+# cannot sleep between tool calls, so the status tools hold the request open
+# for up to this long (checking SSM every APPROVAL_WAIT_CHECK_SECONDS) before
+# responding — back-to-back agent polls are then naturally paced ~30s apart,
+# and the response returns early the moment a human decides.
+APPROVAL_WAIT_SECONDS = 25
+APPROVAL_WAIT_CHECK_SECONDS = 5
+
+
+def _approval_step_pending(execution: Dict) -> bool:
+    """True while the wrapper execution is paused at the aws:approve step."""
+    for step in execution.get('StepExecutions', []) or []:
+        if step.get('StepName') == APPROVAL_STEP_NAME:
+            return step.get('StepStatus') in ('Pending', 'InProgress', 'Waiting')
+    return False
+
+
+def wait_for_approval_decision(regional_ssm, execution_id: str, execution: Dict) -> Dict:
+    """
+    Long-poll SSM while the approval is pending, up to APPROVAL_WAIT_SECONDS.
+    Returns the most recent execution snapshot (early when a human decides).
+    """
+    deadline = time.time() + APPROVAL_WAIT_SECONDS
+    latest = execution
+    while _approval_step_pending(latest) and time.time() < deadline:
+        time.sleep(APPROVAL_WAIT_CHECK_SECONDS)
+        try:
+            latest = regional_ssm.get_automation_execution(
+                AutomationExecutionId=execution_id
+            )['AutomationExecution']
+        except Exception:
+            break  # transient read error — return what we have
+    return latest
+
+
+def _is_approval_wrapper(document_name: str) -> bool:
+    """True when an execution was started from one of the approval wrapper docs."""
+    if not document_name:
+        return False
+    return document_name in (
+        COLLECT_APPROVAL_DOCUMENT, BATCH_APPROVAL_DOCUMENT, TCPDUMP_APPROVAL_DOCUMENT,
+    )
+
+
+def _step_output_values(step: Dict, key: str) -> List[str]:
+    """Extract a list-valued output from a StepExecution, defensively."""
+    outputs = step.get('Outputs', {}) or {}
+    values = outputs.get(key, [])
+    return [v for v in values if isinstance(v, str)]
+
+
+def augment_wrapper_status(execution: Dict, result: Dict, target_region: str) -> None:
+    """
+    Enrich a status result for an approval-wrapper execution: expose the human
+    approval state (pending / approved / denied-or-expired), the SSM console
+    deep link, and the child collection execution id once the approval clears.
+    Mutates `result` in place.
+    """
+    execution_id = execution.get('AutomationExecutionId', result.get('executionId', ''))
+    url = console_automation_url(target_region, execution_id)
+    steps = execution.get('StepExecutions', []) or []
+    approve_step = next((s for s in steps if s.get('StepName') == APPROVAL_STEP_NAME), None)
+    if approve_step is None:
+        return
+
+    approve_status = approve_step.get('StepStatus', '')
+
+    if approve_status in ('Pending', 'InProgress', 'Waiting'):
+        result['humanApproval'] = {
+            'state': 'pending',
+            'consoleUrl': url,
+            'message': 'Waiting for a human to approve in the AWS Systems Manager console.',
+        }
+        result['suggestedPollIntervalSeconds'] = 30
+        result['polling'] = {
+            'intervalSeconds': 30,
+            'maxAttempts': 10,
+            'serverSideWaitSeconds': APPROVAL_WAIT_SECONDS,
+            'onExhausted': 'stop polling and ask the user to get the request approved',
+        }
+        result['nextStep'] = (
+            f'A human must approve in the SSM console ({url}). '
+            f'Call status again immediately (each call already waits up to '
+            f'{APPROVAL_WAIT_SECONDS}s server-side while pending), up to 10 calls total '
+            f'without waiting for the user; if still pending after that, stop and ask '
+            f'the user to get the request approved.'
+        )
+        if 'task' in result:
+            result['task']['message'] = 'Waiting for human approval in the SSM console'
+        return
+
+    if approve_status in ('Failed', 'TimedOut', 'Cancelled'):
+        result['humanApproval'] = {
+            'state': 'denied_or_expired',
+            'consoleUrl': url,
+            'message': (
+                'The approval was denied by an approver or timed out without a decision. '
+                'No collection ran.'
+            ),
+        }
+        result['nextStep'] = 'Re-call collect to request a fresh approval if still needed.'
+        if 'task' in result:
+            result['task']['state'] = 'failed'
+            result['task']['message'] = 'Human approval denied or expired — collection did not run'
+        return
+
+    # Approved — surface child execution id(s) from the post-approval step(s)
+    result['humanApproval'] = {'state': 'approved', 'consoleUrl': url}
+    for step in steps:
+        if step.get('StepName') == APPROVAL_STEP_NAME:
+            continue
+        child_ids = _step_output_values(step, 'ExecutionId')
+        if child_ids:
+            result['childExecutionId'] = child_ids[0]
+        batch_children = _step_output_values(step, 'Executions')
+        if batch_children:
+            result['childExecutions'] = _parse_batch_children(batch_children)
+
+
+def _parse_batch_children(raw_entries: List[str]) -> List[Dict]:
+    """Parse 'instanceId|executionId' entries emitted by the batch fan-out step."""
+    children = []
+    for entry in raw_entries:
+        if '|' in entry:
+            iid, _, eid = entry.partition('|')
+            children.append({'instanceId': iid.strip(), 'executionId': eid.strip()})
+    return children
 
 
 def start_log_collection(arguments: Dict) -> Dict:
@@ -3885,20 +4173,33 @@ def start_log_collection(arguments: Dict) -> Dict:
     if idempotency_token:
         existing = find_execution_by_idempotency_token(instance_id, idempotency_token)
         if existing:
-            return success_response({
+            existing_region = existing.get('region', target_region)
+            response_data = {
                 'message': 'Returning existing execution (idempotent)',
                 'executionId': existing['executionId'],
                 'status': existing['status'],
                 'instanceId': instance_id,
-                'region': target_region,
-                'idempotent': True
-            })
+                'region': existing_region,
+                'idempotent': True,
+            }
+            # Mirror the augmentation get_collection_status applies — without
+            # it, a retried collect() with the same token while the wrapper is
+            # paused at aws:approve reports a bare "InProgress" and the agent
+            # cannot tell the run is waiting on a human approval.
+            if _is_approval_wrapper(existing.get('documentName', '')):
+                augment_wrapper_status(existing['_execution'], response_data, existing_region)
+            return success_response(response_data)
 
-    # Human-in-the-loop approval gate (M1). Blocks the SSM call until a human
-    # approves out-of-band. Returns a 'pending_approval' response on first call.
-    approval_response = enforce_collection_approval('collect', instance_id, target_region, arguments)
-    if approval_response is not None:
-        return approval_response
+    # Human-in-the-loop approval gate (M1). When enabled, collection runs via a
+    # wrapper document whose FIRST step is the native aws:approve action — the
+    # execution pauses inside SSM until a designated human approves it in the
+    # Systems Manager console, then the collection step runs automatically.
+    # The agent only needs to poll status(); no second collect call is required.
+    if REQUIRE_COLLECTION_APPROVAL:
+        precondition_error = enforce_approval_preconditions(target_region)
+        if precondition_error is not None:
+            return precondition_error
+        return start_collection_with_approval(instance_id, target_region, arguments)
 
     try:
         # Start SSM Automation in the target region
@@ -3988,7 +4289,14 @@ def get_collection_status(arguments: Dict) -> Dict:
             AutomationExecutionId=execution_id
         )
         execution = response['AutomationExecution']
-        
+
+        # Approval-wrapper executions: hold the request open (server-side
+        # long-poll) while the aws:approve step is pending, so agent polls are
+        # paced ~30s apart even when the agent cannot sleep between calls.
+        if (_is_approval_wrapper(execution.get('DocumentName', ''))
+                and _approval_step_pending(execution)):
+            execution = wait_for_approval_decision(regional_ssm, execution_id, execution)
+
         status = execution['AutomationExecutionStatus']
         
         result = {
@@ -4053,7 +4361,12 @@ def get_collection_status(arguments: Dict) -> Dict:
             'message': result.get('failureReason', f'SSM status: {status}'),
             'progress': result.get('progress', 0),
         }
-        
+
+        # Approval-wrapper executions: expose the human-approval state (pending /
+        # approved / denied), the SSM console deep link, and child execution ids.
+        if _is_approval_wrapper(result.get('documentName', '')):
+            augment_wrapper_status(execution, result, target_region)
+
         return success_response({'automation': result})
         
     except regional_ssm.exceptions.AutomationExecutionNotFoundException:
@@ -4459,9 +4772,17 @@ def read_log_chunk(arguments: Dict) -> Dict:
     line_count = arguments.get('lineCount', DEFAULT_LINE_COUNT)
     
     # E4: restrict to log-bundle keys; blocks arbitrary reads and path traversal.
-    # When instanceId is supplied, the key must belong to that instance (rejects
-    # reading another instance's bundle).
-    key_err = validate_log_key(log_key, expected_instance_id=arguments.get('instanceId'))
+    # instanceId is mandatory so the key is always scoped to the instance under
+    # investigation — omitting it would otherwise allow lateral reads of other
+    # instances' bundles.
+    instance_id = arguments.get('instanceId')
+    if not instance_id:
+        return error_response(
+            400,
+            'instanceId is required: read() only returns log content for the '
+            'instance under investigation.'
+        )
+    key_err = validate_log_key(log_key, expected_instance_id=instance_id)
     if key_err:
         return key_err
     
@@ -5236,8 +5557,16 @@ def get_artifact_reference(arguments: Dict) -> Dict:
     expiration_seconds = min(arguments.get('expirationMinutes', 0) * 60 or PRESIGNED_URL_EXPIRATION, PRESIGNED_URL_EXPIRATION)
     
     # E4: restrict to log-bundle keys; blocks arbitrary reads and path traversal.
-    # When instanceId is supplied, the key must belong to that instance.
-    key_err = validate_log_key(log_key, expected_instance_id=arguments.get('instanceId'))
+    # instanceId is mandatory so presigned URLs are always scoped to the
+    # instance under investigation.
+    instance_id = arguments.get('instanceId')
+    if not instance_id:
+        return error_response(
+            400,
+            'instanceId is required: artifact() only returns URLs for the '
+            'instance under investigation.'
+        )
+    key_err = validate_log_key(log_key, expected_instance_id=instance_id)
     if key_err:
         return key_err
     
@@ -6560,26 +6889,90 @@ def batch_collect(arguments: Dict) -> Dict:
                 'message': f'{len(filtered_nodes)} nodes grouped into {len(bucket_list)} buckets. Will collect from {total_planned} representative nodes. Re-run with dryRun=false to proceed.',
             })
 
-        # M2: a single human approval authorizes the whole batch (target = the
-        # cluster). Only reached for real execution — dry runs returned above.
-        approval_response = enforce_collection_approval('batch_collect', cluster_name, target_region, arguments)
-        if approval_response is not None:
-            return approval_response
-
-        # 7. Execute collections
+        # 7. Real execution — dry runs returned above.
         batch_id = hashlib.sha256(f"{cluster_name}-{datetime.utcnow().isoformat()}".encode(), usedforsecurity=False).hexdigest()[:12]
+        sampled_ids = [iid for bucket in bucket_list for iid in bucket['sampleNodes']]
+
+        # M2: when approval is required, start the batch wrapper document ONCE.
+        # Its first step is the native aws:approve action — a single human
+        # approval in the SSM console authorizes the whole batch — then an
+        # aws:executeScript step fans out one collection per sampled node.
+        if REQUIRE_COLLECTION_APPROVAL:
+            precondition_error = enforce_approval_preconditions(target_region)
+            if precondition_error is not None:
+                return precondition_error
+            if not BATCH_APPROVAL_DOCUMENT:
+                return error_response(
+                    503,
+                    'Human approval is required but the batch approval document is not '
+                    'configured (BATCH_APPROVAL_DOCUMENT unset). Contact the operator.',
+                )
+            try:
+                wrapper_resp = regional_ssm.start_automation_execution(
+                    DocumentName=BATCH_APPROVAL_DOCUMENT,
+                    Parameters={
+                        'InstanceIds': sampled_ids,
+                        'LogDestination': [LOGS_BUCKET],
+                        'AutomationAssumeRole': [SSM_AUTOMATION_ROLE_ARN],
+                        'Approvers': APPROVAL_APPROVERS,
+                        'SNSTopicArn': [APPROVAL_TOPIC_ARN],
+                    },
+                )
+            except Exception as e:
+                return error_response(500, f'Failed to start approval-gated batch collection: {str(e)}')
+
+            batch_execution_id = wrapper_resp['AutomationExecutionId']
+            store_execution_region(batch_execution_id, target_region)
+            try:
+                s3_client.put_object(
+                    Bucket=LOGS_BUCKET,
+                    Key=f"batches/{batch_id}/metadata.json",
+                    Body=json.dumps({
+                        'batchId': batch_id,
+                        'clusterName': cluster_name,
+                        'region': target_region,
+                        'createdAt': datetime.utcnow().isoformat(),
+                        'approvalExecutionId': batch_execution_id,
+                        'plannedInstanceIds': sampled_ids,
+                        'buckets': bucket_list,
+                        'executions': [],
+                    }, default=str),
+                    ContentType='application/json',
+                )
+            except Exception:
+                pass
+
+            notify_approvers('batch_collect', cluster_name, target_region, batch_execution_id, arguments)
+            return _pending_approval_response(
+                'batch_collect', cluster_name, target_region, batch_execution_id,
+                extra={
+                    'batchId': batch_id,
+                    'clusterName': cluster_name,
+                    'plannedCollections': total_planned,
+                    'plannedInstanceIds': sampled_ids,
+                    'buckets': bucket_list,
+                    'nextStep': (
+                        f'A single human approval in the SSM console authorizes the whole '
+                        f'batch ({total_planned} nodes). Poll batch_status(batchId='
+                        f'"{batch_id}") every 30 seconds, up to 10 attempts, without '
+                        f'waiting for the user — the fan-out happens automatically after '
+                        f'approval. If still pending after 10 attempts, stop polling and '
+                        f'ask the user to get the request approved.'
+                    ),
+                },
+            )
+
+        # Approval disabled (supervised/test deployments): fan out directly.
         executions = []
 
         for bucket in bucket_list:
             for iid in bucket['sampleNodes']:
                 try:
-                    # Reuse existing collect logic. The batch already carries one
-                    # human approval, so bypass the per-instance approval gate.
+                    # Reuse existing collect logic.
                     collect_args = {
                         'instanceId': iid,
                         'region': target_region,
                         'idempotencyToken': f"batch-{batch_id}-{iid}",
-                        '_approval_bypass': True,
                     }
                     result = start_log_collection(collect_args)
                     result_body = json.loads(result.get('body', '{}'))
@@ -6667,6 +7060,7 @@ def batch_status(arguments: Dict) -> Dict:
     batch_id = arguments.get('batchId')
 
     # If batchId provided, load execution IDs from stored metadata
+    meta = None
     if batch_id and not execution_ids:
         try:
             meta_result = safe_s3_read(f"batches/{batch_id}/metadata.json")
@@ -6678,6 +7072,79 @@ def batch_status(arguments: Dict) -> Dict:
                 ]
         except Exception:
             pass
+
+    # Approval-gated batches: a wrapper execution owns the approval + fan-out.
+    # Resolve its state — pending approval, denied, or fan-out child executions.
+    if not execution_ids and meta and meta.get('approvalExecutionId'):
+        wrapper_id = meta['approvalExecutionId']
+        wrapper_region = meta.get('region', DEFAULT_REGION)
+        try:
+            wrapper_ssm = get_regional_client('ssm', wrapper_region)
+            wrapper_exec = wrapper_ssm.get_automation_execution(
+                AutomationExecutionId=wrapper_id
+            )['AutomationExecution']
+        except Exception as e:
+            return error_response(500, f'Failed to look up batch approval execution: {str(e)}')
+
+        # Server-side long-poll while the batch approval is pending (see
+        # wait_for_approval_decision) so agent polls are paced ~30s apart.
+        if _approval_step_pending(wrapper_exec):
+            wrapper_exec = wait_for_approval_decision(wrapper_ssm, wrapper_id, wrapper_exec)
+
+        probe: Dict = {'executionId': wrapper_id}
+        augment_wrapper_status(wrapper_exec, probe, wrapper_region)
+        approval = probe.get('humanApproval', {})
+
+        if approval.get('state') == 'pending':
+            return success_response({
+                'allComplete': False,
+                'batchId': batch_id,
+                'status': 'pending_approval',
+                'approvalExecutionId': wrapper_id,
+                'humanApproval': approval,
+                'approvalConsoleUrl': approval.get('consoleUrl'),
+                'suggestedPollIntervalSeconds': 30,
+                'polling': {
+                    'intervalSeconds': 30,
+                    'maxAttempts': 10,
+                    'serverSideWaitSeconds': APPROVAL_WAIT_SECONDS,
+                    'onExhausted': 'stop polling and ask the user to get the request approved',
+                },
+                'nextStep': (
+                    'A human must approve the batch in the AWS Systems Manager console '
+                    f"({approval.get('consoleUrl')}). Call batch_status again immediately "
+                    f'(each call already waits up to {APPROVAL_WAIT_SECONDS}s server-side '
+                    f'while pending), up to 10 calls total without waiting for the user; '
+                    f'if still pending after that, stop and ask the user to get the '
+                    f'request approved.'
+                ),
+            })
+        if approval.get('state') == 'denied_or_expired':
+            return success_response({
+                'allComplete': True,
+                'batchId': batch_id,
+                'status': 'denied_or_expired',
+                'approvalExecutionId': wrapper_id,
+                'humanApproval': approval,
+                'nextStep': 'Approval was denied or expired — no collections ran. '
+                            'Re-run batch_collect if still needed.',
+            })
+
+        execution_ids = [
+            c['executionId'] for c in probe.get('childExecutions', [])
+            if c.get('executionId')
+        ]
+        if not execution_ids:
+            return success_response({
+                'allComplete': False,
+                'batchId': batch_id,
+                'status': wrapper_exec.get('AutomationExecutionStatus', 'InProgress'),
+                'approvalExecutionId': wrapper_id,
+                'humanApproval': approval,
+                'message': 'Approved — the fan-out step is starting child collections.',
+                'suggestedPollIntervalSeconds': 15,
+                'nextStep': 'Poll batch_status again in 15 seconds.',
+            })
 
     if not execution_ids:
         return error_response(400, 'executionIds list or batchId is required')
@@ -6697,7 +7164,7 @@ def batch_status(arguments: Dict) -> Dict:
             status = execution['AutomationExecutionStatus']
             # Extract instanceId from parameters
             params = execution.get('Parameters', {})
-            instance_id = params.get('InstanceId', [None])[0] if params.get('InstanceId') else None
+            instance_id = (params.get('EKSInstanceId') or params.get('InstanceId') or [None])[0]
             return {
                 'executionId': eid,
                 'instanceId': instance_id,
@@ -8123,6 +8590,15 @@ def _network_assessment(issues: List[Dict]) -> str:
 
     if critical:
         sections = set(i['section'] for i in critical)
+        # Proactive tcpdump escalation for non-kube-proxy critical issues
+        if not kube_proxy_down:
+            return (
+                f"CRITICAL — {len(critical)} critical networking issues in: {', '.join(sections)}. Immediate investigation needed. "
+                "ESCALATION: If log analysis is inconclusive, use tcpdump_capture (requires the tool to be "
+                "enabled and a human approval in the SSM console) to capture live traffic "
+                "on the affected node. Target port 53 for DNS issues, port 443/6443 for API server issues, "
+                "or the pod IP for pod-to-pod connectivity problems."
+            )
         return f"CRITICAL — {len(critical)} critical networking issues in: {', '.join(sections)}. Immediate investigation needed."
     return f"WARNING — {len(issues)} non-critical networking issues found. Review recommended."
 
@@ -8840,3 +9316,2482 @@ def _storage_assessment(issues: List[Dict]) -> str:
         return f"CRITICAL — {len(critical)} critical storage issues in: {', '.join(sections)}. Immediate investigation needed."
     return f"WARNING — {len(issues)} non-critical storage issues found. Review recommended."
 
+
+# =============================================================================
+# TCPDUMP — restricted network packet capture tools (opt-in + approval-gated)
+# =============================================================================
+#
+# tcpdump_capture is the most invasive tool this server exposes: it runs
+# tcpdump as root on a worker node (optionally inside a pod's network
+# namespace via nsenter). Two independent gates apply:
+#   1. Opt-in: both tools are RESTRICTED_TOOLS — absent from the tool surface
+#      unless ENABLED_RESTRICTED_TOOLS includes them (deploy-time choice).
+#   2. Human approval (M3): when REQUIRE_COLLECTION_APPROVAL is true (the
+#      default), every capture starts a wrapper SSM Automation document whose
+#      FIRST step is the native aws:approve action. The execution pauses
+#      inside SSM until a designated approver approves it in the Systems
+#      Manager console; only then does the runTcpdump step send the capture
+#      script to the node. The Lambda has no ssm:SendAutomationSignal (it
+#      cannot approve its own requests) and, in approval mode, no
+#      ssm:SendCommand (it cannot bypass the wrapper).
+# tcpdump_analyze is read-only (S3 reads of completed captures) and needs no
+# approval.
+
+TCPDUMP_RUN_STEP_NAME = 'runTcpdump'
+
+
+def _tcpdump_approval_configured() -> bool:
+    """True when the tcpdump approval wrapper is wired up."""
+    return bool(TCPDUMP_APPROVAL_DOCUMENT and APPROVAL_APPROVERS)
+
+
+def enforce_tcpdump_approval_preconditions(target_region: str) -> Optional[Dict]:
+    """
+    Fail-closed checks for the approval-gated tcpdump path (M3). Returns None
+    when the wrapper document can be started, or an error response.
+    """
+    if not _tcpdump_approval_configured():
+        return error_response(
+            503,
+            'Human approval is required for packet capture, but the approval workflow '
+            'is not configured (TCPDUMP_APPROVAL_DOCUMENT/APPROVAL_APPROVERS unset). '
+            'Contact the operator.',
+        )
+    if target_region != DEFAULT_REGION:
+        return error_response(
+            400,
+            f'Approval-gated packet capture is only available in {DEFAULT_REGION}: the '
+            f'approval wrapper document is a regional SSM document deployed with this '
+            f'stack. Requested region: {target_region}. Deploy the stack in that region, '
+            f'or (test deployments only) set REQUIRE_COLLECTION_APPROVAL=false.',
+        )
+    return None
+
+
+def _tcpdump_execution_metadata_key(execution_id: str) -> str:
+    return f'tcpdump-executions/{execution_id}.json'
+
+
+def _start_tcpdump_with_approval(regional_ssm, instance_id: str, target_region: str,
+                                 script: str, duration: int, ns_label: str,
+                                 capture_metadata: Dict, arguments: Dict) -> Dict:
+    """
+    Start the approval-gated tcpdump wrapper automation. The wrapper pauses at
+    aws:approve until a human approves in the SSM console, then its runTcpdump
+    step sends the capture script to the node via AWS-RunShellScript.
+    """
+    scope = capture_metadata.get('networkNamespace', 'host')
+    try:
+        response = regional_ssm.start_automation_execution(
+            DocumentName=TCPDUMP_APPROVAL_DOCUMENT,
+            Parameters={
+                'InstanceId': [instance_id],
+                'Commands': [script],
+                'ExecutionTimeoutSeconds': [str(duration + 120)],
+                'DurationSeconds': [str(duration)],
+                'Interface': [capture_metadata.get('interface', 'any')],
+                'BpfFilter': [capture_metadata.get('filter') or 'none'],
+                'CaptureScope': [scope],
+                'AutomationAssumeRole': [SSM_AUTOMATION_ROLE_ARN],
+                'Approvers': APPROVAL_APPROVERS,
+                'SNSTopicArn': [APPROVAL_TOPIC_ARN],
+            },
+        )
+    except Exception as e:
+        return error_response(500, f'Failed to start approval-gated tcpdump: {str(e)}')
+
+    execution_id = response['AutomationExecutionId']
+    store_execution_region(execution_id, target_region)
+
+    # Persist capture metadata keyed by the wrapper execution id. Once a human
+    # approves and the runTcpdump step emits a CommandId, the poll path copies
+    # this to tcpdump-commands/{commandId}.json so tcpdump_analyze finds it.
+    try:
+        s3_client.put_object(
+            Bucket=LOGS_BUCKET,
+            Key=_tcpdump_execution_metadata_key(execution_id),
+            Body=json.dumps({**capture_metadata, 'executionId': execution_id}),
+        )
+    except Exception:
+        pass  # Non-fatal
+
+    notify_approvers(
+        'tcpdump_capture',
+        f'{instance_id} ({scope})',
+        target_region, execution_id, arguments,
+    )
+    pending = _pending_approval_response(
+        'tcpdump_capture', instance_id, target_region, execution_id,
+        extra={
+            'instanceId': instance_id,
+            'durationSeconds': duration,
+            'interface': capture_metadata.get('interface'),
+            'filter': capture_metadata.get('filter') or 'none',
+            'captureScope': capture_metadata.get('captureScope'),
+            'networkNamespace': scope,
+            's3Key': capture_metadata.get('s3Key'),
+            's3Bucket': LOGS_BUCKET,
+        },
+    )
+    # The generic pending response points at status(); tcpdump polls go through
+    # tcpdump_capture(executionId=...) instead, which resolves the CommandId
+    # after approval and then tracks the capture itself.
+    try:
+        body = json.loads(pending['body'])
+        body['message'] = (
+            f"'tcpdump_capture' requires human approval before the capture runs on "
+            f"{instance_id}{ns_label}. The SSM Automation execution has started and is "
+            f"PAUSED at a native aws:approve step. A designated approver must approve "
+            f"it in the AWS Systems Manager console: {body.get('approvalConsoleUrl')}"
+        )
+        body['nextStep'] = (
+            f'Share the console link with an approver, then poll with '
+            f'tcpdump_capture(executionId="{execution_id}", instanceId="{instance_id}", '
+            f'confirmCapture=true) repeatedly, up to 10 times. Each call waits up to '
+            f'{APPROVAL_WAIT_SECONDS}s server-side while approval is pending — do NOT '
+            f'stop and wait for the user to confirm approval. The capture starts '
+            f'automatically once approved (no new tcpdump_capture request is needed). '
+            f'If still pending after 10 calls, stop and ask the user to get it approved.'
+        )
+        pending['body'] = json.dumps(body, default=str)
+    except Exception:
+        pass
+    return pending
+
+
+def _poll_tcpdump_wrapper(execution_id: str, instance_id: str, arguments: Dict) -> Dict:
+    """
+    Poll an approval-gated tcpdump wrapper execution. While the aws:approve
+    step is pending this long-polls SSM (like status() does for collections);
+    once approved it resolves the runTcpdump step's CommandId, upgrades the
+    stored capture metadata, and delegates to the Run Command poller.
+    """
+    target_region = get_execution_region(execution_id) or resolve_region(arguments, instance_id)
+    try:
+        regional_ssm = get_regional_client('ssm', target_region)
+        execution = regional_ssm.get_automation_execution(
+            AutomationExecutionId=execution_id
+        )['AutomationExecution']
+    except Exception as e:
+        return error_response(500, f'Failed to read tcpdump execution {execution_id}: {str(e)}')
+
+    if _approval_step_pending(execution):
+        execution = wait_for_approval_decision(regional_ssm, execution_id, execution)
+
+    url = console_automation_url(target_region, execution_id)
+    steps = execution.get('StepExecutions', []) or []
+    approve_step = next(
+        (s for s in steps if s.get('StepName') == APPROVAL_STEP_NAME), None)
+    approve_status = (approve_step or {}).get('StepStatus', '')
+
+    if approve_status in ('Pending', 'InProgress', 'Waiting'):
+        return success_response({
+            'status': 'pending_approval',
+            'executionId': execution_id,
+            'instanceId': instance_id,
+            'region': target_region,
+            'approvalConsoleUrl': url,
+            'humanApproval': {
+                'state': 'pending',
+                'consoleUrl': url,
+                'message': 'Waiting for a human to approve in the AWS Systems Manager console.',
+            },
+            'suggestedPollIntervalSeconds': 30,
+            'polling': {
+                'intervalSeconds': 30,
+                'maxAttempts': 10,
+                'serverSideWaitSeconds': APPROVAL_WAIT_SECONDS,
+                'onExhausted': 'stop polling and ask the user to get the capture approved',
+            },
+            'nextStep': (
+                f'A human must approve in the SSM console ({url}). Call '
+                f'tcpdump_capture(executionId="{execution_id}", instanceId="{instance_id}", '
+                f'confirmCapture=true) again immediately (each call already waits up to '
+                f'{APPROVAL_WAIT_SECONDS}s server-side), up to 10 calls total; if still '
+                f'pending after that, stop and ask the user to get it approved.'
+            ),
+            'task': {
+                'taskId': execution_id,
+                'state': 'running',
+                'message': 'Waiting for human approval in the AWS Systems Manager console',
+                'progress': 0,
+            },
+        })
+
+    if approve_status in ('Failed', 'TimedOut', 'Cancelled'):
+        return error_response(403, 'tcpdump capture approval was denied or expired', {
+            'executionId': execution_id,
+            'instanceId': instance_id,
+            'humanApproval': {
+                'state': 'denied_or_expired',
+                'consoleUrl': url,
+                'message': (
+                    'The approval was denied by an approver or timed out without a '
+                    'decision. No packet capture ran.'
+                ),
+            },
+            'nextStep': 'Re-call tcpdump_capture to request a fresh approval if still needed.',
+            'task': {
+                'taskId': execution_id,
+                'state': 'failed',
+                'message': 'Human approval denied or expired — packet capture did not run',
+                'progress': 0,
+            },
+        })
+
+    # Approved — resolve the CommandId emitted by the runTcpdump step.
+    run_step = next(
+        (s for s in steps if s.get('StepName') == TCPDUMP_RUN_STEP_NAME), None)
+    command_ids = _step_output_values(run_step or {}, 'CommandId')
+    if not command_ids:
+        exec_status = execution.get('AutomationExecutionStatus', 'InProgress')
+        if exec_status in ('Failed', 'TimedOut', 'Cancelled'):
+            return error_response(500, f'tcpdump wrapper execution {exec_status}', {
+                'executionId': execution_id,
+                'failureReason': parse_failure_reason(execution),
+                'consoleUrl': url,
+            })
+        return success_response({
+            'status': 'in_progress',
+            'executionId': execution_id,
+            'instanceId': instance_id,
+            'humanApproval': {'state': 'approved', 'consoleUrl': url},
+            'message': 'Approved — capture command is being dispatched to the node.',
+            'nextStep': (
+                f'Poll again in ~15s with tcpdump_capture(executionId="{execution_id}", '
+                f'instanceId="{instance_id}", confirmCapture=true).'
+            ),
+            'task': {
+                'taskId': execution_id,
+                'state': 'running',
+                'message': 'Approved — dispatching tcpdump to the node',
+                'progress': 5,
+            },
+        })
+
+    command_id = command_ids[0]
+
+    # Upgrade the execution-keyed metadata to command-keyed metadata (the shape
+    # _poll_tcpdump_status and tcpdump_analyze expect). Refresh startedAt so
+    # staleness/elapsed math reflects when the capture actually started, not
+    # when approval was requested.
+    try:
+        try:
+            s3_client.head_object(
+                Bucket=LOGS_BUCKET, Key=f'tcpdump-commands/{command_id}.json')
+            metadata_exists = True
+        except Exception:
+            metadata_exists = False
+        if not metadata_exists:
+            meta_resp = s3_client.get_object(
+                Bucket=LOGS_BUCKET,
+                Key=_tcpdump_execution_metadata_key(execution_id),
+            )
+            metadata = json.loads(meta_resp['Body'].read().decode('utf-8'))
+            metadata['commandId'] = command_id
+            step_start = (run_step or {}).get('ExecutionStartTime')
+            if step_start is not None:
+                try:
+                    metadata['startedAt'] = step_start.strftime('%Y%m%dT%H%M%SZ')
+                except Exception:
+                    pass
+            s3_client.put_object(
+                Bucket=LOGS_BUCKET,
+                Key=f'tcpdump-commands/{command_id}.json',
+                Body=json.dumps(metadata),
+            )
+    except Exception:
+        pass  # Non-fatal — the Run Command poller falls back to stdout parsing
+
+    result = _poll_tcpdump_status(command_id, instance_id, arguments)
+    try:
+        body = json.loads(result['body'])
+        if isinstance(body, dict):
+            body['executionId'] = execution_id
+            body['humanApproval'] = {'state': 'approved', 'consoleUrl': url}
+            result['body'] = json.dumps(body, default=str)
+    except Exception:
+        pass
+    return result
+
+
+def tcpdump_capture(arguments: Dict) -> Dict:
+    """
+    Run tcpdump on an EKS worker node via SSM Run Command for a specified duration,
+    then upload the pcap file to S3.
+
+    Inputs:
+        instanceId: EC2 instance ID (required)
+        durationSeconds: Capture duration in seconds (default: 120, max: 300)
+        interface: Network interface to capture on (default: "any")
+        filter: BPF filter expression (e.g., "port 443", "host 10.0.0.1") (optional)
+        region: AWS region where the instance runs (optional, auto-detected)
+
+    Returns:
+        commandId for async polling, or capture results if already complete
+    """
+    instance_id = arguments.get('instanceId')
+    if not instance_id:
+        return error_response(400, 'instanceId is required')
+
+    if not re.match(r'^i-[0-9a-f]{8,17}$', instance_id):
+        return error_response(400, f'Invalid instanceId format: {instance_id}')
+
+    duration = int(arguments.get('durationSeconds', 120))
+    if duration < 10 or duration > 300:
+        return error_response(400, 'durationSeconds must be between 10 and 300')
+
+    interface = arguments.get('interface', 'any')
+    # Sanitize interface name to prevent injection — strict allowlist
+    if not re.match(r'^[a-zA-Z0-9\-\.]+$', interface):
+        return error_response(400, f'Invalid interface name: {interface}')
+
+    bpf_filter = arguments.get('filter', '')
+    # Allowlist-based BPF filter validation (replaces denylist approach)
+    bpf_error = validate_bpf_filter(bpf_filter)
+    if bpf_error:
+        return error_response(400, f'Invalid BPF filter: {bpf_error}')
+
+    # Container/pod namespace support
+    container_pid = arguments.get('containerPid', '')
+    if container_pid:
+        container_pid = str(container_pid).strip()
+        if not re.match(r'^\d+$', container_pid):
+            return error_response(400, f'Invalid containerPid — must be a numeric PID: {container_pid}')
+
+    pod_name = arguments.get('podName', '').strip()
+    pod_namespace = arguments.get('podNamespace', 'default').strip()
+    if pod_name and not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9\-\.]{0,252}$', pod_name):
+        return error_response(400, f'Invalid podName: {pod_name}')
+    if pod_namespace and not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9\-]{0,62}$', pod_namespace):
+        return error_response(400, f'Invalid podNamespace: {pod_namespace}')
+
+    # Can't specify both podName and containerPid
+    if pod_name and container_pid:
+        return error_response(400, 'Specify either podName or containerPid, not both')
+
+    # Status polls (before the confirmation gate — a poll is not a new capture):
+    # executionId polls an approval-gated wrapper execution; commandId polls
+    # the underlying SSM Run Command directly.
+    execution_id = arguments.get('executionId')
+    if execution_id:
+        return _poll_tcpdump_wrapper(execution_id, instance_id, arguments)
+    command_id = arguments.get('commandId')
+    if command_id:
+        return _poll_tcpdump_status(command_id, instance_id, arguments)
+
+    # ── Confirmation gate (T2 mitigation) ──
+    # tcpdump installs packages, enters container namespaces, and captures raw
+    # network traffic as root. Require explicit confirmation to proceed.
+    confirm = arguments.get('confirmCapture', False)
+    if confirm is not True and str(confirm).lower() != 'true':
+        scope_desc = (
+            f'pod {pod_namespace}/{pod_name}' if pod_name
+            else f'container PID {container_pid}' if container_pid
+            else 'host network namespace'
+        )
+        return error_response(400,
+            f'tcpdump_capture requires explicit confirmation. This tool will: '
+            f'(1) run tcpdump as root on instance {instance_id} targeting {scope_desc}, '
+            f'(2) capture raw network packets for {duration}s on interface {interface}, '
+            f'(3) upload pcap to S3. '
+            f'Set confirmCapture=true to proceed.',
+            {
+                'requiresConfirmation': True,
+                'instanceId': instance_id,
+                'scope': scope_desc,
+                'durationSeconds': duration,
+                'interface': interface,
+                'filter': bpf_filter or 'none',
+            }
+        )
+
+    # Resolve and validate region
+    target_region, region_error = resolve_and_validate_region(arguments, instance_id)
+    if region_error:
+        return region_error
+
+    # Validate instance belongs to an EKS cluster
+    instance_error = validate_eks_instance(instance_id, target_region)
+    if instance_error:
+        return instance_error
+
+    try:
+        regional_ssm = get_regional_client('ssm', target_region)
+    except Exception as e:
+        return error_response(500, f'Failed to create SSM client for region {target_region}: {str(e)}')
+
+    # Build the shell script that runs tcpdump and uploads to S3
+    timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+    s3_prefix = f"tcpdump/{instance_id}/{timestamp}"
+    s3_key = f"{s3_prefix}/capture.pcap"
+    s3_key_txt = f"{s3_prefix}/capture_summary.txt"
+    s3_key_stats = f"{s3_prefix}/capture_stats.json"
+    s3_uri = f"s3://{LOGS_BUCKET}/{s3_key}"
+    s3_uri_txt = f"s3://{LOGS_BUCKET}/{s3_key_txt}"
+    s3_uri_stats = f"s3://{LOGS_BUCKET}/{s3_key_stats}"
+
+    filter_clause = f' {bpf_filter}' if bpf_filter else ''
+
+    # Determine nsenter prefix based on pod or PID
+    use_nsenter = bool(container_pid or pod_name)
+    ns_label = ''
+    if container_pid:
+        ns_label = f' (container PID {container_pid} namespace)'
+    elif pod_name:
+        ns_label = f' (pod {pod_namespace}/{pod_name} namespace)'
+
+    script = f"""#!/bin/bash
+set -euo pipefail
+
+PCAP_FILE="/tmp/tcpdump_capture_{timestamp}.pcap"
+TXT_FILE="/tmp/tcpdump_summary_{timestamp}.txt"
+STATS_FILE="/tmp/tcpdump_stats_{timestamp}.json"
+
+# Check if tcpdump is available — do NOT auto-install packages (T2 mitigation)
+if ! command -v tcpdump &>/dev/null; then
+    echo "FATAL: tcpdump is not installed on this node. Install it manually or use an AMI that includes tcpdump."
+    echo "For Amazon Linux 2: yum install -y tcpdump"
+    echo "For Ubuntu: apt-get install -y tcpdump"
+    exit 1
+fi
+
+NSENTER_PREFIX=""
+"""
+
+    # Add pod PID discovery when podName is provided
+    if pod_name:
+        script += f"""
+# === Resolve pod "{pod_namespace}/{pod_name}" to container PID ===
+echo "Resolving pod {pod_namespace}/{pod_name} to container PID..."
+TARGET_PID=""
+
+# Ensure PATH includes common binary locations (SSM may have minimal PATH)
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
+# Set containerd endpoint for crictl (EKS standard)
+export CONTAINER_RUNTIME_ENDPOINT="unix:///run/containerd/containerd.sock"
+export CONTAINERD_ADDRESS="/run/containerd/containerd.sock"
+
+# Find crictl binary (may not be in default SSM PATH)
+CRICTL=""
+for p in /usr/local/bin/crictl /usr/bin/crictl /opt/bin/crictl $(which crictl 2>/dev/null); do
+    if [ -x "$p" ]; then CRICTL="$p"; break; fi
+done
+
+# Method 1: crictl (containerd/CRI-O — standard on EKS AL2023 / 1.24+)
+if [ -n "$CRICTL" ]; then
+    echo "Using crictl ($CRICTL) to find pod..."
+    # crictl pods --name does substring match, so filter precisely
+    POD_ID=$($CRICTL pods --namespace '{pod_namespace}' -q 2>/dev/null | while read pid; do
+        PNAME=$($CRICTL inspectp --output json "$pid" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',{{}}).get('metadata',{{}}).get('name',''))" 2>/dev/null || true)
+        if [ "$PNAME" = "{pod_name}" ]; then echo "$pid"; break; fi
+    done)
+    if [ -z "$POD_ID" ]; then
+        # Fallback: simple name match (works when pod name is unique enough)
+        POD_ID=$($CRICTL pods --name '{pod_name}' --namespace '{pod_namespace}' -q 2>/dev/null | head -1)
+    fi
+    if [ -n "$POD_ID" ]; then
+        echo "Found pod ID: $POD_ID"
+        CONTAINER_ID=$($CRICTL ps --pod "$POD_ID" -q 2>/dev/null | head -1)
+        if [ -n "$CONTAINER_ID" ]; then
+            echo "Found container ID: $CONTAINER_ID"
+            # Extract PID using JSON parsing — try multiple paths (containerd versions differ)
+            TARGET_PID=$($CRICTL inspect --output json "$CONTAINER_ID" 2>/dev/null | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+# Try info.pid (containerd 1.x), then status.pid, then info.runtimeSpec.linux.namespaces
+pid = d.get('info',{{}}).get('pid',0)
+if not pid:
+    pid = d.get('status',{{}}).get('pid',0)
+if not pid:
+    # Last resort: look for any 'pid' key recursively
+    def find_pid(obj):
+        if isinstance(obj, dict):
+            if 'pid' in obj and isinstance(obj['pid'], int) and obj['pid'] > 0:
+                return obj['pid']
+            for v in obj.values():
+                r = find_pid(v)
+                if r: return r
+        return 0
+    pid = find_pid(d)
+print(pid)
+" 2>/dev/null || true)
+            echo "crictl: pod=$POD_ID container=$CONTAINER_ID pid=$TARGET_PID"
+            # Validate PID immediately; if invalid, try the pause (sandbox) container instead
+            if [ -n "$TARGET_PID" ] && [ "$TARGET_PID" != "0" ] && [ ! -e "/proc/$TARGET_PID/ns/net" ]; then
+                echo "WARNING: container PID $TARGET_PID has no /proc entry or ns/net — trying sandbox (pause) container..."
+                SANDBOX_PID=$($CRICTL inspectp --output json "$POD_ID" 2>/dev/null | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+pid = d.get('info',{{}}).get('pid',0)
+if not pid:
+    pid = d.get('status',{{}}).get('pid',0)
+if not pid:
+    def find_pid(obj):
+        if isinstance(obj, dict):
+            if 'pid' in obj and isinstance(obj['pid'], int) and obj['pid'] > 0:
+                return obj['pid']
+            for v in obj.values():
+                r = find_pid(v)
+                if r: return r
+        return 0
+    pid = find_pid(d)
+print(pid)
+" 2>/dev/null || true)
+                if [ -n "$SANDBOX_PID" ] && [ "$SANDBOX_PID" != "0" ] && [ -e "/proc/$SANDBOX_PID/ns/net" ]; then
+                    echo "Using sandbox (pause) container PID $SANDBOX_PID instead"
+                    TARGET_PID="$SANDBOX_PID"
+                else
+                    echo "Sandbox PID $SANDBOX_PID also invalid"
+                    TARGET_PID=""
+                fi
+            fi
+        else
+            echo "crictl: pod found but no running containers in pod $POD_ID"
+        fi
+    else
+        echo "crictl: no pod matching name='{pod_name}' namespace='{pod_namespace}'"
+        echo "Available pods on this node:"
+        $CRICTL pods 2>/dev/null | head -10 || true
+    fi
+else
+    echo "crictl not found on this node"
+fi
+
+# Method 2: ctr (containerd native CLI — usually present even when crictl is not)
+if [ -z "$TARGET_PID" ] || [ "$TARGET_PID" = "0" ]; then
+    CTR=""
+    for p in /usr/local/bin/ctr /usr/bin/ctr $(which ctr 2>/dev/null); do
+        if [ -x "$p" ]; then CTR="$p"; break; fi
+    done
+    # Find containerd socket
+    CTR_ADDR=""
+    for sock in /run/containerd/containerd.sock /var/run/containerd/containerd.sock; do
+        if [ -S "$sock" ]; then CTR_ADDR="$sock"; break; fi
+    done
+    if [ -n "$CTR" ] && [ -n "$CTR_ADDR" ]; then
+        echo "Trying ctr ($CTR) with socket $CTR_ADDR to find pod container..."
+        CTR_CMD="$CTR --address $CTR_ADDR"
+        # containerd uses k8s.io namespace for Kubernetes containers
+        # ctr containers ls does NOT show pod names — must inspect each container's labels
+        # First find non-pause container, then fall back to pause (sandbox) container
+        SANDBOX_CID=""
+        for cid in $($CTR_CMD -n k8s.io containers ls -q 2>/dev/null); do
+            INFO=$($CTR_CMD -n k8s.io containers info "$cid" 2>/dev/null || true)
+            if echo "$INFO" | grep -q '"io.kubernetes.pod.name": "{pod_name}"'; then
+                if echo "$INFO" | grep -q '"io.kubernetes.pod.namespace": "{pod_namespace}"'; then
+                    # Check if this is a pause/sandbox container
+                    if echo "$INFO" | grep -q '"io.kubernetes.cri.container-type": "sandbox"'; then
+                        SANDBOX_CID="$cid"
+                        echo "ctr: found sandbox container $cid (saving as fallback)"
+                    else
+                        echo "ctr: found app container $cid"
+                        # '|| true' guards the pipeline: under set -euo pipefail a
+                        # no-match grep (e.g. container has no running task) would
+                        # otherwise abort the whole script instead of falling
+                        # through to the sandbox / cgroup-scan fallbacks.
+                        CTR_PID=$($CTR_CMD -n k8s.io task ls 2>/dev/null | grep "$cid" | awk '{{print $2}}' || true)
+                        if [ -n "$CTR_PID" ] && [ "$CTR_PID" != "0" ] && [ -e "/proc/$CTR_PID/ns/net" ]; then
+                            TARGET_PID="$CTR_PID"
+                            echo "ctr: resolved pid=$TARGET_PID"
+                            break
+                        fi
+                    fi
+                fi
+            fi
+        done
+        # Fall back to sandbox (pause) container — shares the same network namespace
+        if ([ -z "$TARGET_PID" ] || [ "$TARGET_PID" = "0" ]) && [ -n "$SANDBOX_CID" ]; then
+            echo "ctr: using sandbox container $SANDBOX_CID"
+            CTR_PID=$($CTR_CMD -n k8s.io task ls 2>/dev/null | grep "$SANDBOX_CID" | awk '{{print $2}}' || true)
+            if [ -n "$CTR_PID" ] && [ "$CTR_PID" != "0" ] && [ -e "/proc/$CTR_PID/ns/net" ]; then
+                TARGET_PID="$CTR_PID"
+                echo "ctr: resolved pid=$TARGET_PID via sandbox"
+            fi
+        fi
+        [ -z "$TARGET_PID" ] && echo "ctr: could not resolve pod '{pod_name}' in namespace '{pod_namespace}'"
+    elif [ -n "$CTR" ]; then
+        echo "ctr found ($CTR) but no containerd socket found"
+    fi
+fi
+
+# Method 3: docker (older EKS AMIs with dockershim)
+if [ -z "$TARGET_PID" ] || [ "$TARGET_PID" = "0" ]; then
+    if command -v docker &>/dev/null; then
+        echo "Trying docker..."
+        DOCKER_ID=$(docker ps --filter "label=io.kubernetes.pod.name={pod_name}" --filter "label=io.kubernetes.pod.namespace={pod_namespace}" -q 2>/dev/null | head -1)
+        if [ -n "$DOCKER_ID" ]; then
+            # NOTE: parse JSON with python3 instead of a Go template. Literal
+            # double-curly-brace sequences in this script break the approval
+            # wrapper: SSM Automation re-resolves them in substituted document
+            # parameters and fails with ".State.Pid is not defined".
+            TARGET_PID=$(docker inspect "$DOCKER_ID" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0].get('State',{{}}).get('Pid',0))" 2>/dev/null || true)
+            echo "docker: container=$DOCKER_ID pid=$TARGET_PID"
+        fi
+    fi
+fi
+
+# Method 4: search /proc cgroups for the pod name (works with containerd/CRI-O)
+if [ -z "$TARGET_PID" ] || [ "$TARGET_PID" = "0" ]; then
+    echo "Trying /proc cgroup scan for pod name..."
+    # Container PIDs have cgroup entries containing the pod UID or pod name
+    for pid_dir in /proc/[0-9]*/cgroup; do
+        pid=$(echo "$pid_dir" | cut -d/ -f3)
+        if grep -q "{pod_name}" "$pid_dir" 2>/dev/null; then
+            # Verify it's a container process (not a host process)
+            if [ -e "/proc/$pid/ns/net" ] && [ "$(readlink /proc/$pid/ns/net)" != "$(readlink /proc/1/ns/net)" ]; then
+                TARGET_PID="$pid"
+                echo "cgroup scan: found pid=$TARGET_PID (cgroup matches pod name)"
+                break
+            fi
+        fi
+    done
+fi
+
+# Method 5: fallback — search /proc for pause or main container process
+if [ -z "$TARGET_PID" ] || [ "$TARGET_PID" = "0" ]; then
+    echo "Trying /proc process scan..."
+    # Look for any process whose network namespace differs from host and whose cgroup contains pod-related strings
+    for pid in $(ps -eo pid --no-headers 2>/dev/null | tr -d ' '); do
+        if [ -e "/proc/$pid/ns/net" ] && [ "$(readlink /proc/$pid/ns/net 2>/dev/null)" != "$(readlink /proc/1/ns/net 2>/dev/null)" ]; then
+            # Check if this PID's cmdline or environ references the pod
+            if grep -q "{pod_name}" /proc/$pid/cmdline 2>/dev/null || grep -q "{pod_name}" /proc/$pid/environ 2>/dev/null; then
+                TARGET_PID="$pid"
+                echo "proc scan: found pid=$TARGET_PID (cmdline/environ matches)"
+                break
+            fi
+        fi
+    done
+fi
+
+if [ -z "$TARGET_PID" ] || [ "$TARGET_PID" = "0" ]; then
+    echo "FATAL: Could not resolve pod {pod_namespace}/{pod_name} to a container PID on this node."
+    echo "Ensure the pod is running on this specific worker node (instance {instance_id})."
+    echo "Use 'kubectl get pod -n {pod_namespace} {pod_name} -o wide' to verify the node."
+    echo ""
+    echo "Debug info:"
+    echo "  crictl binary: ${{CRICTL:-not found}}"
+    echo "  ctr binary: ${{CTR:-not found}}"
+    echo "  containerd socket: ${{CTR_ADDR:-$(ls -la /run/containerd/containerd.sock 2>/dev/null || ls -la /var/run/containerd/containerd.sock 2>/dev/null || echo 'not found')}}"
+    echo "  docker: $(which docker 2>/dev/null || echo 'not found')"
+    echo "  Running containers:"
+    ${{CRICTL:-true}} ps 2>/dev/null | head -10 || ${{CTR:-true}} --address ${{CTR_ADDR:-/run/containerd/containerd.sock}} -n k8s.io task ls 2>/dev/null | head -10 || docker ps 2>/dev/null | head -10 || echo "  (no container runtime accessible)"
+    exit 1
+fi
+
+echo "Resolved pod {pod_namespace}/{pod_name} -> PID $TARGET_PID"
+# Validate PID: /proc/<PID>/ns/net is a SYMLINK, not a directory — use -e (exists) not -d
+if [ ! -e "/proc/$TARGET_PID/ns/net" ]; then
+    # Retry: PID might be a thread group leader; check if /proc/<PID> exists at all
+    if [ ! -d "/proc/$TARGET_PID" ]; then
+        echo "FATAL: PID $TARGET_PID does not exist in /proc (process may have exited)"
+    else
+        echo "FATAL: PID $TARGET_PID exists but /proc/$TARGET_PID/ns/net is missing"
+        echo "  /proc/$TARGET_PID/ns contents: $(ls -la /proc/$TARGET_PID/ns/ 2>/dev/null || echo 'cannot list')"
+    fi
+    exit 1
+fi
+NSENTER_PREFIX="nsenter -n -t $TARGET_PID "
+"""
+    elif container_pid:
+        script += f"""
+# === Validate container PID {container_pid} ===
+if [ ! -e "/proc/{container_pid}/ns/net" ]; then
+    if [ ! -d "/proc/{container_pid}" ]; then
+        echo "FATAL: PID {container_pid} does not exist in /proc (process may have exited)"
+    else
+        echo "FATAL: PID {container_pid} exists but /proc/{container_pid}/ns/net is missing"
+        echo "  /proc/{container_pid}/ns contents: $(ls -la /proc/{container_pid}/ns/ 2>/dev/null || echo 'cannot list')"
+    fi
+    exit 1
+fi
+CONTAINER_COMM=$(cat /proc/{container_pid}/comm 2>/dev/null || echo "unknown")
+echo "Targeting container process: PID {container_pid} ($CONTAINER_COMM)"
+NSENTER_PREFIX="nsenter -n -t {container_pid} "
+"""
+
+    script += f"""
+echo "Starting tcpdump{ns_label} on interface '{interface}' for {duration}s..."
+echo "Filter: '{bpf_filter or 'none'}'"
+echo "Output: $PCAP_FILE"
+
+# Run tcpdump with timeout (with optional nsenter)
+timeout {duration} ${{NSENTER_PREFIX}}tcpdump -i {interface} -w "$PCAP_FILE" -c 100000{filter_clause} 2>&1 || true
+
+# Verify capture file exists and has data
+if [ ! -f "$PCAP_FILE" ]; then
+    echo "FATAL: Capture file not created"
+    exit 1
+fi
+
+FILE_SIZE=$(stat -c%s "$PCAP_FILE" 2>/dev/null || stat -f%z "$PCAP_FILE" 2>/dev/null || echo "0")
+echo "Capture complete. File size: $FILE_SIZE bytes"
+
+if [ "$FILE_SIZE" -eq 0 ]; then
+    echo "WARNING: Capture file is empty — no packets matched the filter"
+fi
+
+# Decode pcap to human-readable text summary (first 5000 packets max)
+echo "Decoding pcap to text summary..."
+# Use -c 5000 instead of piping through head to avoid SIGPIPE under set -euo pipefail
+tcpdump -nn -r "$PCAP_FILE" -c 5000 > "$TXT_FILE" 2>/dev/null || true
+TXT_SIZE=$(stat -c%s "$TXT_FILE" 2>/dev/null || stat -f%z "$TXT_FILE" 2>/dev/null || echo "0")
+PACKET_COUNT=$(wc -l < "$TXT_FILE" 2>/dev/null || echo "0")
+echo "Decoded $PACKET_COUNT packets to text (txt_size=$TXT_SIZE)"
+
+# If decode produced empty output, log diagnostics and retry
+if [ "$TXT_SIZE" -eq 0 ] || [ "$PACKET_COUNT" -eq 0 ]; then
+    echo "WARNING: Text decode produced empty output."
+    echo "Pcap file details:"
+    ls -la "$PCAP_FILE" 2>/dev/null || true
+    file "$PCAP_FILE" 2>/dev/null || true
+    # Retry with verbose stderr to diagnose
+    echo "Retry with stderr:"
+    tcpdump -nn -r "$PCAP_FILE" -c 10 2>&1 || true
+fi
+
+# Generate stats JSON with protocol breakdown and top talkers (using Python for valid JSON)
+echo "Generating capture statistics..."
+if command -v python3 &>/dev/null; then
+    python3 - "$PCAP_FILE" "$STATS_FILE" << 'PYSTATS'
+import subprocess, json, sys, re
+from collections import Counter
+
+pcap, out = sys.argv[1], sys.argv[2]
+
+def tcpdump_count(extra_args=None):
+    cmd = ['tcpdump', '-nn', '-r', pcap] + (extra_args or [])
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return len([l for l in r.stdout.strip().splitlines() if l])
+    except Exception:
+        return 0
+
+def tcpdump_lines():
+    try:
+        r = subprocess.run(['tcpdump', '-nn', '-r', pcap], capture_output=True, text=True, timeout=60)
+        return [l for l in r.stdout.strip().splitlines() if l]
+    except Exception:
+        return []
+
+lines = tcpdump_lines()
+total = len(lines)
+
+# Extract IPs from tcpdump output: field 3 = src (IP.port), field 5 = dst (IP.port:)
+ip_port_re = re.compile(r'^(\\d+\\.\\d+\\.\\d+\\.\\d+)\\.\\d+$')
+src_counter, dst_counter = Counter(), Counter()
+for line in lines:
+    parts = line.split()
+    if len(parts) >= 5:
+        # Source: field index 2 (0-based), format "IP.port"
+        m = ip_port_re.match(parts[2])
+        if m:
+            src_counter[m.group(1)] += 1
+        # Destination: field index 4, format "IP.port:" (trailing colon)
+        dst_raw = parts[4].rstrip(':')
+        m = ip_port_re.match(dst_raw)
+        if m:
+            dst_counter[m.group(1)] += 1
+
+retrans = sum(1 for l in lines if 'retransmit' in l.lower() or 'retrans' in l.lower())
+
+stats = {{
+    "totalPackets": total,
+    "protocols": {{
+        "tcp": tcpdump_count(['tcp']),
+        "udp": tcpdump_count(['udp']),
+        "icmp": tcpdump_count(['icmp']),
+        "arp": tcpdump_count(['arp']),
+    }},
+    "ports": {{
+        "dns_53": tcpdump_count(['port', '53']),
+        "http_80": tcpdump_count(['port', '80']),
+        "https_443": tcpdump_count(['port', '443']),
+    }},
+    "tcpFlags": {{
+        "syn": tcpdump_count(['tcp[tcpflags] & (tcp-syn) != 0']),
+        "rst": tcpdump_count(['tcp[tcpflags] & (tcp-rst) != 0']),
+    }},
+    "possibleRetransmits": retrans,
+    "topSourceIPs": dict(src_counter.most_common(10)),
+    "topDestinationIPs": dict(dst_counter.most_common(10)),
+}}
+
+with open(out, 'w') as f:
+    json.dump(stats, f, indent=2)
+print(f"Stats generated: {{total}} packets")
+PYSTATS
+else
+    # Fallback: minimal stats without top talkers if python3 not available
+    TOTAL=$(tcpdump -nn -r "$PCAP_FILE" 2>/dev/null | wc -l)
+    TCP_COUNT=$(tcpdump -nn -r "$PCAP_FILE" tcp 2>/dev/null | wc -l)
+    UDP_COUNT=$(tcpdump -nn -r "$PCAP_FILE" udp 2>/dev/null | wc -l)
+    ICMP_COUNT=$(tcpdump -nn -r "$PCAP_FILE" icmp 2>/dev/null | wc -l)
+    echo '{{"totalPackets":'$TOTAL',"protocols":{{"tcp":'$TCP_COUNT',"udp":'$UDP_COUNT',"icmp":'$ICMP_COUNT'}},"topSourceIPs":{{}},"topDestinationIPs":{{}}}}' > "$STATS_FILE"
+fi
+if [ ! -f "$STATS_FILE" ] || [ ! -s "$STATS_FILE" ]; then
+    echo '{{"error":"stats generation failed"}}' > "$STATS_FILE"
+fi
+
+# Upload all artifacts to S3 (non-fatal — node may lack S3 permissions)
+# IMPORTANT: disable set -e for uploads — these are best-effort and must not kill the script
+set +e
+UPLOAD_FAILURES=0
+
+echo "Uploading pcap to {s3_uri}..."
+aws s3 cp "$PCAP_FILE" "{s3_uri}" --no-progress 2>&1
+if [ $? -eq 0 ]; then
+    echo "UPLOAD_PCAP=ok"
+else
+    echo "WARNING: Failed to upload pcap to S3 (node IAM role may lack s3:PutObject permission)"
+    echo "UPLOAD_PCAP=failed"
+    UPLOAD_FAILURES=$((UPLOAD_FAILURES + 1))
+fi
+
+echo "Uploading text summary to {s3_uri_txt}..."
+aws s3 cp "$TXT_FILE" "{s3_uri_txt}" --quiet 2>&1
+if [ $? -eq 0 ]; then
+    echo "UPLOAD_TXT=ok"
+else
+    echo "WARNING: Failed to upload text summary to S3"
+    echo "UPLOAD_TXT=failed"
+    UPLOAD_FAILURES=$((UPLOAD_FAILURES + 1))
+fi
+
+echo "Uploading stats to {s3_uri_stats}..."
+aws s3 cp "$STATS_FILE" "{s3_uri_stats}" --quiet 2>&1
+if [ $? -eq 0 ]; then
+    echo "UPLOAD_STATS=ok"
+else
+    echo "WARNING: Failed to upload stats to S3"
+    echo "UPLOAD_STATS=failed"
+    UPLOAD_FAILURES=$((UPLOAD_FAILURES + 1))
+fi
+
+# Do NOT re-enable set -e — the inline output section and cleanup must not kill the script
+# set -e is intentionally left off for the remainder
+
+if [ "$UPLOAD_FAILURES" -gt 0 ]; then
+    echo "WARNING: $UPLOAD_FAILURES of 3 uploads failed. Ensure the node IAM role has s3:PutObject permission to {LOGS_BUCKET}."
+    echo "See README — 'S3 Upload Permissions for Worker Nodes' section."
+fi
+
+echo "S3_KEY={s3_key}"
+echo "S3_KEY_TXT={s3_key_txt}"
+echo "S3_KEY_STATS={s3_key_stats}"
+echo "FILE_SIZE=$FILE_SIZE"
+echo "PACKET_COUNT=$PACKET_COUNT"
+echo "UPLOAD_FAILURES=$UPLOAD_FAILURES"
+
+# Inline the decoded text and stats in stdout so Lambda can parse them even if S3 upload failed
+echo "===INLINE_STATS_BEGIN==="
+cat "$STATS_FILE" 2>/dev/null || echo '{{"error":"stats file missing"}}'
+echo ""
+echo "===INLINE_STATS_END==="
+echo "===INLINE_TXT_BEGIN==="
+head -500 "$TXT_FILE" 2>/dev/null || echo "(no decoded text)"
+echo ""
+echo "===INLINE_TXT_END==="
+
+# Cleanup
+rm -f "$PCAP_FILE" "$TXT_FILE" "$STATS_FILE" 2>/dev/null || true
+echo "DONE"
+exit 0
+"""
+
+    capture_metadata = {
+        'instanceId': instance_id,
+        'region': target_region,
+        's3Key': s3_key,
+        's3KeyTxt': s3_key_txt,
+        's3KeyStats': s3_key_stats,
+        's3Prefix': s3_prefix,
+        'durationSeconds': duration,
+        'interface': interface,
+        'filter': bpf_filter,
+        'containerPid': container_pid or None,
+        'podName': pod_name or None,
+        'podNamespace': pod_namespace if pod_name else None,
+        'startedAt': timestamp,
+        'captureScope': 'podNamespace' if (pod_name or container_pid) else 'hostNamespace',
+        'nsenterUsed': bool(pod_name or container_pid),
+        'networkNamespace': (
+            f'pod/{pod_namespace}/{pod_name}' if pod_name
+            else f'container/PID-{container_pid}' if container_pid
+            else 'host'
+        ),
+    }
+
+    # Human-in-the-loop approval gate (M3). Packet capture is the most invasive
+    # tool this server exposes — when approval is required (the default), the
+    # capture runs through a wrapper SSM Automation document whose FIRST step
+    # is the native aws:approve action. The execution pauses inside SSM until a
+    # designated human approves it in the Systems Manager console; only then
+    # does the runTcpdump step send this script to the node. The direct
+    # send_command path below exists only for REQUIRE_COLLECTION_APPROVAL=false
+    # (supervised/test deployments).
+    if REQUIRE_COLLECTION_APPROVAL:
+        precondition_error = enforce_tcpdump_approval_preconditions(target_region)
+        if precondition_error is not None:
+            return precondition_error
+        return _start_tcpdump_with_approval(
+            regional_ssm, instance_id, target_region, script, duration,
+            ns_label, capture_metadata, arguments,
+        )
+
+    try:
+        response = regional_ssm.send_command(
+            InstanceIds=[instance_id],
+            DocumentName='AWS-RunShellScript',
+            Parameters={
+                'commands': [script],
+                'executionTimeout': [str(duration + 120)],  # extra buffer for install + upload
+            },
+            TimeoutSeconds=duration + 180,
+            Comment=f'tcpdump capture for {instance_id} ({duration}s)',
+        )
+
+        cmd_id = response['Command']['CommandId']
+
+        # Store capture metadata for status polling and tcpdump_analyze
+        try:
+            s3_client.put_object(
+                Bucket=LOGS_BUCKET,
+                Key=f"tcpdump-commands/{cmd_id}.json",
+                Body=json.dumps({**capture_metadata, 'commandId': cmd_id}),
+            )
+        except Exception:
+            pass  # Non-fatal
+
+        return success_response({
+            'message': f'tcpdump capture started ({duration}s){ns_label}',
+            'commandId': cmd_id,
+            'instanceId': instance_id,
+            'region': target_region,
+            'durationSeconds': duration,
+            'interface': interface,
+            'filter': bpf_filter or 'none',
+            'containerPid': container_pid or None,
+            'podName': pod_name or None,
+            'podNamespace': pod_namespace if pod_name else None,
+            'captureScope': 'podNamespace' if (pod_name or container_pid) else 'hostNamespace',
+            'nsenterUsed': bool(pod_name or container_pid),
+            'networkNamespace': (
+                f'pod/{pod_namespace}/{pod_name}' if pod_name
+                else f'container/PID-{container_pid}' if container_pid
+                else 'host'
+            ),
+            's3Key': s3_key,
+            's3KeyTxt': s3_key_txt,
+            's3KeyStats': s3_key_stats,
+            's3Bucket': LOGS_BUCKET,
+            'estimatedCompletionSeconds': duration + 30,
+            'nextStep': f'Poll with tcpdump_capture(commandId="{cmd_id}", instanceId="{instance_id}") after ~{duration + 30}s. Once complete, use tcpdump_analyze(instanceId="{instance_id}", commandId="{cmd_id}") to read the decoded packet summary.',
+            'task': {
+                'taskId': cmd_id,
+                'state': 'running',
+                'message': f'tcpdump running for {duration}s on {interface}',
+                'progress': 0,
+            },
+        })
+
+    except Exception as e:
+        return error_response(500, f'Failed to start tcpdump: {str(e)}')
+
+
+def _poll_tcpdump_status(command_id: str, instance_id: str, arguments: Dict) -> Dict:
+    """Poll the status of a tcpdump SSM Run Command."""
+
+    # Try to load stored metadata
+    metadata = {}
+    try:
+        meta_resp = s3_client.get_object(
+            Bucket=LOGS_BUCKET,
+            Key=f"tcpdump-commands/{command_id}.json",
+        )
+        metadata = json.loads(meta_resp['Body'].read().decode('utf-8'))
+    except Exception:
+        pass
+
+    target_region = metadata.get('region') or resolve_region(arguments, instance_id)
+
+    try:
+        regional_ssm = get_regional_client('ssm', target_region)
+        result = regional_ssm.get_command_invocation(
+            CommandId=command_id,
+            InstanceId=instance_id,
+        )
+
+        status = result.get('Status', 'Unknown')
+        stdout = result.get('StandardOutputContent', '')
+        stderr = result.get('StandardErrorContent', '')
+
+        # Parse output for S3 key and file size
+        s3_key = metadata.get('s3Key', '')
+        s3_key_txt = metadata.get('s3KeyTxt', '')
+        s3_key_stats = metadata.get('s3KeyStats', '')
+        file_size = 0
+        packet_count = 0
+        for line in stdout.split('\n'):
+            if line.startswith('S3_KEY='):
+                s3_key = line.split('=', 1)[1].strip()
+            if line.startswith('S3_KEY_TXT='):
+                s3_key_txt = line.split('=', 1)[1].strip()
+            if line.startswith('S3_KEY_STATS='):
+                s3_key_stats = line.split('=', 1)[1].strip()
+            if line.startswith('FILE_SIZE='):
+                try:
+                    file_size = int(line.split('=', 1)[1].strip())
+                except ValueError:
+                    pass
+            if line.startswith('PACKET_COUNT='):
+                try:
+                    packet_count = int(line.split('=', 1)[1].strip())
+                except ValueError:
+                    pass
+
+        # Check if capture completed but S3 upload failed (script has inline data)
+        # Use multiple markers for robustness — SSM truncates StandardOutputContent at 24KB
+        # so early markers like "Capture complete." may be cut if inline stats/text are large.
+        #
+        # IMPORTANT: These markers are ONLY printed AFTER the capture succeeds.
+        # Genuine failures (tcpdump not found, pod PID not resolved, no capture file)
+        # exit with "FATAL:" before any of these markers are emitted, so
+        # capture_completed will correctly be False for real failures.
+        capture_completed = (
+            'Capture complete.' in stdout
+            or 'DONE' in stdout
+            or 'UPLOAD_PCAP=ok' in stdout
+            or 'UPLOAD_PCAP=failed' in stdout
+            or ('FILE_SIZE=' in stdout and 'S3_KEY=' in stdout)
+        )
+        # Double-check: if stdout contains FATAL, the capture itself failed — never treat as success
+        if 'FATAL:' in stdout:
+            capture_completed = False
+        upload_failures = 0
+        for line in stdout.split('\n'):
+            if line.startswith('UPLOAD_FAILURES='):
+                try:
+                    upload_failures = int(line.split('=', 1)[1].strip())
+                except ValueError:
+                    pass
+
+        # Extract inline stats and text from stdout (available even when S3 upload fails)
+        inline_stats = {}
+        inline_txt_lines = []
+        if '===INLINE_STATS_BEGIN===' in stdout:
+            try:
+                stats_block = stdout.split('===INLINE_STATS_BEGIN===')[1].split('===INLINE_STATS_END===')[0].strip()
+                if stats_block:
+                    inline_stats = json.loads(stats_block)
+            except (IndexError, json.JSONDecodeError):
+                pass
+        if '===INLINE_TXT_BEGIN===' in stdout:
+            try:
+                txt_block = stdout.split('===INLINE_TXT_BEGIN===')[1].split('===INLINE_TXT_END===')[0].strip()
+                if txt_block:
+                    inline_txt_lines = txt_block.split('\n')
+            except IndexError:
+                pass
+
+        # If capture completed (even if S3 upload failed), treat as success with warnings
+        if status in ('Success',) or (capture_completed and status == 'Failed'):
+            # Generate presigned URL for download (may fail if pcap wasn't uploaded).
+            # pcap captures use a tighter expiration than ordinary log artifacts
+            # because they may contain credentials in transit.
+            presigned_url = ''
+            try:
+                presigned_url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={'Bucket': LOGS_BUCKET, 'Key': s3_key},
+                    ExpiresIn=PCAP_PRESIGNED_URL_EXPIRATION,
+                )
+            except Exception:
+                pass
+
+            # If S3 uploads failed, store inline data to S3 from Lambda (Lambda has S3 permissions)
+            if (upload_failures > 0 or (status == 'Failed' and capture_completed)) and inline_stats:
+                try:
+                    s3_client.put_object(
+                        Bucket=LOGS_BUCKET,
+                        Key=s3_key_stats,
+                        Body=json.dumps(inline_stats, indent=2),
+                        ContentType='application/json',
+                    )
+                except Exception:
+                    pass
+            if (upload_failures > 0 or (status == 'Failed' and capture_completed)) and inline_txt_lines:
+                try:
+                    s3_client.put_object(
+                        Bucket=LOGS_BUCKET,
+                        Key=s3_key_txt,
+                        Body='\n'.join(inline_txt_lines),
+                        ContentType='text/plain',
+                    )
+                except Exception:
+                    pass
+
+            warnings = []
+            actual_failures = 0
+            if upload_failures > 0 or (status == 'Failed' and capture_completed):
+                actual_failures = upload_failures if upload_failures > 0 else 3  # assume all failed if script died during upload
+                warnings.append(f'{actual_failures} of 3 S3 uploads failed from the node (node IAM role may lack s3:PutObject). Stats and text summary were recovered from stdout and uploaded by Lambda.')
+                if actual_failures == 3:
+                    warnings.append('pcap file was NOT uploaded — it was too large to inline in stdout. Add S3 PutObject permission to the node IAM role to capture pcap files.')
+
+            # Surface a warning when the pcap exceeds the configured upload cap.
+            pcap_oversized = False
+            if file_size and MAX_PCAP_BYTES and file_size > MAX_PCAP_BYTES:
+                pcap_oversized = True
+                warnings.append(
+                    f'pcap exceeds MAX_PCAP_BYTES ({format_bytes(MAX_PCAP_BYTES)}); '
+                    f'capture is {format_bytes(file_size)}. Consider shorter durationSeconds '
+                    f'or a tighter BPF filter on future captures.'
+                )
+
+            response_data = {
+                'commandId': command_id,
+                'instanceId': instance_id,
+                'status': 'completed' if not warnings else 'completed_with_warnings',
+                's3Key': s3_key,
+                's3KeyTxt': s3_key_txt,
+                's3KeyStats': s3_key_stats,
+                's3Bucket': LOGS_BUCKET,
+                'fileSizeBytes': file_size,
+                'fileSizeHuman': format_bytes(file_size),
+                'packetCount': packet_count,
+                'pcapOversized': pcap_oversized,
+                'pcapMaxBytes': MAX_PCAP_BYTES,
+                'presignedUrl': presigned_url,
+                'presignedUrlExpiresIn': f'{PCAP_PRESIGNED_URL_EXPIRATION} seconds',
+                'output': stdout[-2000:] if len(stdout) > 2000 else stdout,
+                'nextStep': f'Use tcpdump_analyze(instanceId="{instance_id}", commandId="{command_id}") to read decoded packet data and statistics.',
+                'task': {
+                    'taskId': command_id,
+                    'state': 'completed',
+                    'message': f'tcpdump capture completed' + (f' ({actual_failures} S3 uploads failed — recovered via Lambda)' if warnings else f' — uploaded to s3://{LOGS_BUCKET}/{s3_key}'),
+                    'progress': 100,
+                },
+            }
+            if warnings:
+                response_data['warnings'] = warnings
+            if inline_stats:
+                response_data['inlineStats'] = inline_stats
+
+            return success_response(response_data)
+
+        elif status in ('InProgress', 'Pending', 'Delayed'):
+            elapsed = 0
+            duration = metadata.get('durationSeconds', 120)
+            if metadata.get('startedAt'):
+                try:
+                    start_dt = datetime.strptime(metadata['startedAt'], '%Y%m%dT%H%M%SZ')
+                    elapsed = (datetime.utcnow() - start_dt).total_seconds()
+                except Exception:
+                    pass
+            progress = min(95, int((elapsed / (duration + 30)) * 100)) if duration else 0
+
+            return success_response({
+                'commandId': command_id,
+                'instanceId': instance_id,
+                'status': 'in_progress',
+                'elapsedSeconds': int(elapsed),
+                'durationSeconds': duration,
+                'nextStep': f'Poll again in 15-30 seconds',
+                'task': {
+                    'taskId': command_id,
+                    'state': 'running',
+                    'message': f'tcpdump capture in progress ({int(elapsed)}s / {duration}s)',
+                    'progress': progress,
+                },
+            })
+
+        else:
+            # Failed / TimedOut / Cancelled
+            return error_response(500, f'tcpdump command {status}', {
+                'commandId': command_id,
+                'status': status,
+                'stdout': stdout[-2000:] if stdout else '',
+                'stderr': stderr[-2000:] if stderr else '',
+                'statusDetails': result.get('StatusDetails', ''),
+                'task': {
+                    'taskId': command_id,
+                    'state': 'failed',
+                    'message': f'tcpdump command {status}: {stderr[:200] if stderr else "unknown error"}',
+                    'progress': 0,
+                },
+            })
+
+    except Exception as e:
+        return error_response(500, f'Failed to poll tcpdump status: {str(e)}')
+
+
+def _analyze_dns_packets(lines: list) -> Dict:
+    """Analyze DNS queries in decoded tcpdump lines.
+    Detects ndots search-domain expansion (normal), NXDomain storms, and real failures."""
+    dns_re = re.compile(
+        r'>\s+\S+\.53:\s+\d+\+?\s+(A|AAAA|CNAME|MX|SRV|PTR|TXT|SOA|NS)\?\s+(\S+)',
+        re.IGNORECASE,
+    )
+    nxdomain_re = re.compile(r'NXDomain', re.IGNORECASE)
+    k8s_svc_suffix = re.compile(
+        r'\.svc\.cluster\.local\..*\.svc\.cluster\.local',
+        re.IGNORECASE,
+    )
+
+    queries = []
+    nxdomain_count = 0
+    ndots_expansion_queries = []
+    total_dns = 0
+
+    for line in lines:
+        m = dns_re.search(line)
+        if m:
+            total_dns += 1
+            qtype = m.group(1).upper()
+            qname = m.group(2).rstrip('.')
+            queries.append({'type': qtype, 'name': qname})
+            if k8s_svc_suffix.search(qname):
+                ndots_expansion_queries.append(qname)
+        if nxdomain_re.search(line):
+            nxdomain_count += 1
+
+    if total_dns == 0:
+        return {}
+
+    result: Dict = {
+        'totalDnsQueries': total_dns,
+        'nxdomainResponses': nxdomain_count,
+        'anomalies': [],
+    }
+
+    if ndots_expansion_queries:
+        unique = list(set(ndots_expansion_queries))[:10]
+        result['ndotsSearchDomainExpansion'] = {
+            'count': len(ndots_expansion_queries),
+            'isNormalBehavior': True,
+            'explanation': (
+                'Queries with doubled Kubernetes suffixes (e.g., '
+                'name.ns.svc.cluster.local.ns.svc.cluster.local) are NORMAL. '
+                'With the default ndots:5, the glibc resolver appends each '
+                '/etc/resolv.conf search domain to names with fewer than 5 dots '
+                'before trying the name as-is. These NXDomain responses are '
+                'expected and harmless. To reduce them: use a trailing dot on '
+                'FQDNs, lower ndots to 2, or use short service names.'
+            ),
+            'exampleQueries': unique,
+        }
+        result['anomalies'].append({
+            'type': 'ndots_search_expansion',
+            'severity': 'info',
+            'message': (
+                f'{len(ndots_expansion_queries)} DNS queries show ndots:5 search-domain '
+                f'expansion (doubled .svc.cluster.local suffixes). This is NORMAL '
+                f'Kubernetes DNS behavior, not a misconfiguration. The queries get '
+                f'NXDomain but the correct resolution succeeds afterward.'
+            ),
+        })
+    elif nxdomain_count > total_dns * 0.5 and total_dns > 10:
+        result['anomalies'].append({
+            'type': 'high_nxdomain_rate',
+            'severity': 'warning',
+            'message': (
+                f'{nxdomain_count} NXDomain responses out of {total_dns} DNS queries '
+                f'({(nxdomain_count/total_dns)*100:.0f}%) — possible DNS misconfiguration '
+                f'or queries for non-existent services.'
+            ),
+        })
+
+    return result
+
+
+def _analyze_tcp_rst_patterns(lines: list) -> Dict:
+    """Detect TCP RST patterns that are normal in Kubernetes.
+    Health probes (liveness/readiness) open a TCP connection and immediately close it,
+    producing RST packets. kube-proxy DNAT race during pod termination also causes RSTs.
+    These are expected and should not be flagged as connection failures.
+    Ref: https://docs.aws.amazon.com/prescriptive-guidance/latest/ha-resiliency-amazon-eks-apps/probes-checks.html"""
+    rst_re = re.compile(r'Flags\s+\[R\.?\]|Flags\s+\[R\]', re.IGNORECASE)
+    syn_re = re.compile(r'Flags\s+\[S\]', re.IGNORECASE)
+    fin_re = re.compile(r'Flags\s+\[F\.?\]', re.IGNORECASE)
+    # Health probe pattern: SYN then RST within a few packets to same port, short-lived
+    # Detect port 10250 (kubelet), 10256 (kube-proxy health), 15021 (istio), common probe ports
+    probe_port_re = re.compile(r'\.\s*(10250|10256|10257|10259|15021|8080|8443|80|443)\s*[>:]')
+
+    total_rst = 0
+    probe_rst = 0
+    short_lived_rst = 0
+    rst_lines_sample = []
+
+    # Track connections: (src, dst, port) -> packet count
+    connections: Dict[str, int] = {}
+
+    for line in lines:
+        if rst_re.search(line):
+            total_rst += 1
+            if probe_port_re.search(line):
+                probe_rst += 1
+            if len(rst_lines_sample) < 5:
+                rst_lines_sample.append(line.strip()[:200])
+
+    if total_rst == 0:
+        return {}
+
+    result: Dict = {'totalRstPackets': total_rst, 'anomalies': []}
+
+    if probe_rst > 0:
+        result['healthProbeRsts'] = {
+            'count': probe_rst,
+            'isNormalBehavior': True,
+            'explanation': (
+                'TCP RST packets to kubelet (10250), kube-proxy health (10256), '
+                'or common HTTP ports after very short connections are NORMAL. '
+                'Kubernetes liveness/readiness probes open a TCP connection to verify '
+                'the port is listening, then close it immediately — producing a RST. '
+                'This is expected probe behavior, not a connection failure.'
+            ),
+        }
+        result['anomalies'].append({
+            'type': 'health_probe_rst',
+            'severity': 'info',
+            'isNormalBehavior': True,
+            'message': (
+                f'{probe_rst} TCP RST packets detected on health-check ports '
+                f'(10250/10256/8080/etc). This is NORMAL Kubernetes health probe '
+                f'behavior — probes open and immediately close TCP connections.'
+            ),
+        })
+
+    return result
+
+
+def _analyze_kube_proxy_dnat(lines: list) -> Dict:
+    """Detect kube-proxy DNAT patterns where both ClusterIP and PodIP appear for the same flow.
+    When a pod connects to a ClusterIP Service, kube-proxy/iptables performs DNAT to rewrite
+    the destination to a backend PodIP. In tcpdump on the node, you see BOTH the original
+    ClusterIP destination AND the DNATed PodIP — this looks like duplicate or phantom traffic
+    but is completely normal kube-proxy behavior.
+    Ref: https://docs.aws.amazon.com/eks/latest/best-practices/hybrid-nodes-app-network-traffic.html"""
+    # Detect 10.x.x.x (typical ClusterIP range) and pod IPs in same capture
+    cluster_ip_re = re.compile(r'\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3})\.\d+\b')
+    # Look for the same source talking to two different IPs on the same port
+    flow_re = re.compile(
+        r'(\d+\.\d+\.\d+\.\d+)\.(\d+)\s+>\s+(\d+\.\d+\.\d+\.\d+)\.(\d+)'
+    )
+
+    src_dst_pairs: Dict[str, set] = {}  # src.port -> set of dst IPs
+    for line in lines:
+        m = flow_re.search(line)
+        if m:
+            src_ip, src_port, dst_ip, dst_port = m.groups()
+            key = f"{src_ip}:{src_port}->{dst_port}"
+            if key not in src_dst_pairs:
+                src_dst_pairs[key] = set()
+            src_dst_pairs[key].add(dst_ip)
+
+    # Find flows where same src:port->dstPort talks to multiple dst IPs (DNAT indicator)
+    dnat_flows = {k: v for k, v in src_dst_pairs.items() if len(v) > 1}
+
+    if not dnat_flows:
+        return {}
+
+    examples = []
+    for key, dsts in list(dnat_flows.items())[:5]:
+        examples.append(f"{key} -> {', '.join(sorted(dsts))}")
+
+    return {
+        'dnatFlowCount': len(dnat_flows),
+        'isNormalBehavior': True,
+        'explanation': (
+            'Flows where the same source connects to multiple destination IPs on the '
+            'same port are typically kube-proxy DNAT in action. When a pod connects to '
+            'a ClusterIP Service, iptables rewrites the destination to a backend pod IP. '
+            'tcpdump on the node captures BOTH the pre-DNAT (ClusterIP) and post-DNAT '
+            '(PodIP) packets, making it look like duplicate traffic. This is normal.'
+        ),
+        'exampleFlows': examples,
+        'anomalies': [{
+            'type': 'kube_proxy_dnat',
+            'severity': 'info',
+            'isNormalBehavior': True,
+            'message': (
+                f'{len(dnat_flows)} flows show the same source connecting to multiple '
+                f'destination IPs on the same port. This is likely kube-proxy DNAT — '
+                f'ClusterIP being rewritten to backend PodIP. NORMAL behavior.'
+            ),
+        }],
+    }
+
+
+def _analyze_vpc_cni_snat(lines: list) -> Dict:
+    """Detect VPC CNI SNAT where pod IP is translated to node IP for external traffic.
+    By default, VPC CNI SNATs pod traffic destined outside the VPC — the source IP changes
+    from the pod's IP to the node's primary ENI IP. In tcpdump you see outbound packets
+    with the node IP as source instead of the pod IP. This is expected.
+    Ref: https://docs.aws.amazon.com/eks/latest/userguide/external-snat.html"""
+    # Detect traffic to external IPs (non-RFC1918, non-cluster)
+    flow_re = re.compile(
+        r'(\d+\.\d+\.\d+\.\d+)\.(\d+)\s+>\s+(\d+\.\d+\.\d+\.\d+)\.(\d+)'
+    )
+    private_re = re.compile(r'^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)')
+
+    external_flows = 0
+    for line in lines:
+        m = flow_re.search(line)
+        if m:
+            dst_ip = m.group(3)
+            if not private_re.match(dst_ip) and not dst_ip.startswith('127.'):
+                external_flows += 1
+
+    if external_flows < 5:
+        return {}
+
+    return {
+        'externalTrafficFlows': external_flows,
+        'isNormalBehavior': True,
+        'explanation': (
+            'Traffic to external (non-RFC1918) IPs undergoes SNAT by the VPC CNI plugin. '
+            'The pod source IP is translated to the node primary ENI IP before leaving '
+            'the VPC. In tcpdump on the node, outbound external packets show the node IP '
+            'as source, not the pod IP. This is default VPC CNI behavior '
+            '(AWS_VPC_K8S_CNI_EXTERNALSNAT=false). Inbound responses are reverse-NATed '
+            'back to the pod IP.'
+        ),
+        'anomalies': [{
+            'type': 'vpc_cni_snat',
+            'severity': 'info',
+            'isNormalBehavior': True,
+            'message': (
+                f'{external_flows} packets to external IPs detected. Source IP translation '
+                f'(SNAT) from pod IP to node IP is NORMAL VPC CNI behavior for traffic '
+                f'leaving the VPC.'
+            ),
+        }],
+    }
+
+
+def _analyze_tcp_keepalives(lines: list) -> Dict:
+    """Detect TCP keepalive packets on idle connections.
+    Long-lived connections (e.g., gRPC, database pools, websockets) send periodic TCP
+    keepalive probes to prevent idle timeout by NAT gateways (350s), NLBs, or conntrack.
+    These appear as small packets with ack flag on established connections. Normal behavior.
+    Ref: https://aws.amazon.com/blogs/networking-and-content-delivery/implementing-long-running-tcp-connections-within-vpc-networking/"""
+    # Keepalives are typically: small ack-only packets, often with length 0
+    keepalive_re = re.compile(r'Flags\s+\[\.?\].*length\s+0', re.IGNORECASE)
+    total_keepalive_candidates = 0
+
+    for line in lines:
+        if keepalive_re.search(line) and 'ack' in line.lower():
+            total_keepalive_candidates += 1
+
+    if total_keepalive_candidates < 10:
+        return {}
+
+    return {
+        'keepaliveCandidates': total_keepalive_candidates,
+        'isNormalBehavior': True,
+        'explanation': (
+            'Zero-length ACK packets on established connections are typically TCP keepalive '
+            'probes. Applications and kernels send these to prevent idle connection timeout '
+            'by NAT Gateway (350s idle timeout), NLB, or conntrack table eviction. This is '
+            'expected for long-lived connections like gRPC streams, database connection pools, '
+            'and websockets.'
+        ),
+        'anomalies': [{
+            'type': 'tcp_keepalive',
+            'severity': 'info',
+            'isNormalBehavior': True,
+            'message': (
+                f'{total_keepalive_candidates} zero-length ACK packets detected (likely TCP '
+                f'keepalives). This is NORMAL for long-lived connections preventing idle '
+                f'timeout by NAT Gateway/NLB/conntrack.'
+            ),
+        }],
+    }
+
+
+def _analyze_icmp_expected(lines: list) -> Dict:
+    """Detect expected ICMP patterns in Kubernetes.
+    ICMP port-unreachable during rolling updates (old pod IP, new pod not yet ready),
+    ICMP fragmentation-needed for PMTUD, and ICMP redirect from VPC routing are all normal.
+    Ref: https://docs.aws.amazon.com/eks/latest/best-practices/vpc-cni.html"""
+    icmp_unreach_re = re.compile(r'ICMP.*unreachable', re.IGNORECASE)
+    icmp_frag_re = re.compile(r'ICMP.*frag.*needed|ICMP.*too\s+big', re.IGNORECASE)
+    icmp_redirect_re = re.compile(r'ICMP.*redirect', re.IGNORECASE)
+
+    unreachable = 0
+    frag_needed = 0
+    redirect = 0
+
+    for line in lines:
+        if icmp_unreach_re.search(line):
+            unreachable += 1
+        if icmp_frag_re.search(line):
+            frag_needed += 1
+        if icmp_redirect_re.search(line):
+            redirect += 1
+
+    total = unreachable + frag_needed + redirect
+    if total == 0:
+        return {}
+
+    result: Dict = {'anomalies': []}
+
+    if frag_needed > 0:
+        result['pmtudFragNeeded'] = {
+            'count': frag_needed,
+            'isNormalBehavior': True,
+            'explanation': (
+                'ICMP "fragmentation needed" (type 3 code 4) or "packet too big" messages '
+                'are part of Path MTU Discovery (PMTUD). This is the network telling the '
+                'sender to reduce packet size. Normal for VPC traffic crossing different MTU '
+                'boundaries (e.g., 9001 jumbo frames to 1500 standard).'
+            ),
+        }
+        result['anomalies'].append({
+            'type': 'pmtud_frag_needed',
+            'severity': 'info',
+            'isNormalBehavior': True,
+            'message': (
+                f'{frag_needed} ICMP fragmentation-needed packets detected. This is NORMAL '
+                f'Path MTU Discovery behavior.'
+            ),
+        })
+
+    if unreachable > 0 and unreachable < 20:
+        result['icmpUnreachable'] = {
+            'count': unreachable,
+            'isNormalBehavior': True,
+            'explanation': (
+                'A small number of ICMP port/host unreachable messages is normal during '
+                'rolling updates, pod termination, or when UDP services are briefly '
+                'unavailable. The VPC CNI 30-second IP cooldown cache means old pod IPs '
+                'may receive traffic briefly after pod deletion.'
+            ),
+        }
+        result['anomalies'].append({
+            'type': 'icmp_unreachable_transient',
+            'severity': 'info',
+            'isNormalBehavior': True,
+            'message': (
+                f'{unreachable} ICMP unreachable packets detected. Small numbers are NORMAL '
+                f'during rolling updates or pod termination (VPC CNI 30s IP cooldown).'
+            ),
+        })
+    elif unreachable >= 20:
+        result['anomalies'].append({
+            'type': 'icmp_unreachable_high',
+            'severity': 'warning',
+            'isNormalBehavior': False,
+            'message': (
+                f'{unreachable} ICMP unreachable packets detected — this is higher than '
+                f'expected for normal rolling updates. Investigate for misconfigured '
+                f'services, missing endpoints, or network policy blocks.'
+            ),
+        })
+
+    return result
+
+
+def _analyze_coredns_transients(lines: list) -> Dict:
+    """Detect brief DNS failures that occur during CoreDNS scaling events.
+    When CoreDNS pods scale down, there is a propagation delay for kube-proxy to update
+    iptables rules. During this window, DNS queries may be sent to a terminating CoreDNS pod
+    and get SERVFAIL or timeout. Setting lameduck duration in CoreDNS mitigates this.
+    Ref: https://docs.aws.amazon.com/eks/latest/best-practices/scale-cluster-services.html"""
+    servfail_re = re.compile(r'SERVFAIL|ServFail', re.IGNORECASE)
+    dns_timeout_re = re.compile(r'>\s+\S+\.53:.*\[.*\].*no\s+response', re.IGNORECASE)
+
+    servfail_count = 0
+    for line in lines:
+        if servfail_re.search(line):
+            servfail_count += 1
+
+    if servfail_count == 0:
+        return {}
+
+    if servfail_count < 10:
+        return {
+            'servfailCount': servfail_count,
+            'isNormalBehavior': True,
+            'explanation': (
+                'A small number of SERVFAIL responses can occur during CoreDNS pod scaling '
+                'events. When a CoreDNS pod terminates, there is a brief window where '
+                'kube-proxy iptables rules still route DNS queries to the terminating pod. '
+                'The CoreDNS lameduck plugin mitigates this by delaying shutdown. A few '
+                'SERVFAILs during scaling are transient and self-resolving.'
+            ),
+            'anomalies': [{
+                'type': 'coredns_scaling_transient',
+                'severity': 'info',
+                'isNormalBehavior': True,
+                'message': (
+                    f'{servfail_count} DNS SERVFAIL responses detected. Small numbers are '
+                    f'NORMAL during CoreDNS scaling events (lameduck propagation delay).'
+                ),
+            }],
+        }
+    else:
+        return {
+            'servfailCount': servfail_count,
+            'anomalies': [{
+                'type': 'high_servfail_rate',
+                'severity': 'warning',
+                'isNormalBehavior': False,
+                'message': (
+                    f'{servfail_count} DNS SERVFAIL responses detected — this exceeds '
+                    f'normal CoreDNS scaling transients. Investigate CoreDNS health, '
+                    f'resource limits, and upstream DNS connectivity.'
+                ),
+            }],
+        }
+
+
+def _analyze_syn_flood(lines: list) -> Dict:
+    """Detect SYN flood / connection flood patterns.
+    A high ratio of SYN packets without corresponding SYN-ACK indicates either a SYN flood
+    attack or an overwhelmed service that can't accept connections fast enough."""
+    syn_re = re.compile(r'Flags\s+\[S\]', re.IGNORECASE)
+    synack_re = re.compile(r'Flags\s+\[S\.\]', re.IGNORECASE)
+    flow_re = re.compile(r'(\d+\.\d+\.\d+\.\d+)\.(\d+)\s+>\s+(\d+\.\d+\.\d+\.\d+)\.(\d+)')
+
+    syn_count = 0
+    synack_count = 0
+    syn_sources: Dict[str, int] = {}
+    syn_targets: Dict[str, int] = {}
+
+    for line in lines:
+        if synack_re.search(line):
+            synack_count += 1
+        elif syn_re.search(line):
+            syn_count += 1
+            m = flow_re.search(line)
+            if m:
+                src_ip = m.group(1)
+                dst = f"{m.group(3)}:{m.group(4)}"
+                syn_sources[src_ip] = syn_sources.get(src_ip, 0) + 1
+                syn_targets[dst] = syn_targets.get(dst, 0) + 1
+
+    if syn_count < 20:
+        return {}
+
+    result: Dict = {
+        'synCount': syn_count,
+        'synAckCount': synack_count,
+        'anomalies': [],
+    }
+
+    # Half-open ratio: SYN without SYN-ACK
+    if synack_count > 0:
+        half_open_ratio = (syn_count - synack_count) / syn_count
+    else:
+        half_open_ratio = 1.0 if syn_count > 0 else 0
+
+    top_sources = sorted(syn_sources.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_targets = sorted(syn_targets.items(), key=lambda x: x[1], reverse=True)[:5]
+    result['topSynSources'] = [{'ip': ip, 'count': c} for ip, c in top_sources]
+    result['topSynTargets'] = [{'target': t, 'count': c} for t, c in top_targets]
+
+    if half_open_ratio > 0.7 and syn_count > 50:
+        result['anomalies'].append({
+            'type': 'syn_flood',
+            'severity': 'critical',
+            'message': (
+                f'{syn_count} SYN packets but only {synack_count} SYN-ACK responses '
+                f'({half_open_ratio*100:.0f}% unanswered). Possible SYN flood attack or '
+                f'target service is overwhelmed/unreachable. Top source: '
+                f'{top_sources[0][0]} ({top_sources[0][1]} SYNs).'
+            ),
+        })
+    elif half_open_ratio > 0.4:
+        result['anomalies'].append({
+            'type': 'connection_pressure',
+            'severity': 'warning',
+            'message': (
+                f'{syn_count} SYN packets with {synack_count} SYN-ACK responses '
+                f'({half_open_ratio*100:.0f}% unanswered). Service may be under connection '
+                f'pressure or accept queue is full (check net.core.somaxconn).'
+            ),
+        })
+    elif syn_count > 200:
+        result['anomalies'].append({
+            'type': 'high_connection_rate',
+            'severity': 'info',
+            'message': (
+                f'{syn_count} new TCP connections in capture window. High but connections '
+                f'are being accepted ({synack_count} SYN-ACKs). Monitor for scaling needs.'
+            ),
+        })
+
+    return result
+
+
+def _analyze_tcp_window_zero(lines: list) -> Dict:
+    """Detect TCP window zero events indicating receiver backpressure.
+    When a pod's receive buffer is full, it advertises window size 0, telling the sender
+    to stop. This indicates the application can't consume data fast enough — common with
+    overwhelmed services, slow consumers, or memory pressure."""
+    win_zero_re = re.compile(r'win\s+0\b', re.IGNORECASE)
+    flow_re = re.compile(r'(\d+\.\d+\.\d+\.\d+)\.(\d+)\s+>\s+(\d+\.\d+\.\d+\.\d+)\.(\d+)')
+
+    zero_window_count = 0
+    affected_flows: Dict[str, int] = {}
+
+    for line in lines:
+        if win_zero_re.search(line):
+            zero_window_count += 1
+            m = flow_re.search(line)
+            if m:
+                flow = f"{m.group(1)}:{m.group(2)}->{m.group(3)}:{m.group(4)}"
+                affected_flows[flow] = affected_flows.get(flow, 0) + 1
+
+    if zero_window_count == 0:
+        return {}
+
+    top_flows = sorted(affected_flows.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    result: Dict = {
+        'zeroWindowCount': zero_window_count,
+        'affectedFlows': len(affected_flows),
+        'topAffectedFlows': [{'flow': f, 'count': c} for f, c in top_flows],
+        'anomalies': [],
+    }
+
+    if zero_window_count > 20:
+        result['anomalies'].append({
+            'type': 'tcp_window_zero_critical',
+            'severity': 'critical',
+            'message': (
+                f'{zero_window_count} TCP zero-window events across {len(affected_flows)} '
+                f'flows. Receiver cannot consume data fast enough — application is overwhelmed. '
+                f'Check pod memory limits, application processing capacity, and consider '
+                f'horizontal scaling. Most affected: {top_flows[0][0]} ({top_flows[0][1]}x).'
+            ),
+        })
+    elif zero_window_count > 5:
+        result['anomalies'].append({
+            'type': 'tcp_window_zero_warning',
+            'severity': 'warning',
+            'message': (
+                f'{zero_window_count} TCP zero-window events detected. Receiver is '
+                f'experiencing backpressure — may indicate slow application processing '
+                f'or insufficient memory for socket buffers.'
+            ),
+        })
+
+    return result
+
+
+def _analyze_retransmissions(lines: list) -> Dict:
+    """Detect TCP retransmission patterns indicating packet loss or network congestion.
+    Retransmissions show up as duplicate sequence numbers. High retransmission rates
+    indicate packet loss (security group drops, NACL drops, ENA throttling, or congestion)."""
+    retrans_re = re.compile(r'retransmit|retrans', re.IGNORECASE)
+    dup_ack_re = re.compile(r'dup\s+ack|duplicate\s+ack', re.IGNORECASE)
+    flow_re = re.compile(r'(\d+\.\d+\.\d+\.\d+)\.(\d+)\s+>\s+(\d+\.\d+\.\d+\.\d+)\.(\d+)')
+
+    retrans_count = 0
+    dup_ack_count = 0
+    retrans_flows: Dict[str, int] = {}
+
+    # Also detect retransmissions by looking for repeated seq numbers
+    seq_re = re.compile(r'seq\s+(\d+)[:\s]')
+    seen_seqs: Dict[str, set] = {}  # flow -> set of seq numbers
+
+    for line in lines:
+        if retrans_re.search(line):
+            retrans_count += 1
+            m = flow_re.search(line)
+            if m:
+                flow = f"{m.group(1)}->{m.group(3)}:{m.group(4)}"
+                retrans_flows[flow] = retrans_flows.get(flow, 0) + 1
+        if dup_ack_re.search(line):
+            dup_ack_count += 1
+
+        # Track seq numbers per flow for duplicate detection
+        m_flow = flow_re.search(line)
+        m_seq = seq_re.search(line)
+        if m_flow and m_seq:
+            flow_key = f"{m_flow.group(1)}->{m_flow.group(3)}:{m_flow.group(4)}"
+            seq_num = m_seq.group(1)
+            if flow_key not in seen_seqs:
+                seen_seqs[flow_key] = set()
+            if seq_num in seen_seqs[flow_key]:
+                retrans_count += 1
+                retrans_flows[flow_key] = retrans_flows.get(flow_key, 0) + 1
+            seen_seqs[flow_key].add(seq_num)
+
+    if retrans_count == 0 and dup_ack_count == 0:
+        return {}
+
+    top_flows = sorted(retrans_flows.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    result: Dict = {
+        'retransmissionCount': retrans_count,
+        'duplicateAckCount': dup_ack_count,
+        'affectedFlows': len(retrans_flows),
+        'topRetransmitFlows': [{'flow': f, 'count': c} for f, c in top_flows],
+        'anomalies': [],
+    }
+
+    total_packets = len(lines)
+    retrans_pct = (retrans_count / total_packets * 100) if total_packets > 0 else 0
+
+    if retrans_pct > 5:
+        result['anomalies'].append({
+            'type': 'high_retransmission_rate',
+            'severity': 'critical',
+            'message': (
+                f'{retrans_count} retransmissions ({retrans_pct:.1f}% of packets). '
+                f'Severe packet loss — check ENA throttling (linklocal_allowance_exceeded), '
+                f'security group/NACL drops, or network congestion. '
+                f'{len(retrans_flows)} flows affected.'
+            ),
+        })
+    elif retrans_pct > 1:
+        result['anomalies'].append({
+            'type': 'moderate_retransmission_rate',
+            'severity': 'warning',
+            'message': (
+                f'{retrans_count} retransmissions ({retrans_pct:.1f}% of packets). '
+                f'Moderate packet loss detected. Check for ENA bandwidth/PPS throttling '
+                f'or intermittent network issues.'
+            ),
+        })
+    elif retrans_count > 0:
+        result['anomalies'].append({
+            'type': 'low_retransmissions',
+            'severity': 'info',
+            'message': (
+                f'{retrans_count} retransmissions detected ({retrans_pct:.1f}%). '
+                f'Low level — within normal range for most workloads.'
+            ),
+        })
+
+    return result
+
+
+def _analyze_connection_refused(lines: list) -> Dict:
+    """Detect connection refused patterns (RST immediately after SYN).
+    This indicates the target port is not listening — common when a pod hasn't started,
+    a service endpoint is stale, or a NetworkPolicy is blocking traffic."""
+    flow_re = re.compile(r'(\d+\.\d+\.\d+\.\d+)\.(\d+)\s+>\s+(\d+\.\d+\.\d+\.\d+)\.(\d+)')
+    syn_re = re.compile(r'Flags\s+\[S\]', re.IGNORECASE)
+    rst_re = re.compile(r'Flags\s+\[R\.?\]', re.IGNORECASE)
+
+    # Track SYN -> RST pairs (connection refused = RST right after SYN)
+    recent_syns: Dict[str, str] = {}  # "dst:port" -> src line
+    refused: Dict[str, int] = {}  # "dst:port" -> count
+
+    for line in lines:
+        m = flow_re.search(line)
+        if not m:
+            continue
+        src_ip, src_port, dst_ip, dst_port = m.groups()
+
+        if syn_re.search(line):
+            key = f"{dst_ip}:{dst_port}"
+            recent_syns[key] = src_ip
+        elif rst_re.search(line):
+            # RST coming FROM the destination back to source
+            reverse_key = f"{src_ip}:{src_port}"
+            if reverse_key in recent_syns:
+                refused[reverse_key] = refused.get(reverse_key, 0) + 1
+
+    if not refused:
+        return {}
+
+    top_refused = sorted(refused.items(), key=lambda x: x[1], reverse=True)[:10]
+    total_refused = sum(refused.values())
+
+    result: Dict = {
+        'totalConnectionRefused': total_refused,
+        'uniqueTargets': len(refused),
+        'topRefusedTargets': [{'target': t, 'count': c} for t, c in top_refused],
+        'anomalies': [],
+    }
+
+    if total_refused > 50:
+        result['anomalies'].append({
+            'type': 'mass_connection_refused',
+            'severity': 'critical',
+            'message': (
+                f'{total_refused} connections refused across {len(refused)} targets. '
+                f'Services are not listening or pods are not ready. Top target: '
+                f'{top_refused[0][0]} ({top_refused[0][1]}x refused). Check pod readiness, '
+                f'service endpoints, and NetworkPolicy rules.'
+            ),
+        })
+    elif total_refused > 10:
+        result['anomalies'].append({
+            'type': 'connection_refused',
+            'severity': 'warning',
+            'message': (
+                f'{total_refused} connections refused to {len(refused)} targets. '
+                f'Some services may not be ready or endpoints are stale.'
+            ),
+        })
+
+    return result
+
+
+def _analyze_traffic_burst(lines: list) -> Dict:
+    """Detect traffic bursts by analyzing packet timestamps.
+    Identifies periods of abnormally high packet rates that could indicate
+    DDoS, thundering herd, or misconfigured retry storms."""
+    ts_re = re.compile(r'^(\d{2}:\d{2}:\d{2}\.\d+)\s')
+
+    # Group packets by second
+    packets_per_second: Dict[str, int] = {}
+    for line in lines:
+        m = ts_re.match(line)
+        if m:
+            ts = m.group(1).split('.')[0]  # truncate to second
+            packets_per_second[ts] = packets_per_second.get(ts, 0) + 1
+
+    if len(packets_per_second) < 5:
+        return {}
+
+    rates = list(packets_per_second.values())
+    avg_rate = sum(rates) / len(rates)
+    max_rate = max(rates)
+    max_ts = max(packets_per_second, key=packets_per_second.get)
+
+    # Find burst periods (>3x average)
+    burst_seconds = [(ts, count) for ts, count in packets_per_second.items()
+                     if count > avg_rate * 3 and count > 20]
+    burst_seconds.sort(key=lambda x: x[1], reverse=True)
+
+    result: Dict = {
+        'avgPacketsPerSecond': round(avg_rate, 1),
+        'maxPacketsPerSecond': max_rate,
+        'peakTime': max_ts,
+        'captureDurationSeconds': len(packets_per_second),
+        'anomalies': [],
+    }
+
+    if burst_seconds:
+        result['burstPeriods'] = [{'time': ts, 'packetsPerSecond': c}
+                                  for ts, c in burst_seconds[:10]]
+        if max_rate > avg_rate * 10 and max_rate > 100:
+            result['anomalies'].append({
+                'type': 'extreme_traffic_burst',
+                'severity': 'critical',
+                'message': (
+                    f'Extreme traffic burst: {max_rate} pps at {max_ts} vs average '
+                    f'{avg_rate:.0f} pps ({max_rate/avg_rate:.0f}x spike). '
+                    f'{len(burst_seconds)} burst periods detected. Possible DDoS, '
+                    f'retry storm, or thundering herd.'
+                ),
+            })
+        elif burst_seconds:
+            result['anomalies'].append({
+                'type': 'traffic_burst',
+                'severity': 'warning',
+                'message': (
+                    f'Traffic bursts detected: peak {max_rate} pps at {max_ts} vs '
+                    f'average {avg_rate:.0f} pps. {len(burst_seconds)} periods exceeded '
+                    f'3x average rate.'
+                ),
+            })
+
+    return result
+
+
+def _analyze_top_talkers(lines: list) -> Dict:
+    """Identify top bandwidth consumers and communication patterns.
+    Helps identify which pods/IPs are generating the most traffic and whether
+    traffic distribution is skewed (one pod hogging bandwidth)."""
+    flow_re = re.compile(
+        r'(\d+\.\d+\.\d+\.\d+)\.(\d+)\s+>\s+(\d+\.\d+\.\d+\.\d+)\.(\d+).*length\s+(\d+)'
+    )
+
+    src_bytes: Dict[str, int] = {}
+    dst_bytes: Dict[str, int] = {}
+    src_packets: Dict[str, int] = {}
+    dst_packets: Dict[str, int] = {}
+    flow_bytes: Dict[str, int] = {}
+
+    for line in lines:
+        m = flow_re.search(line)
+        if m:
+            src_ip, src_port, dst_ip, dst_port, length = m.groups()
+            length = int(length)
+            src_bytes[src_ip] = src_bytes.get(src_ip, 0) + length
+            dst_bytes[dst_ip] = dst_bytes.get(dst_ip, 0) + length
+            src_packets[src_ip] = src_packets.get(src_ip, 0) + 1
+            dst_packets[dst_ip] = dst_packets.get(dst_ip, 0) + 1
+            flow_key = f"{src_ip}->{dst_ip}:{dst_port}"
+            flow_bytes[flow_key] = flow_bytes.get(flow_key, 0) + length
+
+    if not src_bytes:
+        return {}
+
+    top_src = sorted(src_bytes.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_dst = sorted(dst_bytes.items(), key=lambda x: x[1], reverse=True)[:10]
+    top_flows = sorted(flow_bytes.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    total_bytes = sum(src_bytes.values())
+
+    result: Dict = {
+        'totalBytes': total_bytes,
+        'totalBytesHuman': f'{total_bytes/1024:.1f} KB' if total_bytes < 1048576 else f'{total_bytes/1048576:.1f} MB',
+        'uniqueSources': len(src_bytes),
+        'uniqueDestinations': len(dst_bytes),
+        'topSenders': [{'ip': ip, 'bytes': b, 'packets': src_packets.get(ip, 0)}
+                       for ip, b in top_src],
+        'topReceivers': [{'ip': ip, 'bytes': b, 'packets': dst_packets.get(ip, 0)}
+                         for ip, b in top_dst],
+        'topFlows': [{'flow': f, 'bytes': b} for f, b in top_flows],
+        'anomalies': [],
+    }
+
+    # Check for traffic skew — one source dominating
+    if top_src and total_bytes > 0:
+        top_pct = (top_src[0][1] / total_bytes) * 100
+        if top_pct > 80 and len(src_bytes) > 3:
+            result['anomalies'].append({
+                'type': 'traffic_skew',
+                'severity': 'warning',
+                'message': (
+                    f'Traffic heavily skewed: {top_src[0][0]} sends {top_pct:.0f}% of all '
+                    f'bytes ({top_src[0][1]} bytes). Possible bandwidth hog or '
+                    f'misconfigured client retry loop.'
+                ),
+            })
+
+    return result
+
+
+def _analyze_mtu_fragmentation(lines: list) -> Dict:
+    """Detect MTU/fragmentation issues from packet captures.
+    Fragmented packets indicate MTU mismatch. In EKS, the VPC MTU is typically 9001
+    (jumbo frames) but tunnels (VPN, VXLAN) or cross-AZ traffic may have lower MTU.
+    Excessive fragmentation causes performance degradation and can break PMTUD."""
+    frag_re = re.compile(r'frag\s+\d+|offset\s+\d+|flags\s+\[.*MF.*\]', re.IGNORECASE)
+    df_re = re.compile(r'flags\s+\[.*DF.*\]', re.IGNORECASE)
+    length_re = re.compile(r'length\s+(\d+)')
+
+    frag_count = 0
+    df_count = 0
+    large_packets = 0  # packets > 1500 bytes (jumbo)
+
+    for line in lines:
+        if frag_re.search(line):
+            frag_count += 1
+        if df_re.search(line):
+            df_count += 1
+        m = length_re.search(line)
+        if m and int(m.group(1)) > 1500:
+            large_packets += 1
+
+    if frag_count == 0 and large_packets == 0:
+        return {}
+
+    result: Dict = {
+        'fragmentedPackets': frag_count,
+        'dontFragmentPackets': df_count,
+        'jumboPackets': large_packets,
+        'anomalies': [],
+    }
+
+    if frag_count > 20:
+        result['anomalies'].append({
+            'type': 'excessive_fragmentation',
+            'severity': 'warning',
+            'message': (
+                f'{frag_count} fragmented packets detected. MTU mismatch likely — '
+                f'check if traffic crosses VPN tunnels, VXLAN overlays, or different '
+                f'MTU boundaries. Consider setting pod MTU explicitly or enabling PMTUD. '
+                f'EKS VPC default MTU is 9001 (jumbo frames).'
+            ),
+        })
+    elif frag_count > 0:
+        result['anomalies'].append({
+            'type': 'minor_fragmentation',
+            'severity': 'info',
+            'message': (
+                f'{frag_count} fragmented packets. Low level — may be normal for '
+                f'cross-region or VPN traffic.'
+            ),
+        })
+
+    return result
+
+
+def _analyze_conntrack_pressure(lines: list) -> Dict:
+    """Estimate conntrack table pressure from unique connection count.
+    Each TCP/UDP flow consumes a conntrack entry. Default nf_conntrack_max is 131072.
+    High unique flow counts in a short capture window suggest conntrack exhaustion risk."""
+    flow_re = re.compile(
+        r'(\d+\.\d+\.\d+\.\d+)\.(\d+)\s+>\s+(\d+\.\d+\.\d+\.\d+)\.(\d+)'
+    )
+
+    unique_flows = set()
+    for line in lines:
+        m = flow_re.search(line)
+        if m:
+            # Bidirectional: normalize so A->B and B->A count as one flow
+            src = f"{m.group(1)}:{m.group(2)}"
+            dst = f"{m.group(3)}:{m.group(4)}"
+            flow = tuple(sorted([src, dst]))
+            unique_flows.add(flow)
+
+    if len(unique_flows) < 100:
+        return {}
+
+    result: Dict = {
+        'uniqueFlows': len(unique_flows),
+        'anomalies': [],
+    }
+
+    # Default conntrack max is 131072; warn at 50% observed in a short window
+    if len(unique_flows) > 50000:
+        result['anomalies'].append({
+            'type': 'conntrack_exhaustion_risk',
+            'severity': 'critical',
+            'message': (
+                f'{len(unique_flows)} unique flows observed in capture window. '
+                f'Default nf_conntrack_max is 131072 — node may be at risk of '
+                f'conntrack table exhaustion. Check: '
+                f'cat /proc/sys/net/netfilter/nf_conntrack_count vs nf_conntrack_max. '
+                f'Symptoms: "nf_conntrack: table full, dropping packet" in dmesg.'
+            ),
+        })
+    elif len(unique_flows) > 10000:
+        result['anomalies'].append({
+            'type': 'high_flow_count',
+            'severity': 'warning',
+            'message': (
+                f'{len(unique_flows)} unique flows in capture window. Monitor conntrack '
+                f'usage — high flow counts can exhaust the conntrack table '
+                f'(default max 131072).'
+            ),
+        })
+    else:
+        result['anomalies'].append({
+            'type': 'flow_count_info',
+            'severity': 'info',
+            'message': f'{len(unique_flows)} unique flows observed. Within normal range.',
+        })
+
+    return result
+
+
+def tcpdump_analyze(arguments: Dict) -> Dict:
+    """
+    Read and analyze a completed tcpdump capture from S3.
+    Returns decoded packet text, protocol statistics, and top talkers.
+
+
+    Inputs:
+        instanceId: EC2 instance ID (required)
+        commandId: SSM Command ID from tcpdump_capture (optional — finds latest if omitted)
+        section: "summary" (first N packets decoded), "stats" (protocol breakdown), "all" (default: "all")
+        maxPackets: Max decoded packet lines to return (default: 500, max: 3000)
+        filter: Text filter to apply on decoded lines (e.g., "SYN", "RST", "10.0.0.5")
+
+    Returns:
+        Decoded packet text, protocol stats, top talkers, and anomaly indicators
+    """
+    instance_id = arguments.get('instanceId')
+    if not instance_id:
+        return error_response(400, 'instanceId is required')
+
+    command_id = arguments.get('commandId')
+    section = arguments.get('section', 'all')
+    max_packets = min(int(arguments.get('maxPackets', 500)), 3000)
+    text_filter = arguments.get('filter', '')
+
+    # ── Always find the LATEST capture for this instance ──
+    # Even if commandId is provided, we verify it is the latest capture.
+    # This prevents analyzing stale data when a newer capture exists.
+    metadata = {}
+    latest_metadata = {}
+    try:
+        list_resp = safe_s3_list(f"tcpdump-commands/", max_keys=200)
+        if list_resp.get('success'):
+            candidates = []
+            for obj in list_resp.get('objects', []):
+                try:
+                    r = s3_client.get_object(Bucket=LOGS_BUCKET, Key=obj['key'])
+                    m = json.loads(r['Body'].read().decode('utf-8'))
+                    if m.get('instanceId') == instance_id:
+                        candidates.append(m)
+                except Exception:
+                    continue
+            if candidates:
+                candidates.sort(key=lambda x: x.get('startedAt', ''), reverse=True)
+                latest_metadata = candidates[0]
+    except Exception:
+        pass
+
+    if command_id and latest_metadata:
+        # commandId was provided — check if it matches the latest
+        if latest_metadata.get('commandId') == command_id:
+            metadata = latest_metadata
+        else:
+            # Requested commandId is NOT the latest — reject with guidance
+            return error_response(409,
+                f'commandId {command_id} is not the latest capture for {instance_id}. '
+                f'Latest capture is commandId={latest_metadata.get("commandId")} '
+                f'started at {latest_metadata.get("startedAt", "unknown")}. '
+                f'Omit commandId to auto-use the latest, or run a new tcpdump_capture.')
+    elif latest_metadata:
+        metadata = latest_metadata
+    elif command_id:
+        # No candidates found at all — try the specific commandId as fallback
+        try:
+            meta_resp = s3_client.get_object(
+                Bucket=LOGS_BUCKET,
+                Key=f"tcpdump-commands/{command_id}.json",
+            )
+            metadata = json.loads(meta_resp['Body'].read().decode('utf-8'))
+        except Exception:
+            pass
+
+    if not metadata:
+        return error_response(404, f'No tcpdump capture found for {instance_id}. Run tcpdump_capture first.')
+
+    # ── Staleness check ──
+    capture_age_warning = None
+    started_at = metadata.get('startedAt', '')
+    if started_at:
+        try:
+            capture_time = datetime.strptime(started_at, '%Y-%m-%dT%H:%M:%SZ')
+            age_seconds = (datetime.utcnow() - capture_time).total_seconds()
+            age_minutes = age_seconds / 60
+            if age_minutes > 15:
+                capture_age_warning = (
+                    f'This capture is {int(age_minutes)} minutes old (started {started_at}). '
+                    f'Network conditions may have changed. Consider running a fresh tcpdump_capture.'
+                )
+        except (ValueError, TypeError):
+            pass
+
+    s3_key_txt = metadata.get('s3KeyTxt', '')
+    s3_key_stats = metadata.get('s3KeyStats', '')
+    s3_key_pcap = metadata.get('s3Key', '')
+
+    results = {
+        'instanceId': instance_id,
+        'commandId': metadata.get('commandId', command_id or 'unknown'),
+        'captureInfo': {
+            'interface': metadata.get('interface', 'unknown'),
+            'filter': metadata.get('filter', 'none'),
+            'durationSeconds': metadata.get('durationSeconds', 0),
+            'startedAt': metadata.get('startedAt', 'unknown'),
+            'captureScope': metadata.get('captureScope', 'hostNamespace'),
+            'nsenterUsed': metadata.get('nsenterUsed', False),
+            'networkNamespace': metadata.get('networkNamespace', 'host'),
+            'podName': metadata.get('podName'),
+            'podNamespace': metadata.get('podNamespace'),
+            'containerPid': metadata.get('containerPid'),
+        },
+    }
+    if capture_age_warning:
+        results['stalenessWarning'] = capture_age_warning
+
+    # Read stats
+    if section in ('stats', 'all'):
+        stats = {}
+        if s3_key_stats:
+            try:
+                resp = safe_s3_read(s3_key_stats, max_size=65536)
+                if resp.get('success') and resp.get('content'):
+                    stats = json.loads(resp['content'])
+            except (json.JSONDecodeError, Exception):
+                stats = {'error': 'Could not parse stats JSON'}
+        else:
+            stats = {'error': 'No stats file found — capture may still be in progress'}
+
+        results['statistics'] = stats
+
+        # Anomaly detection from stats
+        anomalies = []
+        if isinstance(stats, dict) and 'totalPackets' in stats:
+            total = stats.get('totalPackets', 0)
+            rst_count = stats.get('tcpFlags', {}).get('rst', 0)
+            syn_count = stats.get('tcpFlags', {}).get('syn', 0)
+            retrans = stats.get('possibleRetransmits', 0)
+
+            if total > 0:
+                rst_pct = (rst_count / total) * 100
+                if rst_pct > 5:
+                    anomalies.append({
+                        'type': 'high_rst_rate',
+                        'severity': 'warning' if rst_pct < 15 else 'critical',
+                        'message': f'{rst_pct:.1f}% of packets are TCP RST ({rst_count}/{total}) — possible connection rejection or firewall drops',
+                    })
+                if retrans > 0:
+                    retrans_pct = (retrans / total) * 100
+                    anomalies.append({
+                        'type': 'retransmissions',
+                        'severity': 'warning' if retrans_pct < 5 else 'critical',
+                        'message': f'{retrans} possible retransmissions detected ({retrans_pct:.1f}%) — network congestion or packet loss',
+                    })
+                if syn_count > 0 and rst_count > syn_count * 0.5:
+                    anomalies.append({
+                        'type': 'syn_rst_ratio',
+                        'severity': 'warning',
+                        'message': f'High RST-to-SYN ratio ({rst_count} RST vs {syn_count} SYN) — many connections being refused',
+                    })
+                icmp_count = stats.get('protocols', {}).get('icmp', 0)
+                if icmp_count > total * 0.1:
+                    anomalies.append({
+                        'type': 'high_icmp',
+                        'severity': 'info',
+                        'message': f'{icmp_count} ICMP packets ({(icmp_count/total)*100:.1f}%) — possible ping flood or unreachable destinations',
+                    })
+
+        results['anomalies'] = anomalies
+
+    # Read decoded text summary
+    # NOTE: all_lines holds the FULL packet set for analysis; decoded_lines is truncated for response payload
+    all_lines = []
+    if section in ('summary', 'all'):
+        decoded_lines = []
+        if s3_key_txt:
+            try:
+                resp = safe_s3_read(s3_key_txt, max_size=2 * 1024 * 1024)  # 2MB max
+                if resp.get('success') and resp.get('content'):
+                    all_lines = resp['content'].split('\n')
+
+                    # Apply text filter if provided (only for display, not analysis)
+                    display_lines = all_lines
+                    if text_filter:
+                        pattern = re.compile(re.escape(text_filter), re.IGNORECASE)
+                        display_lines = [l for l in all_lines if pattern.search(l)]
+
+                    total_lines = len(display_lines)
+                    decoded_lines = display_lines[:max_packets]
+
+                    results['decodedPackets'] = {
+                        'lines': decoded_lines,
+                        'totalPackets': total_lines,
+                        'returnedPackets': len(decoded_lines),
+                        'truncated': total_lines > max_packets,
+                        'filter': text_filter or 'none',
+                        'analyzedPackets': len(all_lines),
+                    }
+                else:
+                    results['decodedPackets'] = {'error': 'Text summary file is empty or unreadable'}
+            except Exception as e:
+                results['decodedPackets'] = {'error': f'Failed to read text summary: {str(e)}'}
+        else:
+            results['decodedPackets'] = {'error': 'No text summary file found — capture may still be in progress'}
+
+    # DNS analysis — scan ALL packets (not just truncated display lines)
+    if section in ('summary', 'all') and all_lines:
+        dns_analysis = _analyze_dns_packets(all_lines)
+        if dns_analysis:
+            results['dnsAnalysis'] = dns_analysis
+            # Merge DNS anomalies into the main anomalies list
+            if 'anomalies' in results:
+                results['anomalies'].extend(dns_analysis.get('anomalies', []))
+            else:
+                results['anomalies'] = dns_analysis.get('anomalies', [])
+
+    # Expected behavior analysis — run on ALL lines for full coverage
+    # Each analyzer is independent and returns its own findings
+    if section in ('summary', 'all') and all_lines:
+        expected_behaviors = {}
+        expected_anomalies = []
+
+        tcp_rst = _analyze_tcp_rst_patterns(all_lines)
+        if tcp_rst:
+            expected_behaviors['tcpRstPatterns'] = tcp_rst
+            expected_anomalies.extend(tcp_rst.get('anomalies', []))
+
+        dnat = _analyze_kube_proxy_dnat(all_lines)
+        if dnat:
+            expected_behaviors['kubeProxyDnat'] = dnat
+            expected_anomalies.extend(dnat.get('anomalies', []))
+
+        snat = _analyze_vpc_cni_snat(all_lines)
+        if snat:
+            expected_behaviors['vpcCniSnat'] = snat
+            expected_anomalies.extend(snat.get('anomalies', []))
+
+        keepalive = _analyze_tcp_keepalives(all_lines)
+        if keepalive:
+            expected_behaviors['tcpKeepalives'] = keepalive
+            expected_anomalies.extend(keepalive.get('anomalies', []))
+
+        icmp = _analyze_icmp_expected(all_lines)
+        if icmp:
+            expected_behaviors['icmpPatterns'] = icmp
+            expected_anomalies.extend(icmp.get('anomalies', []))
+
+        coredns = _analyze_coredns_transients(all_lines)
+        if coredns:
+            expected_behaviors['corednsTransients'] = coredns
+            expected_anomalies.extend(coredns.get('anomalies', []))
+
+        # ── Deep network analysis (complex issue detection) ──
+        syn_flood = _analyze_syn_flood(all_lines)
+        if syn_flood:
+            expected_behaviors['synFloodDetection'] = syn_flood
+            expected_anomalies.extend(syn_flood.get('anomalies', []))
+
+        win_zero = _analyze_tcp_window_zero(all_lines)
+        if win_zero:
+            expected_behaviors['tcpWindowZero'] = win_zero
+            expected_anomalies.extend(win_zero.get('anomalies', []))
+
+        retrans = _analyze_retransmissions(all_lines)
+        if retrans:
+            expected_behaviors['retransmissions'] = retrans
+            expected_anomalies.extend(retrans.get('anomalies', []))
+
+        conn_refused = _analyze_connection_refused(all_lines)
+        if conn_refused:
+            expected_behaviors['connectionRefused'] = conn_refused
+            expected_anomalies.extend(conn_refused.get('anomalies', []))
+
+        burst = _analyze_traffic_burst(all_lines)
+        if burst:
+            expected_behaviors['trafficBurst'] = burst
+            expected_anomalies.extend(burst.get('anomalies', []))
+
+        talkers = _analyze_top_talkers(all_lines)
+        if talkers:
+            expected_behaviors['topTalkers'] = talkers
+            expected_anomalies.extend(talkers.get('anomalies', []))
+
+        mtu_frag = _analyze_mtu_fragmentation(all_lines)
+        if mtu_frag:
+            expected_behaviors['mtuFragmentation'] = mtu_frag
+            expected_anomalies.extend(mtu_frag.get('anomalies', []))
+
+        conntrack = _analyze_conntrack_pressure(all_lines)
+        if conntrack:
+            expected_behaviors['conntrackPressure'] = conntrack
+            expected_anomalies.extend(conntrack.get('anomalies', []))
+
+        if expected_behaviors:
+            results['expectedBehaviors'] = expected_behaviors
+            if 'anomalies' in results:
+                results['anomalies'].extend(expected_anomalies)
+            else:
+                results['anomalies'] = expected_anomalies
+
+    # Presigned URL for pcap download
+    if s3_key_pcap:
+        try:
+            results['pcapDownloadUrl'] = s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': LOGS_BUCKET, 'Key': s3_key_pcap},
+                ExpiresIn=PCAP_PRESIGNED_URL_EXPIRATION,
+            )
+            results['pcapDownloadUrlExpiresIn'] = f'{PCAP_PRESIGNED_URL_EXPIRATION} seconds'
+        except Exception:
+            pass
+
+    results['s3Bucket'] = LOGS_BUCKET
+    results['s3KeyPcap'] = s3_key_pcap
+    results['s3KeyTxt'] = s3_key_txt
+    results['s3KeyStats'] = s3_key_stats
+
+    return success_response(results)

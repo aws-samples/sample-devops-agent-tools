@@ -23,8 +23,8 @@ context: >
   routing table. Traffic between pods on different nodes goes through the node's eth0, VPC routing, and the
   destination node's ENI. Failures can occur at any layer: veth misconfiguration, iptables/eBPF NetworkPolicy
   enforcement dropping traffic, missing routes for pod CIDRs, CNI plugin bugs, security group rules blocking
-  inter-node traffic, or NACL restrictions. This SOP uses a manual `tcpdump` capture (run on the node via SSM
-  Session Manager) on both the pod's veth interface and the node's eth0 to pinpoint exactly where packets are lost. Cross-references D1 (IP allocation), D3
+  inter-node traffic, or NACL restrictions. This SOP uses tcpdump_capture on both the pod's veth interface
+  and the node's eth0 to pinpoint exactly where packets are lost. Cross-references D1 (IP allocation), D3
   (conntrack), D5 (DNS), D7 (general network perf), D8 (kube-proxy/service connectivity).
 ---
 
@@ -157,23 +157,23 @@ SHOULD:
 
 ### 2F — Packet Capture (tcpdump)
 
-MUST (if the issue is not identified from log analysis above). Run these manually on the node via SSM Session Manager — packet capture is not available as an MCP tool:
-- On the SOURCE node, capture traffic on the pod's veth interface:
-  - `sudo tcpdump -i <pod-veth> -nn 'host <dest-pod-ip>' -w /tmp/src-veth.pcap`
-  - Duration: ~30 seconds while reproducing the connectivity failure
+MUST (if the issue is not identified from log analysis above):
+- Use `tcpdump_capture` tool on the SOURCE node to capture traffic on the pod's veth interface:
+  - Filter for traffic to/from the destination pod IP
+  - Duration: 30 seconds while reproducing the connectivity failure
   - This shows if packets LEAVE the source pod
-- On the SOURCE node, capture on eth0:
-  - `sudo tcpdump -i eth0 -nn 'host <dest-pod-ip>' -w /tmp/src-eth0.pcap`
+- Use `tcpdump_capture` tool on the SOURCE node to capture on eth0:
+  - Same filter for destination pod IP
   - This shows if packets reach the node's outbound interface (cross-node) or are dropped before
-- Review both captures with `sudo tcpdump -nn -r <file>`:
+- Use `tcpdump_analyze` tool to analyze both captures:
   - Packets on veth but NOT on eth0: dropped by iptables/eBPF/routing on the source node
   - Packets on eth0 of source but not arriving at destination: dropped in VPC (SG, NACL, routing)
   - Packets arriving at destination eth0 but not on destination veth: dropped on destination node
 
 SHOULD:
-- If cross-node: also capture on the DESTINATION node's eth0 and the destination pod's veth
+- If cross-node: also use `tcpdump_capture` on the DESTINATION node's eth0 and the destination pod's veth
   - This gives the full 4-point trace: src-veth → src-eth0 → dst-eth0 → dst-veth
-- Review the captures for:
+- Use `tcpdump_analyze` to check for:
   - TCP RST (connection refused — something is actively rejecting)
   - TCP SYN with no SYN-ACK (packets silently dropped)
   - ICMP unreachable messages (routing or firewall rejection)
@@ -231,7 +231,8 @@ escalation_conditions:
 
 safety_ratings:
   - "Log collection (collect), search, errors, network_diagnostics, correlate, compare_nodes: GREEN (read-only)"
-  - "Manual tcpdump on the node (via SSM Session Manager): YELLOW — operator action, not available via MCP tools"
+  - "tcpdump_capture: YELLOW — human-approved packet capture (pauses at a native SSM aws:approve step until a designated approver approves in the Systems Manager console)"
+  - "tcpdump_analyze: GREEN (read-only analysis of completed captures)"
   - "Modify NetworkPolicy: YELLOW — operator action, not available via MCP tools"
   - "Modify iptables FORWARD policy: YELLOW — operator action, affects all pod traffic on node"
   - "Modify security groups: YELLOW — operator action, affects network access"
@@ -332,17 +333,20 @@ search(instanceId="i-0abc123def456", query="blackhole|no route|missing.*route|po
 # Step 8: Check security groups (cross-node)
 search(instanceId="i-0abc123def456", query="security group|sg-|SecurityGroupIds")
 
-# Step 9-11: Capture packets MANUALLY on the node(s) via SSM Session Manager
-#   (packet capture is not an MCP tool). While reproducing the issue:
-#   # source pod veth:
-#   sudo tcpdump -i <pod-veth> -nn 'host <dest-pod-ip>' -w /tmp/src-veth.pcap
-#   # source node eth0:
-#   sudo tcpdump -i eth0 -nn 'host <dest-pod-ip>' -w /tmp/src-eth0.pcap
-#   # if cross-node, on the DESTINATION node (i-0dest789ghi012):
-#   sudo tcpdump -i eth0 -nn 'host <src-pod-ip>' -w /tmp/dst-eth0.pcap
-#   sudo tcpdump -i <dest-pod-veth> -nn 'host <src-pod-ip>' -w /tmp/dst-veth.pcap
-#   # review each with: sudo tcpdump -nn -r <file>
-collect(instanceId="i-0dest789ghi012")   # collect logs from the destination node too
+# Step 9: Capture on source pod veth (while reproducing the issue)
+tcpdump_capture(instanceId="i-0abc123def456", interface="<pod-veth>", duration=30, filter="host <dest-pod-ip>")
+tcpdump_analyze(instanceId="i-0abc123def456", commandId="<commandId-from-step-9>")
+
+# Step 10: Capture on source node eth0
+tcpdump_capture(instanceId="i-0abc123def456", interface="eth0", duration=30, filter="host <dest-pod-ip>")
+tcpdump_analyze(instanceId="i-0abc123def456", commandId="<commandId-from-step-10>")
+
+# Step 11: If cross-node — capture on DESTINATION node eth0 and veth
+collect(instanceId="i-0dest789ghi012")
+tcpdump_capture(instanceId="i-0dest789ghi012", interface="eth0", duration=30, filter="host <src-pod-ip>")
+tcpdump_analyze(instanceId="i-0dest789ghi012", commandId="<commandId-from-step-11>")
+tcpdump_capture(instanceId="i-0dest789ghi012", interface="<dest-pod-veth>", duration=30, filter="host <src-pod-ip>")
+tcpdump_analyze(instanceId="i-0dest789ghi012", commandId="<commandId-from-step-11b>")
 
 # Step 12: Correlate timeline
 correlate(instanceId="i-0abc123def456", pivotEvent="connection refused|timed out|DENY", timeWindow=300)
@@ -367,8 +371,8 @@ evidence:
     content: "<iptables rules, routes, ENI config, CNI status>"
   - type: search
     content: "<NetworkPolicy DENY verdicts, iptables DROP rules, CNI errors>"
-  - type: manual_tcpdump
-    content: "<manual node packet capture showing where traffic stops>"
+  - type: tcpdump_analyze
+    content: "<packet capture showing where traffic stops>"
   - type: correlate
     content: "<timeline of connectivity failure>"
 severity: HIGH
